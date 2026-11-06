@@ -65,12 +65,26 @@
             frame.work.standInPx = Math.round(work.standInPx)
             frame.work.standInPxBy = Object.fromEntries(Object.entries(work.standInPx ? work.standInPxBy : {}).map(([k, v]) => [k, Math.round(v)]))
             frame.work.layerFullRebuildCount = Object.values(work.layerFullRebuild).reduce((a, b) => a + b, 0)
+            // TASK-1562: the board squares of the frame drawn at the camera's level (exact) and not (stretched from another
+            // level), Grid.levelCoverage; a frame not drawn on the levels (mode 'standard') draws every square at the
+            // camera's level; a held frame (no board drawn) shows the last frame's.
+            frame.work.exactCoverage = levelCoverage()
             work = freshWork()
             if (frame.gapMs > 50) report.longGaps.push({timestamp, gapMs: frame.gapMs})
             report.samples.push(frame)
             if (document.hidden) report.invalidReasons.push('hidden-tab')
             frame = null
         }
+    }
+    let coverageSerial = null, coverageLast = null
+    const levelCoverage = () => {
+        const g = typeof grid !== 'undefined' ? grid : null
+        if (!g) return null
+        if (g.drawSerial === coverageSerial && coverageLast) return {...coverageLast, held: true}
+        coverageSerial = g.drawSerial
+        const c = g.levelCoverage
+        coverageLast = c && c.serial === g.drawSerial ? {mode: c.mode, kind: c.kind, total: c.total, exact: c.exact, stretched: c.stretched, live: c.live, bare: c.bare, standIn: c.standIn, old: c.old} : {mode: 'standard'}
+        return coverageLast
     }
     drawAll = function(...args) {
         if (!frame) return originalDraw.apply(this, args)
@@ -216,6 +230,8 @@
         drawStandInRect: () => (g, source, args, area) => addStandIn('standin', area),
         drawZoomUnderlay: () => (g, source, args, area) => addStandIn('zoom-underlay', area),
         drawZoomRaster: board => (g, source, args, area) => { if (source === board.zoomRaster?.canvas) addStandIn('zoom-raster', area) },
+        // TASK-1562: the sectors of other levels stretched to the camera (and the underlay under them).
+        drawStretchedSectors: () => (g, source, args, area) => addStandIn('stretched', area),
         drawSurfaceCacheRect: () => (g, source, args, area) => {
             if (args.length !== 8 || !args[2]) return
             const f = Math.hypot(g.getTransform().a, g.getTransform().b) * args[6] / args[2]
@@ -566,6 +582,24 @@
                 return drawn
             }, 'surface')
         }
+        // TASK-1562: a zoom gesture's frame drawn from the levels kept (drawZoomSectors); a lit frame after a zoom whose view is
+        // not made yet (drawLevelStandIn).
+        if (proto.drawZoomSectors) {
+            const zoomSectors = proto.drawZoomSectors
+            proto.drawZoomSectors = labelled(function(...args) {
+                const drawn = zoomSectors.apply(this, args)
+                if (active && drawn) work.renderPath = 'zoom-sectors'
+                return drawn
+            }, 'surface')
+        }
+        if (proto.drawLevelStandIn) {
+            const levelStandIn = proto.drawLevelStandIn
+            proto.drawLevelStandIn = labelled(function(...args) {
+                const drawn = levelStandIn.apply(this, args)
+                if (active && drawn) work.renderPath = 'stand-in'
+                return drawn
+            }, 'surface')
+        }
         if (proto.drawUnitSectorAt) {
             const at = proto.drawUnitSectorAt
             proto.drawUnitSectorAt = function(...args) {
@@ -627,7 +661,7 @@
             if (target && target.draw) target.draw = labelled(target.draw, 'borders')
         // TASK-1557: the compositing functions (their drawImage copies of kept pictures are not live board calls) and the
         // stand-in classifiers.
-        for (const name of ['drawSurfaceCache', 'drawSurfaceCacheRect', 'drawStandIn', 'drawStandInRect', 'drawZoomUnderlay', 'drawZoomRaster',
+        for (const name of ['drawSurfaceCache', 'drawSurfaceCacheRect', 'drawStandIn', 'drawStandInRect', 'drawZoomUnderlay', 'drawZoomRaster', 'drawStretchedSectors',
             'drawSceneLayer', 'drawLitLayer', 'drawLitTileAt', 'drawUnitSectorAt', 'drawHeldFrame', 'drawOverlaySnapshot', 'drawOverlayLayer']) {
             const original = proto[name]
             if (!original) continue
@@ -729,6 +763,10 @@
                     // TASK-1559: a view that took kept sectors on its canvas (Grid.adoptSectors) is not every tile built again.
                     if (view.sectorAdopt && view.sectorsOnCanvas > 0) work.litSectorAdoptions = (work.litSectorAdoptions || 0) + 1
                     else if (prevA === null) add('lit-tiles', 'other', 'first')
+                    // TASK-1562: a view for a new scale made after a zoom on the levels (Grid.zoomLevels): its tiles are built a
+                    // step at a time while the frames draw the squares from the sectors kept (stretched or of the camera's
+                    // level), nothing is built whole: work.levelViews.
+                    else if (prevA !== view.a && view.levelBuild) work.levelViews = (work.levelViews || 0) + 1
                     else if (prevA !== view.a) add('lit-tiles', 'zoom', 'scale')
                     else if (!viewDrop) add('lit-tiles', 'state', 'replaced')
                     else add('lit-tiles', STATE_CALLERS.test(viewDrop.caller) ? 'state' : 'other', viewDrop.caller)

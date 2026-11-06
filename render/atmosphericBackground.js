@@ -534,8 +534,12 @@ const atmosphericBackground = {
         // A canvas over the budget gets a raster of up to minRasterScale less resolution, drawn scaled up
         // (the soft sky does not show it); beyond that, the image or navy is drawn directly.
         const fit = Math.min(1, Math.sqrt((this.maxBytes - this.lightBytes) / (w * h * 4)))
-        if (!this.raster && fit >= this.minRasterScale && this.stagedRaster)
-            this.rasterStep(w, h, fit)
+        // TASK-1562: a step only with the camera at rest and not after a zoom (Grid.zoomQuiet, Grid.cameraBusy): a step draws
+        // 1-4 MP; the image is drawn directly meanwhile, as before the raster is done.
+        if (!this.raster && fit >= this.minRasterScale && this.stagedRaster) {
+            if (!(typeof Grid !== 'undefined' && Grid.cameraBusy?.()))
+                this.rasterStep(w, h, fit)
+        }
         else if (!this.raster && fit >= this.minRasterScale) {
             const raster = document.createElement('canvas')
             try {

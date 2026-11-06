@@ -228,6 +228,20 @@ class Grid extends SpritesGroup {
         this.unitFrame = undefined
         this.unitSectorWork = {built: 0, drawn: 0, live: 0, frames: 0, clears: 0, dirtied: 0, checks: 0, evicted: 0, cut: 0,
             restarts: 0, overlays: 0, overlaysDrawn: 0, bursts: 0, stepCalls: 0, stepCells: 0, swaps: 0}
+        // TASK-1562 (Grid.zoomLevels): zoom frames drawn from the unit sectors of the levels kept (drawZoomSectors); the
+        // frames after a zoom (levelSettle) until every square on the canvas is drawn at the camera's level, then the frames
+        // at rest drawn from the sectors (sectorRest) until the camera pans; the coverage of the last frame drawn
+        // (levelCoverage: squares exact / stretched / bare) and the counts (levelWork).
+        this.levelSettle = undefined
+        this.sectorRest = undefined
+        this.levelCoverage = undefined
+        // What a unit sector's ground (a lit tile, a stand-in) was drawn from stays the board's while this is the same: one
+        // more on a board change the lit sectors were cleared for (clearSectors); a change they were dirtied for dirties the
+        // unit sectors there too (staleSectorsIn).
+        this.unitGroundEpoch = 0
+        this.zoomQuietUntil = 0
+        this.levelWork = {zoomFrames: 0, settleFrames: 0, settled: 0, stretchedDrawn: 0,
+            budgetStops: 0, quietStops: 0, skippedRasters: 0, restFrames: 0, ends: {}}
         // TASK-1561: a unit sector build the task's draw call budget cut (buildUnitSector), and the count of the cells the
         // unit sector checks found changed (a cut build begins again when it moved).
         this.unitSectorBuilding = undefined
@@ -772,8 +786,9 @@ class Grid extends SpritesGroup {
                 this.drawEntityBody(ctx, unit)
         })
     }
-    drawEntityOverlays(ctx, cells) {
-        const buildingBars = []
+    // TASK-1562: bars given, the buildings' bars are left in it for the caller (a unit sector build's chunks: unitSectorSteps).
+    drawEntityOverlays(ctx, cells, bars = null) {
+        const buildingBars = bars || []
         // A level-of-detail frame (TASK-1375) draws the buildings under construction only: no production silhouettes or
         // bars, so no unit body repainted over them.
         const lod = this.lod
@@ -807,6 +822,8 @@ class Grid extends SpritesGroup {
             if (!observed && building.hasBar && !lod && !this.healBarHidden(building))
                 buildingBars.push(building)
         })
+        if (bars)
+            return
         for (let i = 0; i < buildingBars.length; ++i)
             buildingBars[i].drawBars(ctx)
         this.refreshCulledPortal(range)
@@ -3144,7 +3161,8 @@ class Grid extends SpritesGroup {
             this.surfaceCacheQueued = true
             setTimeout(gridTask(() => {
                 this.surfaceCacheQueued = false
-                if (free())
+                // TASK-1562: none after a zoom (Grid.zoomQuiet: its finish composes the whole cache, ~14 MP).
+                if (free() && !Grid.zoomQuiet())
                     this.surfaceSplitStep()
             }))
             return
@@ -3158,12 +3176,19 @@ class Grid extends SpritesGroup {
             // A board replaced meanwhile (another game or tutorial started) builds nothing: its units read the new grid.
             if (!free())
                 return
+            // TASK-1562: after a zoom (Grid.zoomQuiet) one step of ZOOM_QUIET_STEP_MS a frame (an owned tile is pieces:
+            // ownedTileSteps); the next frame's call queues it again.
+            const quiet = Grid.zoomQuiet()
+            if (quiet && !Grid.oncePerFrame('surface')) {
+                ++this.levelWork.quietStops
+                return
+            }
             // TASK-1544: with no cache yet the stand-in preview is built first (a few steps of a coarse raster).
             const start = performance.now()
             do {
-                if (!this.standInPreviewStep(SURFACE_STEP_MS))
-                    this.surfaceCacheBuildStep(SURFACE_STEP_MS)
-            } while ((this.surfaceCacheBuild || this.standInWanted()) && performance.now() - start < budget - SURFACE_STEP_MS)
+                if (!this.standInPreviewStep(quiet ? ZOOM_QUIET_STEP_MS : SURFACE_STEP_MS))
+                    this.surfaceCacheBuildStep(quiet ? ZOOM_QUIET_STEP_MS : SURFACE_STEP_MS)
+            } while (!quiet && (this.surfaceCacheBuild || this.standInWanted()) && performance.now() - start < budget - SURFACE_STEP_MS)
             this.queueStandInTask()
         }))
     }
@@ -3222,9 +3247,15 @@ class Grid extends SpritesGroup {
                 if ((build.steps = this.surfaceMaskSteps(build)))
                     return
             }
+            // TASK-1562: the finish (several MP: the patch buffer, the cell layer) and the whole stages (the bake) wait between
+            // frames for the camera at rest and a zoom's quiet over (Grid.cameraBusy).
+            if (budget < Infinity && Grid.cameraBusy())
+                return
             this.finishSurfaceCacheStep(build)
             return
         }
+        if (budget < Infinity && !SURFACE_CACHE_STAGE_STEPS[build.stage] && Grid.cameraBusy())
+            return
         ++this.surfaceCacheStages
         // TASK-1518: between frames a stage with steps (SURFACE_CACHE_STAGE_STEPS) runs them.
         const stepped = budget < Infinity && SURFACE_CACHE_STAGE_STEPS[build.stage]
@@ -4039,7 +4070,9 @@ class Grid extends SpritesGroup {
         if (!otherSettings.atmosphericVisuals || !Grid.sceneLayers || !screen || !screen.surfaceMoving || screen.zoomGesture ||
                 typeof createImageBitmap !== 'function' || typeof mainCanvas === 'undefined' ||
                 ctx.canvas !== mainCanvas || t.b !== 0 || t.c !== 0 || t.a <= 0 || t.d <= 0 || !this.surfaceCacheSteady() ||
-                this.stillUnitsHidden() || !this.canUseSurfaceCache() || this.sceneYieldsToSectors()) {
+                this.stillUnitsHidden() || !this.canUseSurfaceCache() || this.sceneYieldsToSectors() ||
+                // TASK-1562: after a zoom the levels draw it (levelMode), not a scene layer made for the new scale.
+                this.levelMode(ctx)) {
             this.dropSceneLayer()
             return false
         }
@@ -5207,15 +5240,20 @@ class Grid extends SpritesGroup {
             return null
         }
         const state = canvasStateOf(ctx)
-        const key = [kind, t.a, basis.r, assets.size, otherSettings.alwaysDisplayHPBar, otherSettings.alwaysDisplayMovesBar,
-            isFogOfWar, this.arr.length, this.arr[0].length, !!debug, ...(kind === 'cache' ? this.cacheSectorKey() : [])]
+        // TASK-1562 (Grid.zoomLevels): the key holds neither the kind nor the scale: the sectors of every level (and of both
+        // kinds: the scale picks the kind) are kept across zooms, each entry with its level, kind and, on the cache's path,
+        // what its ground was drawn from (entry.tag: cacheSectorKey, plan.tag; unitEntryFits).
+        const levels = Grid.zoomLevels
+        const key = [levels ? 'levels' : kind, levels ? 0 : t.a, basis.r, assets.size, otherSettings.alwaysDisplayHPBar, otherSettings.alwaysDisplayMovesBar,
+            isFogOfWar, this.arr.length, this.arr[0].length, !!debug, ...(kind === 'cache' && !levels ? this.cacheSectorKey() : []),
+            ...(levels ? [cachedImagesSignature()] : [])]
         const old = this.unitSectorKey
         const same = (k, skip) => !!k && k.key.length === key.length && key.every((v, i) => skip?.includes(i) || v === k.key[i]) &&
             sameCanvasState(state, k.state, LIT_LAYER_FREE_STATE)
         if (!same(old)) {
             // TASK-1561: debug turned on or off keeps the sectors of the other state aside (unitSectorAlt, within
             // UNIT_SECTOR_ALT_SHARE of the budget) and takes back the ones kept for this state.
-            const debugAt = kind === 'cache' ? [UNIT_SECTOR_DEBUG_KEY, UNIT_SECTOR_KEY_BASE + SCENE_LAYER_KEY_DEBUG] : [UNIT_SECTOR_DEBUG_KEY]
+            const debugAt = kind === 'cache' && !levels ? [UNIT_SECTOR_DEBUG_KEY, UNIT_SECTOR_KEY_BASE + SCENE_LAYER_KEY_DEBUG] : [UNIT_SECTOR_DEBUG_KEY]
             if (Grid.unitSectorDebugSets && same(old, debugAt)) {
                 const alt = this.unitSectorAlt, kept = {cache: this.unitSectors, key: old}
                 if (alt && same(alt.key)) {
@@ -5240,7 +5278,7 @@ class Grid extends SpritesGroup {
                 this.unitSectorKey = {key, state}
             }
         }
-        const plan = {kind, t, level: t.a, state, key: this.unitSectorKey, rest}
+        const plan = {kind, t, level: t.a, state, key: this.unitSectorKey, rest, tag: kind === 'cache' ? this.cacheSectorKey() : null}
         if (!rest)
             this.unitSectorLastPlan = plan
         if (this.unitSectorSerial !== this.drawSerial) {
@@ -5389,7 +5427,12 @@ class Grid extends SpritesGroup {
     // The clean sector (u, v) of plan whose ground is ground (a lit tile, null for none, or a stand-in token), else null.
     freshUnitSector(plan, u, v, ground) {
         const entry = this.unitSectors.get(SectorCache.key(plan.level, u, v))
-        return entry && !entry.dirty && entry.ground === ground && entry.kind === plan.kind ? entry : null
+        return entry && this.unitEntryFits(entry, plan) && entry.ground === ground ? entry : null
+    }
+    // TASK-1562: whether a unit sector entry is clean and of plan's kind (on the cache's path drawn over the cache the plan
+    // draws: the same tag; the levels' key no longer holds it).
+    unitEntryFits(entry, plan) {
+        return !entry.dirty && entry.kind === plan.kind && (plan.kind !== 'cache' || sameKeyArray(entry.tag, plan.tag))
     }
     // The squares of view (a lit view's sector grid) its edge runs meet (drawLitEdges lights them after the tiles), kept with
     // the runs they were found for.
@@ -5486,6 +5529,366 @@ class Grid extends SpritesGroup {
         ctx.drawImage(entry.image, x, y)
         this.unitSectors.use(entry.key)
         ++this.unitSectorWork.drawn
+        this.countLevelDraws(1)
+    }
+    // TASK-1562: the sector copies the frame being drawn made (levelDraws: its draw calls the level budget leaves room for).
+    countLevelDraws(n) {
+        const d = this.levelDraws ||= {serial: -1, n: 0}
+        if (d.serial !== this.drawSerial) {
+            d.serial = this.drawSerial
+            d.n = 0
+        }
+        d.n += n
+    }
+    // TASK-1562 (SECTORS 6/11): ZOOM LEVELS (Grid.zoomLevels). The unit sectors (the board picture of a square: its ground,
+    // units, bars and cell texts) of every level the camera rested or panned at are kept (the key holds no scale:
+    // unitSectorPlan), so
+    //   - a zoom gesture's frame (drawZoomSectors, instead of the zoom raster: nothing captured, replayed or rebuilt) draws the
+    //     board from the sectors kept, each level's stretched to the camera (drawStretchedSectors: per square of the frame's
+    //     level the best level that covers it whole, the next finer first, downscaled, then the next coarser), over the
+    //     surface cache (or its stand-in preview) for what no sector covers, as the raster's frames did past the raster;
+    //   - after the gesture (levelSettle) the frames draw the squares on the canvas from the sectors of the camera's level
+    //     where clean ones are (with the ground they were built on: an exact-level sector on the stand-in until it is built
+    //     again on its tile), else stretched from another level, else live as a pan frame does; the sectors of the camera's
+    //     level are built between frames, the canvas's first (nearest its centre), within LEVEL_FRAME_CALLS draw calls a
+    //     frame (levelWorkLeft: the tasks between two frames together; a frame's live cost bursts as a pan's does), so the
+    //     stretched squares are replaced one by one; then (sectorRest) the frames at rest draw the sectors (no rest snapshot,
+    //     no live units) until the camera pans;
+    //   - the lit tiles of the new level are built a step at a time within the same frame budget (LEVEL_TILE_STEPS).
+    // levelCoverage: the squares of the last frame drawn at the camera's level (exact) and not (stretched; bare: none
+    // covers it, live). Grid.zoomLevels false: as before (the zoom raster, sectors released on a zoom).
+    // Whether this board's frames draw the levels (zoom frames and the frames after them).
+    // (Grid.zoomRasters false: the gesture's frames drawn as any frame, no levels either.)
+    levelsOn() {
+        return !!(Grid.zoomLevels && Grid.zoomRasters && Grid.unitSectors && this.unitSectors && this === grid && otherSettings.atmosphericVisuals &&
+            typeof mainCanvas !== 'undefined')
+    }
+    // Whether ctx's frame is one after a zoom drawn on the levels (levelSettle or sectorRest), the camera not panning.
+    levelMode(ctx) {
+        if (!this.levelsOn() || ctx && ctx.canvas !== mainCanvas || !(this.levelSettle || this.sectorRest))
+            return false
+        const screen = gameEvent.screen
+        // A pan ends the frames at rest on the sectors but within ZOOM_QUIET_MS of the zoom; a settle goes on through it (its
+        // squares stretched, not live, its builds within the frames' budget) until done or LEVEL_SETTLE_MS after the zoom.
+        if (this.levelSettle && performance.now() - this.levelSettle.since > LEVEL_SETTLE_MS)
+            this.endLevels('timeout')
+        if (!this.levelSettle && performance.now() >= this.zoomQuietUntil && (performance.now() < screen.surfacePanUntil || screen.surfacePanFrames > 0)) {
+            this.endLevels('pan')
+            return false
+        }
+        // The settle done and the zoom's quiet over, the frames at rest are drawn as before (the rest snapshot at the camera's
+        // exact offset: a sector is composited at the offset rounded to whole device pixels, up to half a pixel off).
+        if (!this.levelSettle && performance.now() >= this.zoomQuietUntil) {
+            this.endLevels('rest')
+            return false
+        }
+        return !!(this.levelSettle || this.sectorRest) && !screen.zoomGesture
+    }
+    endLevels(why) {
+        if (this.levelSettle || this.sectorRest)
+            this.levelWork.ends[why] = (this.levelWork.ends[why] || 0) + 1
+        this.levelSettle = this.sectorRest = undefined
+    }
+    // Whether entry can be drawn stretched (at another level than it was built for): clean, and its ground still the board's
+    // (a cache sector's the cache's now: its tag; a lit tile's or stand-in's not changed by the board since: unitGroundEpoch);
+    // an overlay holds no ground.
+    stretchable(entry) {
+        if (entry.dirty || !entry.image)
+            return false
+        if (entry.kind === 'cache')
+            return entry.ground === UNIT_OVERLAY || sameKeyArray(entry.tag, this.cacheSectorKey())
+        return entry.epoch === this.unitGroundEpoch && !(entry.ground?.parts && entry.ground.parts[4] !== this.cellLayerRevision)
+    }
+    // The levels of the kept sectors that can stand in at level (not level itself), best first: the finer ones (the next finer
+    // first: downscaled), then the coarser (the next coarser first, magnified at most LEVEL_MAX_MAGNIFY); at most LEVEL_SOURCES.
+    // {levels, by: level -> entries}.
+    stretchSources(level, t, cw, ch, withLevel = false) {
+        const by = new Map()
+        for (const entry of this.unitSectors.entries.values()) {
+            // A level magnified more than LEVEL_MAX_MAGNIFY is left to the underlay (a sector magnified 9x covered ~5 MP of
+            // the frame: a software canvas took ~1 s for a few of them).
+            if (entry.level === level && !withLevel || level > entry.level * LEVEL_MAX_MAGNIFY || !this.stretchable(entry))
+                continue
+            const k = t.a / entry.level, x = entry.u * LIT_TILE * k + t.e, y = entry.v * LIT_TILE * k + t.f, w = LIT_TILE * k
+            if (x >= cw || y >= ch || x + w <= 0 || y + w <= 0)
+                continue
+            let list = by.get(entry.level)
+            if (!list)
+                by.set(entry.level, list = new Map())
+            list.set(entry.u + ',' + entry.v, entry)
+        }
+        const keys = [...by.keys()]
+        const levels = keys.filter(l => l === level).concat(keys.filter(l => l > level).sort((a, b) => a - b),
+            keys.filter(l => l < level).sort((a, b) => b - a))
+        return {levels: levels.slice(0, LEVEL_SOURCES), by}
+    }
+    // Which of squares (u, v at level) the levels of src (stretchSources) cover whole: {covered: Set of 'u,v', need: Map of the
+    // sectors to draw for them}, each square from the best level that covers it whole. partial: the squares none covers whole
+    // get every level's sectors meeting them (need) too.
+    stretchCover(level, squares, src, partial = false) {
+        const covered = new Set(), need = new Map()
+        for (const {u, v} of squares) {
+            const x0 = u * LIT_TILE / level, y0 = v * LIT_TILE / level, x1 = (u + 1) * LIT_TILE / level, y1 = (v + 1) * LIT_TILE / level
+            let found = null
+            for (const L of src.levels) {
+                const map = src.by.get(L), s = LIT_TILE / L
+                const su0 = Math.floor(x0 / s + 1e-6), su1 = Math.ceil(x1 / s - 1e-6) - 1
+                const sv0 = Math.floor(y0 / s + 1e-6), sv1 = Math.ceil(y1 / s - 1e-6) - 1
+                const list = []
+                let whole = true
+                for (let sv = sv0; sv <= sv1 && whole; ++sv)
+                    for (let su = su0; su <= su1; ++su) {
+                        const e = map.get(su + ',' + sv)
+                        if (!e) {
+                            whole = false
+                            break
+                        }
+                        list.push(e)
+                    }
+                if (whole) {
+                    found = list
+                    break
+                }
+            }
+            if (found) {
+                covered.add(u + ',' + v)
+                for (const e of found)
+                    need.set(e.key, e)
+                continue
+            }
+            if (!partial)
+                continue
+            // The best level with a sector meeting the square: its sectors there.
+            for (const L of src.levels) {
+                const map = src.by.get(L), s = LIT_TILE / L
+                let any = false
+                for (let sv = Math.floor(y0 / s + 1e-6); sv <= Math.ceil(y1 / s - 1e-6) - 1; ++sv)
+                    for (let su = Math.floor(x0 / s + 1e-6); su <= Math.ceil(x1 / s - 1e-6) - 1; ++su) {
+                        const e = map.get(su + ',' + sv)
+                        if (e) {
+                            need.set(e.key, e)
+                            any = true
+                        }
+                    }
+                if (any)
+                    break
+            }
+        }
+        // At most LEVEL_MAX_DRAWS sectors (the worst levels' left out first): a Chromium canvas rasterizes inside the frame
+        // once the images drawn into it pass ~32 MB (LIT_TILE squares: 256 KB each).
+        if (need.size > LEVEL_MAX_DRAWS) {
+            const rank = new Map(src.levels.map((L, k) => [L, k]))
+            const kept = [...need.values()].sort((p, q) => rank.get(p.level) - rank.get(q.level)).slice(0, LEVEL_MAX_DRAWS)
+            need.clear()
+            for (const e of kept)
+                need.set(e.key, e)
+        }
+        return {covered, need}
+    }
+    // Draws on ctx (frame at transform t, canvas cw x ch, the sectors' grid at ox, oy) the sectors cover.need (stretchCover),
+    // clipped to squares (all: the whole canvas), over the surface cache or its stand-in preview (drawLevelUnderlay), the
+    // levels of src worst first.
+    drawStretchedSectors(ctx, t, squares, src, cover, cw, ch, ox, oy, all = false) {
+        ctx.save()
+        if (!all)
+            clipToDeviceRects(ctx, squares.map(({u, v}) => this.unitSquareRect(u, v, ox, oy, cw, ch)).filter(Boolean))
+        ctx.setTransform(t.a, t.b, t.c, t.d, t.e, t.f)
+        this.drawLevelUnderlay(ctx)
+        ctx.setTransform(1, 0, 0, 1, 0, 0)
+        const order = [...src.levels].reverse()
+        const list = [...cover.need.values()].sort((p, q) => order.indexOf(p.level) - order.indexOf(q.level))
+        for (const e of list) {
+            const k = t.a / e.level
+            ctx.drawImage(e.image, e.u * LIT_TILE * k + t.e, e.v * LIT_TILE * k + t.f, LIT_TILE * k, LIT_TILE * k)
+            this.unitSectors.use(e.key)
+        }
+        ctx.restore()
+        this.levelWork.stretchedDrawn += list.length
+        this.countLevelDraws(list.length + 2)
+    }
+    // What a level frame draws under its stretched sectors and where none is: the surface cache (with its cell layer) where
+    // it meets the view, else the stand-in preview (drawZoomUnderlay).
+    drawLevelUnderlay(ctx) {
+        this.drawZoomUnderlay(ctx)
+    }
+    // TASK-1562: a level frame's plan (plan: the unit sector plan at the camera's level, the sectors' grid at ox, oy): its
+    // squares, the other levels to stretch (src) and the squares they cover whole (cover), the squares it stretches (stretch).
+    levelPlan(plan, t, cw, ch, ox, oy) {
+        const squares = this.levelSquares(plan.level, cw, ch, ox, oy)
+        const src = this.stretchSources(plan.level, t, cw, ch)
+        // first: the squares drawn live, built first (queueUnitSectors: a burst ends them).
+        const lv = {plan, squares, src, cover: this.stretchCover(plan.level, squares, src), stretch: [], standIn: 0, old: 0, first: new Set()}
+        plan.first = lv.first
+        return lv
+    }
+    // The clean sector (u, v) of plan's level and kind whatever its ground (not an overlay; the cache's path: its own
+    // cache), for a square whose sector is built again.
+    levelAnySector(plan, u, v) {
+        const entry = this.unitSectors.get(SectorCache.key(plan.level, u, v))
+        return entry && entry.ground !== UNIT_OVERLAY && this.stretchable(entry) ? entry : null
+    }
+    // The squares lv stretches drawn (their own sectors only, clipped to them).
+    drawLevelStretch(ctx, t, lv, cw, ch, ox, oy) {
+        if (!lv.stretch.length)
+            return
+        this.drawStretchedSectors(ctx, t, lv.stretch, lv.src, this.stretchCover(lv.plan.level, lv.stretch, lv.src), cw, ch, ox, oy)
+    }
+    // A level frame's coverage (levelCoverage); with no square stretched or live the settle is over: the frames at rest
+    // draw the sectors (sectorRest) until the camera pans or zooms.
+    levelFrameEnd(lv, live, kind) {
+        const total = lv.squares.length, stretched = lv.stretch.length
+        // standIn: squares drawn on the stand-in's ground (no tile yet); old: from a sector of the level on an older ground.
+        this.levelCoverage = {serial: this.drawSerial, mode: this.levelSettle ? 'settle' : 'rest', kind, level: lv.plan.level, total,
+            exact: total - stretched, stretched, bare: live, live, standIn: kind === 'standin' ? total - stretched : lv.standIn, old: lv.old}
+        if (this.levelSettle) {
+            ++this.levelWork.settleFrames
+            if (!stretched && !live) {
+                this.levelSettle = undefined
+                ++this.levelWork.settled
+                // On the lit path the frames at rest go on drawing the sectors while the zoom's quiet lasts (the rest path
+                // would build the rest snapshot's bands and draw the units live in it); so do they with debug on (no still
+                // frame holds a debug frame, stillFrameCandidate: each would draw every unit and coordinate text live).
+                // Elsewhere (the surface cache's path: the cache and the units, held as a still frame from the next frame)
+                // they are drawn as before at once.
+                if (kind === 'lit' || debug)
+                    this.sectorRest = {since: performance.now()}
+                else
+                    this.endLevels('done')
+            }
+        }
+        else
+            ++this.levelWork.restFrames
+    }
+    // TASK-1562: a level frame on the lit path whose view at the camera's scale is not made yet (planLitView's stand-in plan:
+    // its light map or view made by tasks): the stand-in (the surface cache magnified, else its preview) under the squares,
+    // drawn from the sectors of the camera's level built on that stand-in (or another ground), else stretched, else live.
+    // Returns whether it drew the surface and units (Grid.draw then draws the live squares' units: unitFrame).
+    // On the surface cache's path with no cache yet (a new game's first build), its stand-in preview likewise.
+    // TASK-1562: a pan there (no cache yet) too, as a pan on the lit tiles draws its missing tiles' stand-in from sectors.
+    drawLevelStandIn(ctx) {
+        const screen = typeof gameEvent !== 'undefined' ? gameEvent.screen : undefined
+        const levels = this.levelMode(ctx)
+        const pan = !levels && this.levelsOn() && ctx.canvas === mainCanvas && !!screen?.surfaceMoving && !screen.zoomGesture &&
+            !screen.surfaceZooming && this.canUseSurfaceCache() && !this.surfaceCache
+        if (!levels && !pan)
+            return false
+        const t = ctx.getTransform()
+        let standIn
+        if (this.canUseSurfaceCache()) {
+            if (this.surfaceCache || !this.standInPreviewFits())
+                return false
+            standIn = 'standin'
+        }
+        else {
+            let plan = this.litPlan
+            if (plan === undefined || plan && (plan.t.a !== t.a || plan.t.d !== t.d || plan.t.e !== t.e || plan.t.f !== t.f))
+                plan = this.litPlan = this.planLitView(ctx)
+            if (!plan || !plan.cache)
+                return false
+            standIn = this.litStandIn(ctx) || !!this.standInSource() && 'standin'
+        }
+        if (!standIn)
+            return false
+        // Kind 'standin': the units drawn as the frame drawing the stand-in draws them (drawStillUnits + drawEntityOverlays).
+        const units = this.unitSectorPlan(ctx, 'standin', levels)
+        if (!units)
+            return false
+        this.litPlan = undefined
+        units.standIn = standIn
+        units.token = this.unitStandInToken(standIn)
+        units.noView = true
+        const cw = ctx.canvas.width, ch = ctx.canvas.height, ox = Math.round(t.e), oy = Math.round(t.f)
+        this.unitSectorCheck(this.drawRange(ctx))
+        const range = this.litTileRange(cw, ch, ox, oy, 0), board = this.unitBoardSquares(units.level)
+        const lv = this.levelPlan(units, t, cw, ch, ox, oy)
+        // The stand-in under every square (the sectors are opaque where the board is).
+        if (standIn === 'standin')
+            this.drawStandIn(ctx)
+        else
+            this.drawSurfaceCache(ctx)
+        const live = [], wanted = [], overlays = [], upgrades = []
+        ctx.save()
+        ctx.setTransform(1, 0, 0, 1, 0, 0)
+        for (const {u, v} of lv.squares) {
+            const entry = this.freshUnitSector(units, u, v, units.token) || this.levelAnySector(units, u, v)
+            if (entry) {
+                this.drawUnitSectorAt(ctx, entry, u * LIT_TILE + ox, v * LIT_TILE + oy)
+                if (entry.ground !== units.token)
+                    wanted.push({u, v})
+                continue
+            }
+            const over = this.freshUnitSector(units, u, v, UNIT_OVERLAY)
+            const r = this.unitSquareRect(u, v, ox, oy, cw, ch)
+            ;(over ? upgrades : wanted).push({u, v})
+            if (over)
+                overlays.push({entry: over, x: u * LIT_TILE + ox, y: v * LIT_TILE + oy})
+            else if (r && lv.cover.covered.has(u + ',' + v))
+                lv.stretch.push({u, v})
+            else if (r) {
+                live.push(r)
+                lv?.first.add(u + ',' + v)
+            }
+        }
+        ctx.restore()
+        this.drawLevelStretch(ctx, t, lv, cw, ch, ox, oy)
+        this.litFrame = undefined
+        this.unitFrame = {kind: 'standin', live, overlays, plan: units}
+        this.queueUnitSectors(units, wanted, range, board, cw, ch, ox, oy, upgrades)
+        if (levels)
+            this.levelFrameEnd(lv, live.length, 'standin')
+        return true
+    }
+    // The squares (u, v at the frame's level) on a cw x ch canvas with the sectors' grid at ox, oy, within the board's.
+    levelSquares(level, cw, ch, ox, oy) {
+        const range = this.litTileRange(cw, ch, ox, oy, 0), board = this.unitBoardSquares(level), out = []
+        for (let v = Math.max(range.v0, board.v0); v <= Math.min(range.v1, board.v1); ++v)
+            for (let u = Math.max(range.u0, board.u0); u <= Math.min(range.u1, board.u1); ++u)
+                out.push({u, v})
+        return out
+    }
+    // TASK-1562: a zoom gesture's frame drawn from the levels (instead of drawZoomRaster): the sky, the slab's shadow, then the
+    // board from the kept sectors of every level, stretched to the camera (over the surface cache or the stand-in preview),
+    // the selection's raster. Nothing is built (the unit sector tasks refuse zoom gestures). False when the frame is not one.
+    drawZoomSectors(ctx) {
+        const screen = typeof gameEvent !== 'undefined' ? gameEvent.screen : undefined
+        if (!this.levelsOn() || !screen?.zoomGesture || zoomRasterTweens() || ctx.canvas !== mainCanvas)
+            return false
+        const t = ctx.getTransform(), cw = ctx.canvas.width, ch = ctx.canvas.height
+        if (t.b !== 0 || t.c !== 0 || !(t.a > 0) || t.a !== t.d || !this.arr.length)
+            return false
+        ++this.drawSerial
+        this.zoomRaster = undefined
+        if (!atmosphericBackground.opaqueOver(ctx))
+            ctx.clearRect(canvas.offset.x, canvas.offset.y, width, height)
+        atmosphericBackground.draw(ctx)
+        drawBackgroundHints(ctx)
+        this.coverOpen = undefined
+        this.drawSlabShadow(ctx)
+        // (The cells are not compared in the gesture: its frames show the sectors as they were, as the zoom raster showed
+        // the frame before it; the frames after it compare them.)
+        this.lod = false
+        if (this.unitSectorSerial !== this.drawSerial) {
+            this.unitSectorSerial = this.drawSerial
+            this.unitSectors.beginFrame()
+        }
+        const level = t.a, ox = Math.round(t.e), oy = Math.round(t.f)
+        const squares = this.levelSquares(level, cw, ch, ox, oy)
+        // The camera's own level drawn as the others (at the exact offset t.e, t.f).
+        const src = this.stretchSources(level, t, cw, ch, true)
+        const cover = this.stretchCover(level, squares, src, true)
+        this.drawStretchedSectors(ctx, t, squares, src, cover, cw, ch, ox, oy, true)
+        this.levelCoverage = {serial: this.drawSerial, mode: 'zoom', level, total: squares.length, exact: 0,
+            stretched: cover.covered.size, bare: squares.length - cover.covered.size, live: 0}
+        ++this.levelWork.zoomFrames
+        // The frames after the gesture: drawn on the levels until the camera's level is built (levelSettle).
+        this.levelSettle = {since: performance.now(), level: null}
+        this.sectorRest = undefined
+        this.zoomQuietUntil = performance.now() + ZOOM_QUIET_MS
+        SelectionOverlay.drawSelection(ctx)
+        this.dropHeldFrame()
+        this.prepareSurfaceCache()
+        this.countGestureFrame()
+        return true
     }
     // The units pass and info texts of the frame's live squares (frame: unitFrame, or a lit frame's units), clipped to them;
     // then what the skipped units pass does besides drawing (a selected demon portal's panel kept current).
@@ -5510,7 +5913,11 @@ class Grid extends SpritesGroup {
                     this.drawOther(ctx, 'units', range)
                 else {
                     const h = this.arr[0].length
-                    const cells = this.surfaceOverlayCells.filter(k => {
+                    // TASK-1562: a stand-in level frame's: every cell the pass draws on (unitCellVals, compared this frame).
+                    const cells = frame.kind === 'standin' ? [...this.unitCellVals.keys()].filter(k => {
+                        const i = Math.floor(k / h), j = k - i * h
+                        return i >= range.i0 && i < range.i1 && j >= range.j0 && j < range.j1
+                    }).sort((p, q) => p - q) : this.surfaceOverlayCells.filter(k => {
                         const i = Math.floor(k / h), j = k - i * h
                         return i >= range.i0 && i < range.i1 && j >= range.j0 && j < range.j1
                     })
@@ -5552,7 +5959,7 @@ class Grid extends SpritesGroup {
     restUnitSectors(ctx) {
         const screen = typeof gameEvent !== 'undefined' ? gameEvent.screen : undefined
         if (!Grid.unitSectorsAtRest || !screen || screen.surfaceMoving || screen.zoomGesture || screen.surfaceZooming ||
-                this.zoomBoardPass || !otherSettings.atmosphericVisuals)
+                this.zoomBoardPass || !otherSettings.atmosphericVisuals || this.levelMode(ctx))
             return
         const kind = this.canUseSurfaceCache() ? 'cache' : 'lit'
         if (kind === 'cache' && (this.cacheSectorUnsteady() || !this.surfaceStateMatches(ctx) || !this.surfaceCellLayerHolds()))
@@ -5568,7 +5975,7 @@ class Grid extends SpritesGroup {
         for (let v = Math.max(range.v0, board.v0); v <= Math.min(range.v1, board.v1); ++v)
             for (let u = Math.max(range.u0, board.u0); u <= Math.min(range.u1, board.u1); ++u) {
                 const entry = this.unitSectors.get(SectorCache.key(plan.level, u, v))
-                if (!entry || entry.dirty || entry.kind !== kind)
+                if (!entry || !this.unitEntryFits(entry, plan))
                     wanted.push({u, v})
             }
         this.queueUnitSectors(plan, wanted, range, board, cw, ch, ox, oy)
@@ -5586,7 +5993,8 @@ class Grid extends SpritesGroup {
         const unsteady = this.cacheSectorUnsteady()
         if (unsteady)
             return refuse(unsteady)
-        const plan = this.unitSectorPlan(ctx, 'cache')
+        const levels = this.levelMode(ctx)
+        const plan = this.unitSectorPlan(ctx, 'cache', levels)
         if (!plan)
             return false
         if (!this.surfaceStateMatches(ctx) || !this.surfaceCellLayerHolds())
@@ -5595,6 +6003,8 @@ class Grid extends SpritesGroup {
         const ox = Math.round(t.e), oy = Math.round(t.f)
         this.unitSectorCheck(this.drawRange(ctx))
         const range = this.litTileRange(cw, ch, ox, oy, 0), board = this.unitBoardSquares(plan.level)
+        // TASK-1562: after a zoom, the squares without a sector of the camera's level stretched from another (lv).
+        const lv = levels ? this.levelPlan(plan, t, cw, ch, ox, oy) : null
         const live = [], wanted = [], overlays = [], ground = [], upgrades = []
         ctx.save()
         ctx.setTransform(1, 0, 0, 1, 0, 0)
@@ -5608,12 +6018,19 @@ class Grid extends SpritesGroup {
                 // TASK-1561: the cache drawn there, then the units and texts from an overlay sector, else live.
                 const over = this.freshUnitSector(plan, u, v, UNIT_OVERLAY)
                 const r = this.unitSquareRect(u, v, ox, oy, cw, ch)
+                if (r && !over && lv?.cover.covered.has(u + ',' + v)) {
+                    lv.stretch.push({u, v})
+                    wanted.push({u, v})
+                    continue
+                }
                 if (r)
                     ground.push(r)
                 if (over)
                     overlays.push({entry: over, x: u * LIT_TILE + ox, y: v * LIT_TILE + oy})
-                else if (r)
+                else if (r) {
                     live.push(r)
+                    lv?.first.add(u + ',' + v)
+                }
                 ;(over ? upgrades : wanted).push({u, v})
             }
         }
@@ -5626,8 +6043,12 @@ class Grid extends SpritesGroup {
             this.drawSurfaceCacheRect(ctx, left, top, left + cw / t.a, top + ch / t.d)
             ctx.restore()
         }
+        if (lv)
+            this.drawLevelStretch(ctx, t, lv, cw, ch, ox, oy)
         this.unitFrame = {kind: 'cache', live, overlays, plan}
         this.queueUnitSectors(plan, wanted, range, board, cw, ch, ox, oy, upgrades)
+        if (lv)
+            this.levelFrameEnd(lv, live.length, 'cache')
         return true
     }
     // The frame's wanted squares (on the canvas, nearest its centre first) and the ring UNIT_SECTOR_AHEAD round the canvas
@@ -5635,14 +6056,16 @@ class Grid extends SpritesGroup {
     queueUnitSectors(plan, wanted, range, board, cw, ch, ox, oy, upgrades = null) {
         const cu = (cw / 2 - ox) / LIT_TILE - 0.5, cv = (ch / 2 - oy) / LIT_TILE - 0.5
         const near = (p, q) => Math.hypot(p.u - cu, p.v - cv) - Math.hypot(q.u - cu, q.v - cv)
-        wanted.sort(near)
+        // TASK-1562: a level frame's live squares first (plan.first), then the others nearest the centre.
+        const first = plan.first?.size ? p => plan.first.has(p.u + ',' + p.v) ? 0 : 1 : null
+        wanted.sort(first ? (p, q) => first(p) - first(q) || near(p, q) : near)
         const ring = [], A = UNIT_SECTOR_AHEAD
         for (let v = Math.max(range.v0 - A, board.v0); v <= Math.min(range.v1 + A, board.v1); ++v)
             for (let u = Math.max(range.u0 - A, board.u0); u <= Math.min(range.u1 + A, board.u1); ++u) {
                 if (u >= range.u0 && u <= range.u1 && v >= range.v0 && v <= range.v1)
                     continue
                 const entry = this.unitSectors.get(SectorCache.key(plan.level, u, v))
-                if (!entry || entry.dirty || entry.kind !== plan.kind)
+                if (!entry || !this.unitEntryFits(entry, plan))
                     ring.push({u, v})
             }
         ring.sort(near)
@@ -5681,9 +6104,29 @@ class Grid extends SpritesGroup {
         // squares on the canvas (up to UNIT_SECTOR_BURST_CALLS calls in UNIT_SECTOR_BURST_MS), so the live squares (and the
         // heavy frames) end at once.
         const frame = this.unitFrame || this.litFrame?.units
-        const burst = !job.plan.rest && !!frame && frame.plan?.key === job.plan.key && frame.liveCost > UNIT_SECTOR_BURST_COST
-        const start = performance.now(), calls = {n: 0, max: burst ? UNIT_SECTOR_BURST_CALLS : UNIT_SECTOR_TASK_CALLS}
-        const ms = burst ? UNIT_SECTOR_BURST_MS : UNIT_SECTOR_TASK_MS
+        // TASK-1562: a level frame's (levelMode) live squares burst too; its other builds share LEVEL_FRAME_CALLS a frame with
+        // the lit tiles' steps (levelWorkLeft), the rest left to the next frame's task.
+        const levels = this.levelMode()
+        const burst = (!job.plan.rest || levels) && !!frame && frame.plan?.key === job.plan.key && frame.liveCost > UNIT_SECTOR_BURST_COST
+        const left = levels && !burst ? Grid.levelWorkLeft() : null
+        // With no square stretched or live (the sectors left are upgrades onto built tiles) the lit tiles' steps keep their
+        // share of the frame's budget.
+        const cover = this.levelCoverage
+        if (left && cover && cover.serial === this.drawSerial && !cover.stretched && !cover.live)
+            left.calls -= LEVEL_TILE_STEPS * LEVEL_TILE_STEP_CALLS / 2
+        // The frame's own calls are in it too: its sector copies (levelDraws), live squares (liveCost) and the rest of a
+        // frame (LEVEL_FRAME_BASE: the sky, the interface, the borders), within LEVEL_FRAME_TOTAL.
+        if (left) {
+            const drawn = this.levelDraws?.serial === this.drawSerial ? this.levelDraws.n : 0
+            left.calls = Math.min(left.calls, LEVEL_FRAME_TOTAL - LEVEL_FRAME_BASE - drawn - (frame?.liveCost || 0))
+        }
+        if (left && left.calls < UNIT_SECTOR_GROUND_CALLS) {
+            ++this.levelWork.budgetStops
+            this.unitSectorWanted ||= job
+            return
+        }
+        const start = performance.now(), calls = {n: 0, max: burst ? UNIT_SECTOR_BURST_CALLS : left ? left.calls : UNIT_SECTOR_TASK_CALLS}
+        const ms = burst ? (levels ? LEVEL_BURST_MS : UNIT_SECTOR_BURST_MS) : left ? LEVEL_TASK_MS : UNIT_SECTOR_TASK_MS
         if (burst)
             ++this.unitSectorWork.bursts
         let last = 0
@@ -5707,9 +6150,16 @@ class Grid extends SpritesGroup {
             if (this.buildUnitSector(job, u, v, calls))
                 last = performance.now() - t0
         }
+        if (left)
+            Grid.levelSpend(calls.n)
         // A cut build, and the squares the task did not reach, by the next task, though no frame queues one (a frame's own
         // list replaces it; a pan stopped stops a pan's job: the check above).
-        if ((this.unitSectorBuilding || k < job.list.length) && !this.unitSectorQueued) {
+        // TASK-1562: a level frame's job by the next frame's task (its budget spent).
+        if (left && (this.unitSectorBuilding || k < job.list.length)) {
+            this.unitSectorWanted ||= {...job, list: job.list.slice(k), onCanvas: Math.max(0, (job.onCanvas || 0) - k)}
+            ++this.levelWork.budgetStops
+        }
+        else if ((this.unitSectorBuilding || k < job.list.length) && !this.unitSectorQueued) {
             this.unitSectorWanted ||= {...job, list: job.list.slice(k), onCanvas: Math.max(0, (job.onCanvas || 0) - k)}
             this.unitSectorQueued = true
             setTimeout(gridTask(() => this.unitSectorTask()))
@@ -5731,11 +6181,25 @@ class Grid extends SpritesGroup {
         // sampling near the square's edge is the whole picture's.
         const grown = {left: rect.left - span / 4, top: rect.top - span / 4, right: rect.right + span / 4, bottom: rect.bottom + span / 4}
         if (plan.kind === 'cache') {
-            if (this.cacheSectorUnsteady() || this.cacheSectorKey().some((k, i) => k !== plan.key.key[UNIT_SECTOR_KEY_BASE + i]))
+            if (this.cacheSectorUnsteady() || (Grid.zoomLevels ? !sameKeyArray(this.cacheSectorKey(), plan.tag) :
+                    this.cacheSectorKey().some((k, i) => k !== plan.key.key[UNIT_SECTOR_KEY_BASE + i])))
                 return overlay('cache')
             return {ground: 'cache', draw: g => this.drawSurfaceCacheRect(g, grown.left, grown.top, grown.right, grown.bottom)}
         }
         const view = this.litView
+        // TASK-1562: a level frame without the view (drawLevelStandIn): the stand-in as the ground.
+        if (plan.noView && !(view && view.a === level && view.e === 0 && view.f === 0)) {
+            if (!job.standIn || this.surfacePatchJob || this.surfaceLayerJob || this.surfaceSplitJob || this.surfaceCacheBuild ||
+                    this.unitStandInToken(job.standIn) !== job.token)
+                return overlay('standin')
+            const source = job.token.source
+            return {ground: job.token, draw: g => {
+                if (source === 'preview')
+                    this.drawStandInRect(g, grown.left, grown.top, grown.right, grown.bottom, 'sector')
+                else if (this.surfaceCache)
+                    this.drawSurfaceCacheRect(g, grown.left, grown.top, grown.right, grown.bottom)
+            }}
+        }
         if (!view || view !== plan.view || view.a !== level || view.e !== 0 || view.f !== 0 || view.stale?.has(key) ||
                 view.patch || view.layerJob)
             return overlay(!view ? 'noview' : view !== plan.view ? 'view' : view.stale?.has(key) ? 'stale' : view.patch ? 'patch' : view.layerJob ? 'layerjob' : 'viewgrid')
@@ -5779,7 +6243,7 @@ class Grid extends SpritesGroup {
         if (!b) {
             // Already clean with that ground (or, as an overlay, clean).
             const entry = this.unitSectors.get(SectorCache.key(level, u, v))
-            if (entry && !entry.dirty && entry.kind === plan.kind && entry.ground === ground)
+            if (entry && this.unitEntryFits(entry, plan) && entry.ground === ground)
                 return false
             const transform = {a: level, b: 0, c: 0, d: level, e: -u * LIT_TILE, f: -v * LIT_TILE}
             const range = this.drawRange({getTransform: () => transform, canvas: {width: LIT_TILE, height: LIT_TILE}})
@@ -5832,6 +6296,8 @@ class Grid extends SpritesGroup {
         const entry = this.unitSectors.put(level, u, v, b.canvas)
         entry.ground = ground
         entry.kind = plan.kind
+        entry.tag = plan.tag
+        entry.epoch = this.unitGroundEpoch
         this.unitSectorWork.evicted += this.unitSectors.evictions - before
         ++this.unitSectorWork.built
         if (ground === UNIT_OVERLAY)
@@ -5854,11 +6320,26 @@ class Grid extends SpritesGroup {
             return n
         }
         if (plan.kind !== 'lit') {
-            const n = cellsOf(range.i0, range.i1)
+            // TASK-1562: in chunks of the cells the pass draws on (unitCellVals, board order): drawStillUnits on each, then
+            // drawEntityOverlays on each with the buildings' bars kept for the last step, as one pass draws them.
+            const cells = []
+            for (let i = range.i0; i < range.i1; ++i)
+                for (let j = range.j0; j < range.j1; ++j)
+                    if (this.unitCellVals.has(i * h + j))
+                        cells.push(i * h + j)
+            const per = Math.max(1, Math.floor(UNIT_SECTOR_CHUNK_CALLS / UNIT_SECTOR_CELL_CALLS / 2)), parts = []
+            for (let k = 0; k < cells.length; k += per)
+                parts.push(cells.slice(k, k + per))
+            const bars = []
+            for (const part of parts)
+                steps.push({run: g => this.drawStillUnits(g, part), cost: part.length * UNIT_SECTOR_CELL_CALLS / 2})
+            for (const part of parts)
+                steps.push({run: g => this.drawEntityOverlays(g, part, bars), cost: part.length * UNIT_SECTOR_CELL_CALLS / 2})
             steps.push({run: g => {
-                this.drawStillUnits(g)
-                this.drawEntityOverlays(g)
-            }, cost: n * UNIT_SECTOR_CELL_CALLS, cells: range, unitCells: n})
+                for (const building of bars)
+                    building.drawBars(g)
+                this.refreshCulledPortal(range)
+            }, get cost() { return 1 + 3 * bars.length }, cells: range, unitCells: cells.length})
             return steps
         }
         const bars = []
@@ -5959,7 +6440,10 @@ class Grid extends SpritesGroup {
         // TASK-1560: a pan frame draws a square's unit sector (its tile or stand-in and the units over it) where one is clean
         // with the ground the frame draws there; the other squares within the board are live (their ground as before, the
         // units drawn over them after drawLitEdges, drawLiveSectorUnits). Not with stale tiles (drawn with their changed cells).
-        const units = view.e === 0 && view.f === 0 && !view.stale?.size ? this.unitSectorPlan(ctx, 'lit') : null
+        // TASK-1562: after a zoom (levelMode) at rest too, the squares not drawn from the camera's level stretched from another
+        // where one covers them (lv).
+        const levels = this.levelMode(ctx)
+        const units = view.e === 0 && view.f === 0 && !view.stale?.size ? this.unitSectorPlan(ctx, 'lit', levels) : null
         if (!units && (view.e !== 0 || view.f !== 0 || view.stale?.size))
             this.unitSectorRefusals['lit:view'] = (this.unitSectorRefusals['lit:view'] || 0) + 1
         let composed = null, live = null, wanted = null, edges = null, board = null, overlays = null, upgrades = null
@@ -5973,6 +6457,7 @@ class Grid extends SpritesGroup {
             edges = this.unitEdgeSquares(view)
             board = this.unitBoardSquares(units.level)
         }
+        const lv = units && levels ? this.levelPlan(units, t, cw, ch, Math.round(t.e), Math.round(t.f)) : null
         // TASK-1559: the sectors drawn this frame are the cache's most recent and are not evicted before the next frame.
         this.beginSectorFrame()
         ctx.save()
@@ -5996,6 +6481,18 @@ class Grid extends SpritesGroup {
                         if (entry) {
                             this.drawUnitSectorAt(ctx, entry, u * LIT_TILE + ox, v * LIT_TILE + oy)
                             ;(composed ||= new Set()).add(u + ',' + v)
+                            if (lv)
+                                ++lv.standIn
+                            continue
+                        }
+                        // TASK-1562: a clean sector of the camera's level on another ground, until built again.
+                        const any = lv && this.levelAnySector(units, u, v)
+                        if (lv)
+                            ++lv.standIn
+                        if (any) {
+                            this.drawUnitSectorAt(ctx, any, u * LIT_TILE + ox, v * LIT_TILE + oy)
+                            ;(composed ||= new Set()).add(u + ',' + v)
+                            wanted.push({u, v})
                             continue
                         }
                         // TASK-1561: the units and texts from an overlay sector over the stand-in, else live.
@@ -6004,8 +6501,15 @@ class Grid extends SpritesGroup {
                         const r = this.unitSquareRect(u, v, ox, oy, cw, ch)
                         if (over)
                             overlays.push({entry: over, x: u * LIT_TILE + ox, y: v * LIT_TILE + oy})
-                        else if (r)
+                        else if (r && lv && lv.cover.covered.has(u + ',' + v)) {
+                            lv.stretch.push({u, v})
+                            ;(composed ||= new Set()).add(u + ',' + v)
+                            continue
+                        }
+                        else if (r) {
                             live.push(r)
+                            lv?.first.add(u + ',' + v)
+                        }
                     }
                     (missing ||= new Set()).add(u + ',' + v)
                     continue
@@ -6020,6 +6524,16 @@ class Grid extends SpritesGroup {
                         this.drawUnitSectorAt(ctx, entry, u * LIT_TILE + ox, v * LIT_TILE + oy)
                         continue
                     }
+                    // TASK-1562: a clean sector of the camera's level on another ground (the stand-in), until built again.
+                    const any = lv && !edge && this.levelAnySector(units, u, v)
+                    if (any)
+                        ++lv.old
+                    if (any) {
+                        this.drawUnitSectorAt(ctx, any, u * LIT_TILE + ox, v * LIT_TILE + oy)
+                        ;(composed ||= new Set()).add(u + ',' + v)
+                        wanted.push({u, v})
+                        continue
+                    }
                     // TASK-1561: else the units and texts from an overlay sector over the tile (an edge-run tile's is one), else live.
                     const over = this.freshUnitSector(units, u, v, UNIT_OVERLAY)
                     if (!over)
@@ -6029,14 +6543,23 @@ class Grid extends SpritesGroup {
                     const r = this.unitSquareRect(u, v, ox, oy, cw, ch)
                     if (over)
                         overlays.push({entry: over, x: u * LIT_TILE + ox, y: v * LIT_TILE + oy})
-                    else if (r)
+                    else if (r && lv && !edge && lv.cover.covered.has(u + ',' + v)) {
+                        lv.stretch.push({u, v})
+                        ;(composed ||= new Set()).add(u + ',' + v)
+                        continue
+                    }
+                    else if (r) {
                         live.push(r)
+                        lv?.first.add(u + ',' + v)
+                    }
                 }
                 if (tile)
                     this.drawLitTileAt(ctx, tile, u * LIT_TILE + ox, v * LIT_TILE + oy, cw, ch)
             }
         }
         ctx.restore()
+        if (lv)
+            this.drawLevelStretch(ctx, t, lv, cw, ch, ox, oy)
         if (missing) {
             ctx.save()
             clipToDeviceRects(ctx, [...missing].map(key => {
@@ -6080,6 +6603,8 @@ class Grid extends SpritesGroup {
             units: units ? {kind: 'lit', live, overlays, plan: units} : undefined}
         if (units)
             this.queueUnitSectors(units, wanted, range, board, cw, ch, ox, oy, upgrades)
+        if (lv)
+            this.levelFrameEnd(lv, live.length, 'lit')
         this.queueLitTiles(view, t, cw, ch)
         return true
     }
@@ -6151,7 +6676,8 @@ class Grid extends SpritesGroup {
         // state. exact: its whole state compared (litViewHolds' exact, not the rest snapshot's cell layer compare).
         if (Grid.litTrust && holds && view === holds)
             atmosphericLighting.trust = {board: this, view, rebuilds: view.rebuilds, exact: !view.rest || view.rest.done !== LIT_REST_BANDS}
-        const rest = screen.surfaceMoving ? null : this.litRest(ctx, view, t, cw, ch)
+        // TASK-1562: none after a zoom (levelMode): the frames at rest draw the sectors.
+        const rest = screen.surfaceMoving || this.levelMode(ctx) ? null : this.litRest(ctx, view, t, cw, ch)
         // TASK-1372 (Grid.litFirstViewSteps): a view with more than LIT_FRAME_TILES of the tiles on the canvas not built and
         // no stand-in for them (no surface cache yet: a new game's first frames) is not drawn: the frame draws the board
         // live, as a zoom gesture's frames do, while the tasks build those tiles, LIT_FIRST_TILE_BUDGET a task, nearest the
@@ -6997,11 +7523,22 @@ class Grid extends SpritesGroup {
             const k = tiles.findIndex(m => m.u === job.u && m.v === job.v)
             tiles.unshift(...tiles.splice(k, 1))
         }
+        // TASK-1562: after a zoom (levelMode) at most LEVEL_TILE_STEPS steps between two frames, within the frames' budget
+        // (levelWorkLeft, LEVEL_TILE_STEP_CALLS a step), the rest by the next frame's task.
+        const levels = stepped && this.levelMode()
         for (const {u, v} of tiles) {
             if (this.litHas(view, u, v))
                 continue
             if (stepped) {
                 for (;;) {
+                    if (levels) {
+                        const left = Grid.levelWorkLeft()
+                        if (left.tileSteps >= LEVEL_TILE_STEPS || left.calls < LEVEL_TILE_STEP_CALLS) {
+                            ++this.levelWork.budgetStops
+                            return
+                        }
+                        Grid.levelSpend(LEVEL_TILE_STEP_CALLS, 1)
+                    }
                     if (performance.now() - start + last > budget && !(atLeastOne && !steps)) {
                         // At rest the tile under way goes on in the next task at once (queueLitTileSteps), not a frame later.
                         if (budget === LIT_REST_TASK_MS && this.litTileJob)
@@ -7661,6 +8198,10 @@ class Grid extends SpritesGroup {
         sectors.clear()
         ++this.sectorGen
         this.sectorBasis = undefined
+        // TASK-1562: a board change (not a release, or a light map made for another scale only: adoptSectors) leaves the
+        // unit sectors' grounds of other levels behind the board.
+        if (/board|cell layer|lamp|outline|light map/.test(reason))
+            ++this.unitGroundEpoch
     }
     // The sectors the board change found (surfaceCacheChangeRects' cells and light, world boxes) reaches, at every level: each
     // world box (the light's grown by a light map pixel) grown by 3 device pixels at the sector's level and the edge
@@ -7686,6 +8227,9 @@ class Grid extends SpritesGroup {
         if (!sectors || !sectors.entries.size)
             return []
         const kept = []
+        // TASK-1562: the unit sectors there (every level) too: their ground is the lit tile's.
+        if (Grid.zoomLevels && this.unitSectors?.entries.size)
+            this.unitSectorWork.dirtied += this.unitSectors.dirtyCells(Array.isArray(rects) ? rects : [rects], level => (3 + 4 * LIT_EDGE_BLOCK) / level).length
         for (const skey of sectors.dirtyCells(Array.isArray(rects) ? rects : [rects], level => (3 + 4 * LIT_EDGE_BLOCK) / level)) {
             const entry = sectors.get(skey), uv = entry.u + ',' + entry.v
             if (view && entry.level === view.sectorLevel && entry.image && (view.tiles.get(uv) === entry.image || view.stale?.get(uv) === entry.image)) {
@@ -7727,7 +8271,7 @@ class Grid extends SpritesGroup {
         if (!sectors.entries.size)
             return done('empty')
         const refuse = !basis ? 'no basis' : this.isObserving() ? 'observed' : this.sectorOutline !== mapDepth.outline ? 'outline' :
-            basis.rebuilds !== L.rebuilds || basis.mapScale !== L.mapScale ? 'light map' : null
+            basis.rebuilds !== L.rebuilds ? 'light map' : basis.mapScale !== L.mapScale ? 'light map scale' : null
         if (refuse) {
             this.clearSectors(refuse)
             return done('cleared')
@@ -7764,6 +8308,8 @@ class Grid extends SpritesGroup {
         if (this.litView && this.litView !== view)
             this.dropLitView()
         this.litView = view
+        // TASK-1562: made after a zoom on the levels (its tiles built a step at a time while the frames draw the sectors kept).
+        view.levelBuild = !!(this.levelSettle || this.sectorRest)
         this.adoptSectors(view, cw, ch)
         return view
     }
@@ -7860,7 +8406,7 @@ class Grid extends SpritesGroup {
         // TASK-1561: a frame at rest has them built for the pan that may follow (with the state a pan frame plans them in).
         if (!pass && !scene)
             this.restUnitSectors(ctx)
-        const sectored = !pass && !scene && this.drawCacheSectors(ctx)
+        const sectored = !pass && !scene && (this.drawCacheSectors(ctx) || this.drawLevelStandIn(ctx))
         const surface = scene || sectored || this.drawMapSurface(ctx)
         this.frameSurface = surface
         // Lit tiles (drawLitView) hold the buildings and the light but for the board's edge.
@@ -8006,6 +8552,11 @@ class Grid extends SpritesGroup {
         if (!Grid.zoomRasters || this !== grid || this.zoomRaster || typeof mainCanvas === 'undefined' || typeof mainCtx === 'undefined' ||
                 !this.zoomRasterSource || zoomRasterTweens())
             return
+        // TASK-1562: the gesture's frames draw the levels kept (drawZoomSectors): no raster.
+        if (this.levelsOn()) {
+            ++this.levelWork.skippedRasters
+            return
+        }
         const t = mainCtx.getTransform(), cw = mainCanvas.width, ch = mainCanvas.height
         if (t.b !== 0 || t.c !== 0 || t.a <= 0 || t.d <= 0 || !cw || !ch)
             return
@@ -8089,7 +8640,8 @@ class Grid extends SpritesGroup {
                     typeof turnPlaybackView !== 'undefined' && turnPlaybackView.active ||
                     typeof attackFx !== 'undefined' && attackFx.effects.length || typeof healFx !== 'undefined' && healFx.effects.length ||
                     screen.surfaceMoving || screen.surfaceZooming || screen.zoomGesture || screen.glide || this.litRestUnderWay() ||
-                    !(this.surfaceCacheBuild || this.surfaceSplitJob || this.surfacePatchJob || !this.surfaceCache))
+                    !(this.surfaceCacheBuild || this.surfaceSplitJob || this.surfacePatchJob || !this.surfaceCache) ||
+                    Grid.zoomQuiet())
                 return false
             watchGridInput()
             hold = this.cacheHold = {start: performance.now(), frames: 0, workMs: 0, tasks: 0, scale: canvas.scale, x: canvas.offset.x,
@@ -8877,6 +9429,31 @@ function patchCellsWindow(boxes) {
 
 // Whether a move tween runs: the zoom raster (Grid.drawZoomRaster) and a held frame would hold the unit still. Attack
 // animations (attackFx) draw over the frame, held or not (drawMain), and keep no frame live.
+// TASK-1562: which canvases the sprite cache (cachedImages) holds, as one value: the unit sectors drawn from them are
+// released when one is swapped (unitSectorPlan's key; a lost and restored context repaints them in place:
+// restoreImageCaches releases them).
+const cachedImageIds = new WeakMap()
+let cachedImageSeq = 0
+function cachedImagesSignature() {
+    if (typeof cachedImages === 'undefined')
+        return ''
+    let h = 0, n = 0
+    for (const name in cachedImages) {
+        const image = cachedImages[name]
+        if (!image || typeof image !== 'object')
+            continue
+        let id = cachedImageIds.get(image)
+        if (!id)
+            cachedImageIds.set(image, id = ++cachedImageSeq)
+        h = Math.imul(h, 31) + id | 0
+        ++n
+    }
+    return h + ':' + n
+}
+// TASK-1562: two keys (arrays, or null) with the same values.
+function sameKeyArray(a, b) {
+    return a === b || !!a && !!b && a.length === b.length && a.every((v, k) => v === b[k])
+}
 function zoomRasterTweens() {
     return typeof moveTween !== 'undefined' && moveTween.tweens.size > 0
 }
@@ -10097,6 +10674,77 @@ const UNIT_SECTOR_BURST_CALLS = 10000
 const UNIT_SECTOR_BURST_MS = 100
 // TASK-1561: frames at rest have their unit sectors built between frames (Grid.restUnitSectors); false: only pans build.
 Grid.unitSectorsAtRest = true
+// TASK-1562 (SECTORS 6/11): zoom levels (Grid.drawZoomSectors, levelSettle, sectorRest). False: the zoom raster as before.
+Grid.zoomLevels = true
+// The levels a level frame stretches from (the best first: stretchSources).
+const LEVEL_SOURCES = 4
+// The sectors a level frame draws stretched at most (stretchCover).
+const LEVEL_MAX_DRAWS = 100
+// The most a level is magnified to stand in for the camera's (stretchSources).
+const LEVEL_MAX_MAGNIFY = 8
+// Draw calls the tasks between two frames make after a zoom (the unit sector builds and the lit tile steps together:
+// levelWorkLeft), at most LEVEL_TILE_STEPS lit tile steps, each counted LEVEL_TILE_STEP_CALLS (about: a tile quarter's
+// draws, artifacts/TASK-1562), so a frame and the work before it stay under ~500 calls.
+const LEVEL_FRAME_CALLS = 360
+// A level frame and the tasks before the next together at most this many draw calls (a heavy frame: over 500), the frame's
+// calls but its sector copies and live squares counted as LEVEL_FRAME_BASE.
+const LEVEL_FRAME_TOTAL = 460
+const LEVEL_FRAME_BASE = 40
+// A level frame's unit sector task's time (the frames after a zoom draw few calls: ~60-130).
+const LEVEL_TASK_MS = 24
+// A level frame's burst (its live squares, the squares no level covers): one task long enough to end them (a burst cut at
+// UNIT_SECTOR_BURST_MS went on over several frames, each a heavy one).
+const LEVEL_BURST_MS = 250
+const LEVEL_TILE_STEPS = 4
+const LEVEL_TILE_STEP_CALLS = 80
+// A settle (levelSettle) given up this long after its zoom's last frame (its squares then drawn as a pan's or rest frame's).
+const LEVEL_SETTLE_MS = 6000
+// After a zoom gesture (and while its settle lasts) the background builds that do not draw the frame run a piece a frame
+// (the surface cache's build steps: Grid.oncePerFrame) or wait (its split, finish and bake, the owned tiles' prewarm, the
+// sky raster, the canvas pools' reserves, cache holds) for this long after its last zoom frame (Grid.zoomQuiet), so they do not crowd the frames the
+// levels draw (8 ms of them was 3-7 MP drawn between two frames on this host).
+const ZOOM_QUIET_MS = 2500
+// A zoom's quiet cache step: the pieces that fit this (up to a piece heavy to rasterize), one task a frame.
+const ZOOM_QUIET_STEP_MS = 4
+Grid.zoomQuiet = () => {
+    const g = typeof grid !== 'undefined' ? grid : null
+    if (!g || !Grid.zoomLevels || typeof g.levelsOn !== 'function' || !g.levelsOn())
+        return false
+    const screen = typeof gameEvent !== 'undefined' ? gameEvent.screen : undefined
+    return !!screen?.zoomGesture || !!g.levelSettle || performance.now() < g.zoomQuietUntil
+}
+// Whether the camera moves or a zoom's quiet lasts (Grid.zoomQuiet): the optional prewarms (the sky raster, the owned tiles)
+// and the surface cache's heavy pieces (its finish, the bake) wait for the camera at rest.
+Grid.cameraBusy = () => {
+    const screen = typeof gameEvent !== 'undefined' ? gameEvent.screen : undefined
+    // (A zoom key held: the frames zoom by it, Events.updateKeyboardZoom, from the next one on.)
+    return !!Grid.zoomLevels && (!!screen?.surfaceMoving || Grid.zoomQuiet() || !!screen && gameEvent.heldZoomKeys?.size > 0)
+}
+// Whether tag's piece of work may run now: the first time a frame (frameNo) it is asked.
+Grid.quietPieces = new Map()
+Grid.oncePerFrame = tag => {
+    if (Grid.quietPieces.get(tag) === Grid.frameNo)
+        return false
+    Grid.quietPieces.set(tag, Grid.frameNo)
+    return true
+}
+// The frame number (drawAll) and the level work the tasks did since that frame began.
+Grid.frameNo = 0
+Grid.levelFrameWork = {frame: -1, calls: 0, tileSteps: 0}
+Grid.levelWorkLeft = () => {
+    const w = Grid.levelFrameWork
+    if (w.frame !== Grid.frameNo) {
+        w.frame = Grid.frameNo
+        w.calls = 0
+        w.tileSteps = 0
+    }
+    return {calls: LEVEL_FRAME_CALLS - w.calls, tileSteps: w.tileSteps}
+}
+Grid.levelSpend = (calls, tileSteps = 0) => {
+    Grid.levelWorkLeft()
+    Grid.levelFrameWork.calls += calls
+    Grid.levelFrameWork.tileSteps += tileSteps
+}
 // TASK-1561: debug turned on or off keeps the other state's unit sectors aside (Grid.unitSectorPlan), in a share of the
 // budget; the index of debug in the unit sectors' key.
 Grid.unitSectorDebugSets = true

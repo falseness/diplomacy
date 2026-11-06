@@ -154,8 +154,11 @@ function restoreImageCaches() {
         if (cachedImages[name] && image && image.complete && image.naturalWidth > 0)
             paintCachedImage(cachedImages[name], name)
     }
-    if (typeof grid != 'undefined' && grid)
+    if (typeof grid != 'undefined' && grid) {
         grid.surfaceCacheState = undefined
+        // TASK-1562: the unit sectors were drawn from the lost sprites (kept across zooms now).
+        grid.clearUnitSectors?.('images')
+    }
     restoreCameraTransform()
 }
 // A restored main context comes back with the identity transform, and events/screen.js only ever

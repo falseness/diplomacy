@@ -26,8 +26,9 @@ function drawMain() {
 
 // The board's frame (drawMain); true for a zoom gesture's frame (the board of the frame before it, scaled).
 function drawBoard() {
-    // A zoom gesture's frame: the board of the frame before it, scaled (TASK-1374).
-    if (grid.drawZoomRaster(mainCtx)) {
+    // A zoom gesture's frame: the board of the frame before it, scaled (TASK-1374); TASK-1562: from the unit sectors of the
+    // levels kept (Grid.drawZoomSectors).
+    if (grid.drawZoomSectors(mainCtx) || grid.drawZoomRaster(mainCtx)) {
         if (typeof attackFx !== 'undefined')
             attackFx.rasterFrame = true
         return true
@@ -893,6 +894,9 @@ function drawInterfaceTo(interfaceCtx) {
 }
 
 function drawAll() {
+    // TASK-1562: the frame's number (the work tasks between two frames may do: Grid.levelWorkLeft).
+    if (typeof Grid !== 'undefined')
+        ++Grid.frameNo
     // TASK-1517: a zoom gesture whose raster is still made keeps the frame on screen (Grid.holdZoomFrame).
     if (typeof grid !== 'undefined' && grid?.holdZoomFrame?.())
         return

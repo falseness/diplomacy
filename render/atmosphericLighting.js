@@ -7,6 +7,8 @@
 // canvas drawing at the task's end, so the time a step takes to run is only its recording, and a run of steps within a time
 // budget (runSteps, Grid.holdStartFrame) ends after such a step instead of packing more raster into the task.
 const RASTER_STEP = 'raster'
+// TASK-1562: what ownedTileSteps yields between its pieces.
+const OWNED_TILE_PIECE = 'ownedTilePiece'
 const atmosphericLighting = {
     // Light map units: 0..255 per channel, 255 = the unchanged surface.
     // A broad key light from the left, falling mostly across the board (DIRECTION, world
@@ -1614,7 +1616,8 @@ const atmosphericLighting = {
         for (const fill of fills) {
             const tiles = []
             for (let i = 0; i < this.TILE.variants && !this.ownedTileMap().has(fill); i++) {
-                tiles.push(this.buildOwnedTile(i, fill))
+                // TASK-1562: in pieces (ownedTileSteps), each a yield of its own.
+                tiles.push(yield* this.ownedTileSteps(i, fill))
                 yield 'ownedTile ' + fill + ' ' + i
             }
             if (!this.ownedTileMap().has(fill))
@@ -1651,6 +1654,17 @@ const atmosphericLighting = {
                 }
                 job = this.ownedPrewarm = {tiles, fill, steps: this.ownedFillSteps([fill])}
             }
+            // TASK-1562: only with the camera at rest and not after a zoom (Grid.cameraBusy: a tile is ~1.1 MP of draws; the
+            // frames and the surface cache's build make the tiles they need meanwhile); tried again later.
+            const quiet = typeof Grid !== 'undefined' && Grid.cameraBusy?.()
+            if (quiet) {
+                this.ownedTilesQueued = true
+                setTimeout(() => {
+                    this.ownedTilesQueued = false
+                    this.prewarmOwnedTiles()
+                }, 50)
+                return
+            }
             const start = performance.now()
             let piece = 0
             do {
@@ -1660,7 +1674,7 @@ const atmosphericLighting = {
                     break
                 }
                 piece = performance.now() - begin
-            } while (performance.now() - start + piece < this.OWNED_PREWARM_MS)
+            } while (!quiet && performance.now() - start + piece < this.OWNED_PREWARM_MS)
             this.prewarmOwnedTiles()
         })
     },
@@ -1704,6 +1718,16 @@ const atmosphericLighting = {
         return detail.parts = {canvas, raised: maskPath(raised, w, h), lowered: maskPath(lowered, w, h)}
     },
     buildOwnedTile(index, fill) {
+        const steps = this.ownedTileSteps(index, fill)
+        let step = steps.next()
+        while (!step.done)
+            step = steps.next()
+        return step.value
+    },
+    // TASK-1562: buildOwnedTile's drawing in pieces (a generator returning the tile; each yield ends a piece of at most about
+    // two of the tile's areas drawn: a tile is ~1.1 MP of draws, which a task between frames after a zoom does a piece of a
+    // frame, Grid.zoomQuiet); the same calls in the same order.
+    *ownedTileSteps(index, fill) {
         const {size, box, offset, alpha, histogram} = this.tileDetail(index)
         const color = fill.match(/\d+/g).map(Number)
         // A channel near 0 or 255 would clip and shift the colour's mean: each channel takes the largest gain up to
@@ -1753,13 +1777,16 @@ const atmosphericLighting = {
                 g.fillRect(0, 0, box.w, box.h)
             }
             add(raised)
+            yield OWNED_TILE_PIECE
             invert()
             add(lowered)
+            yield OWNED_TILE_PIECE
             invert()
             g.setTransform(1, 0, 0, 1, 0, 0)
             g.globalCompositeOperation = 'destination-in'
             g.drawImage(this.tileVariant(index), 0, 0)
             g.globalCompositeOperation = 'source-over'
+            yield OWNED_TILE_PIECE
         } else {
             const image = g.createImageData(box.w, box.h), data = image.data
             for (let i = 0; i < offset.length; i++) {

@@ -329,6 +329,9 @@ class CanvasPool {
             for (const pool of CanvasPool.pools)
                 pool.trim()
         }
+        // TASK-1562: not after a zoom (Grid.zoomQuiet).
+        if (typeof Grid !== 'undefined' && Grid.zoomQuiet?.())
+            return
         for (const hook of CanvasPool.restHooks)
             hook(CanvasPool.RESERVE_PER_FRAME)
     }
