@@ -20,7 +20,9 @@
     const freshWork = () => ({blendedMegapixels: 0, blendedDraws: 0, blendedMainMegapixels: 0, blendedByOp: {},
         pathBlends: {draws: 0, canvasMegapixels: 0}, uploads: [], uploadMegapixels: 0, renderPath: null, standIn: null, overlayLayer: false, sceneLayer: false, litLayer: false,
         drawnMegapixels: 0, drawCalls: 0, drawnMainMegapixels: 0, drawnByLayer: {}, unboundedDraws: 0,
-        canvasSites: {}, bitmapSites: {}, offscreenByTarget: {}, tilesMissingOnScreen: 0, tilesBuiltInFrame: 0, tilesFromStandIn: 0, tilesUnbuilt: 0})
+        canvasSites: {}, bitmapSites: {}, offscreenByTarget: {}, tilesMissingOnScreen: 0, tilesBuiltInFrame: 0, tilesFromStandIn: 0, tilesUnbuilt: 0,
+        // TASK-1557 (see sectorCounters below)
+        layerFullRebuild: {}, layerRebuildCauses: {}, liveBoardCalls: {text: 0, units: 0, ground: 0, lighting: 0, other: 0}, standInPx: 0, standInPxBy: {}})
     let work = freshWork()
     const originalLoop = gameLoop, originalDraw = drawAll
     gameLoop = function(timestamp) {
@@ -55,6 +57,14 @@
             frame.work.canvasesCreated = Object.values(work.canvasSites).reduce((a, b) => a + b, 0)
             frame.heavy = work.drawCalls > 500 || offscreen > 1
             frame.tilesMissingOnScreen = work.tilesMissingOnScreen
+            // TASK-1557: the board layers rebuilt whole since the previous frame (layerFullRebuild: 'layer:reason' counts,
+            // reason outside / zoom / state / other; layerRebuildCauses: the layer's own cause), the offscreen drawing on the
+            // main thread (every offscreen draw these wrappers see runs on it) and the stand-in pixels rounded.
+            sectorCounters.frameEnd()
+            frame.work.mainOffscreenMP = frame.work.offscreenMegapixels
+            frame.work.standInPx = Math.round(work.standInPx)
+            frame.work.standInPxBy = Object.fromEntries(Object.entries(work.standInPx ? work.standInPxBy : {}).map(([k, v]) => [k, Math.round(v)]))
+            frame.work.layerFullRebuildCount = Object.values(work.layerFullRebuild).reduce((a, b) => a + b, 0)
             work = freshWork()
             if (frame.gapMs > 50) report.longGaps.push({timestamp, gapMs: frame.gapMs})
             report.samples.push(frame)
@@ -182,8 +192,40 @@
     // main canvas. A path or text whose bounds are unknown (a Path2D made before recording) counts its
     // whole canvas (unboundedDraws).
     let layer = 'between-frames'
-    const draw = (g, area) => {
+    // TASK-1557: liveBoardCalls = the board's own drawing calls (all canvases, the tasks since the previous frame included) by
+    // group of their layer label: text (cell texts), units (units, their bars, entities), ground (surface, buildings, sky,
+    // shadow, borders), lighting (light), other (unlabelled calls: 'between-frames' tasks such as tile builds). Not counted:
+    // the frame's own and the interface's calls, and the drawImage copies of a kept board picture made in the compositing
+    // functions (compositing > 0: the surface cache, stand-in, lit tiles, lit / scene / overlay layers, zoom raster, held
+    // frame).
+    const BOARD_GROUPS = {text: 'text', units: 'units', entities: 'units', buildings: 'ground', surface: 'ground', sky: 'ground',
+        shadow: 'ground', borders: 'ground', light: 'lighting', 'between-frames': 'other'}
+    let compositing = 0
+    // TASK-1557: standInPx = on-screen board pixels (device, the main canvas) drawn from a picture not at the frame's exact
+    // scale: the stand-in (drawStandIn / drawStandInRect: the surface cache or the preview for missing lit tiles),
+    // the zoom underlay, the zoom raster stretched to the camera, and the surface cache drawn magnified (its drawImage's
+    // scale over 1). standInPxBy: those by source, plus 'surface-minified' (the surface cache drawn smaller than its raster:
+    // reported, not in standInPx). standInSource: the outermost such function's classifier, set while it runs.
+    let standInSource = null, standInKind = null
+    const addStandIn = (kind, area, total = true) => {
+        work.standInPxBy[kind] = (work.standInPxBy[kind] || 0) + area * 1e6
+        if (total) work.standInPx += area * 1e6
+    }
+    const STAND_IN_KINDS = {
+        drawStandIn: () => (g, source, args, area) => addStandIn('standin', area),
+        drawStandInRect: () => (g, source, args, area) => addStandIn('standin', area),
+        drawZoomUnderlay: () => (g, source, args, area) => addStandIn('zoom-underlay', area),
+        drawZoomRaster: board => (g, source, args, area) => { if (source === board.zoomRaster?.canvas) addStandIn('zoom-raster', area) },
+        drawSurfaceCacheRect: () => (g, source, args, area) => {
+            if (args.length !== 8 || !args[2]) return
+            const f = Math.hypot(g.getTransform().a, g.getTransform().b) * args[6] / args[2]
+            if (f > 1.001) addStandIn('surface-magnified', area)
+            else if (f < 0.999) addStandIn('surface-minified', area, false)
+        }}
+    const draw = (g, area, image = false) => {
         if (area === null) { work.unboundedDraws++; area = g.canvas.width * g.canvas.height / 1e6 }
+        const group = BOARD_GROUPS[layer]
+        if (group && !(image && compositing)) work.liveBoardCalls[group]++
         work.drawCalls++
         work.drawnMegapixels += area
         const main = g.canvas === mainCanvas
@@ -282,13 +324,22 @@
         return wrapped
     }
     // A rest frame's recorded overlay calls (Grid.drawOverlayComposite) are made later in the layer they were recorded in.
+    // TASK-1557: and with the compositing state and stand-in classifier they were recorded under (a recorded frame's calls,
+    // such as a level-of-detail frame's, are made after the compositing functions returned): 'layer|compositing|kind'.
     if (typeof canvasCallLabels !== 'undefined')
-        canvasCallLabels = {current: () => layer, within: (label, fn) => {
-            const outer = layer
-            layer = label
-            try { return fn() }
-            finally { layer = outer }
-        }}
+        canvasCallLabels = {current: () => compositing || standInKind ? layer + '|' + (compositing ? 1 : 0) + '|' + (standInKind || '') : layer,
+            within: (label, fn) => {
+                const outer = layer, outerCompositing = compositing, outerSource = standInSource, outerKind = standInKind
+                const parts = String(label).split('|')
+                layer = parts[0]
+                if (parts.length === 3) {
+                    compositing = +parts[1]
+                    standInKind = parts[2] || null
+                    standInSource = standInKind && typeof grid !== 'undefined' ? STAND_IN_KINDS[standInKind](grid) : null
+                }
+                try { return fn() }
+                finally { layer = outer; compositing = outerCompositing; standInSource = outerSource; standInKind = outerKind }
+            }}
     drawMain = labelled(drawMain, 'frame')
     drawInterface = labelled(drawInterface, 'interface')
     const drawn = g => versions.set(g.canvas, (versions.get(g.canvas) || 0) + 1)
@@ -305,7 +356,8 @@
                 const [x, y, w = sw, h = sh] = args.length === 8 ? args.slice(4) : args
                 const area = boxArea(this, x, y, w, h)
                 blend(this, area)
-                draw(this, area)
+                draw(this, area, true)
+                if (standInSource && this.canvas === mainCanvas) standInSource(this, source, args, area)
             }
             if (isCanvas(source) && sw * sh > 1e6 && uploaded.get(source) !== (versions.get(source) || 0)) {
                 uploaded.set(source, versions.get(source) || 0)
@@ -535,8 +587,118 @@
             if (target && target.draw) target.draw = labelled(target.draw, 'units')
         for (const target of [typeof border !== 'undefined' && border, typeof attackBorder !== 'undefined' && attackBorder])
             if (target && target.draw) target.draw = labelled(target.draw, 'borders')
+        // TASK-1557: the compositing functions (their drawImage copies of kept pictures are not live board calls) and the
+        // stand-in classifiers.
+        for (const name of ['drawSurfaceCache', 'drawSurfaceCacheRect', 'drawStandIn', 'drawStandInRect', 'drawZoomUnderlay', 'drawZoomRaster',
+            'drawSceneLayer', 'drawLitLayer', 'drawLitTileAt', 'drawHeldFrame', 'drawOverlaySnapshot', 'drawOverlayLayer']) {
+            const original = proto[name]
+            if (!original) continue
+            proto[name] = function(...args) {
+                if (!active) return original.apply(this, args)
+                const outer = standInSource, outerKind = standInKind
+                if (!outer && STAND_IN_KINDS[name]) { standInSource = STAND_IN_KINDS[name](this); standInKind = name }
+                ++compositing
+                try { return original.apply(this, args) }
+                finally { --compositing; standInSource = outer; standInKind = outerKind }
+            }
+        }
+        // (Board drawing made inside them is live again: the patched cells drawn over the surface cache.)
+        if (proto.drawPatchCells) {
+            const patchCells = proto.drawPatchCells
+            proto.drawPatchCells = function(...args) {
+                const outer = compositing, source = standInSource, kind = standInKind
+                compositing = 0; standInSource = null; standInKind = null
+                try { return patchCells.apply(this, args) }
+                finally { compositing = outer; standInSource = source; standInKind = kind }
+            }
+        }
+        sectorCounters.wrap(proto)
         proto.drawMapSurface.visualsPerf = true
     }
+    // TASK-1557: full rebuilds of the board's kept layers, counted in the frame they are found in (the tasks since the previous
+    // frame included) as work.layerFullRebuild['layer:reason'] (reason: outside = the view left a layer kept at the same
+    // scale and state; zoom = a new scale; state = the board, the layer's key or the canvas state changed; other = first,
+    // after a rest, or not known) and work.layerRebuildCauses['layer:cause'] (the layer's own cause). Layers:
+    // lit-layer (TASK-1515's units/text layer: queueLitLayer's cause; 'none' takes the reason its last drop had),
+    // lit-tiles (a new lit view: every tile built again; a new scale = zoom, the same scale = state when replaced or dropped
+    // for the board's cell state, else other; cause = the scale or the dropping caller), scene-layer and overlay-layer (a new
+    // raster: scale, key / revision, else outside), zoom-raster (a new one: zoom), surface-cache (finishSurfaceCacheBuild:
+    // state when replacing a cache, else other).
+    const sectorCounters = (() => {
+        let seen = null, litCause = null, litDropReason = 'other', viewDrop = null
+        const add = (name, reason, cause) => {
+            work.layerFullRebuild[name + ':' + reason] = (work.layerFullRebuild[name + ':' + reason] || 0) + 1
+            work.layerRebuildCauses[name + ':' + cause] = (work.layerRebuildCauses[name + ':' + cause] || 0) + 1
+        }
+        const litReason = cause => cause === 'outside' ? 'outside' : cause === 'scale' ? 'zoom' :
+            cause === 'canvas' || cause.startsWith('state') || cause === 'key' || cause === 'cells' ? 'state' :
+            cause === 'none' ? litDropReason : 'other'
+        const STATE_CALLERS = /CellLayer|Patch|Split|refresh|followCell/i
+        const zoomingNow = () => { const screen = gameEvent?.screen; return !!(screen && (screen.zoomGesture || screen.surfaceZooming)) }
+        const mainScale = () => typeof mainCtx !== 'undefined' ? mainCtx.getTransform().a : null
+        const sameKey = (a, b) => !!a && !!b && a.length === b.length && a.every((v, k) => v === b[k])
+        const snapshot = g => ({board: g, litBuilds: g.litLayerBuilds, litView: g.litView, litViewA: g.litView?.a ?? null,
+            scene: g.sceneLayer, scenePrev: g.sceneLayer || null, overlay: g.overlayLayer, overlayPrev: g.overlayLayer || null, zoomRaster: g.zoomRaster})
+        return {
+            wrap(proto) {
+                const queue = proto.queueLitLayer, drop = proto.dropLitLayer, dropView = proto.dropLitView, finish = proto.finishSurfaceCacheBuild
+                if (queue) proto.queueLitLayer = function(ctx, t, state, ahead, cause = 'ahead') {
+                    if (active && this === grid && !this.litLayerQueued) litCause = cause
+                    return queue.apply(this, arguments)
+                }
+                if (drop) proto.dropLitLayer = function(...args) {
+                    if (active && this === grid && this.litLayer) litDropReason = zoomingNow() || this.litLayer.a !== mainScale() ? 'zoom' : 'other'
+                    return drop.apply(this, args)
+                }
+                if (dropView) proto.dropLitView = function(...args) {
+                    if (active && this === grid && this.litView) {
+                        diagnostics.calls++
+                        viewDrop = {a: this.litView.a, caller: creationSite().split(' ')[0]}
+                    }
+                    return dropView.apply(this, args)
+                }
+                if (finish) proto.finishSurfaceCacheBuild = function(...args) {
+                    const had = this === grid && !!this.surfaceCacheBounds && this.surfaceCacheRevision > 0
+                    const result = finish.apply(this, args)
+                    if (active && this === grid) add('surface-cache', had ? 'state' : 'other', had ? 'replaced' : 'first')
+                    return result
+                }
+            },
+            frameEnd() {
+                const g = typeof grid !== 'undefined' ? grid : null
+                if (!g) return
+                if (!seen || seen.board !== g) { seen = snapshot(g); return }
+                for (let n = seen.litBuilds; n < g.litLayerBuilds; ++n) add('lit-layer', litReason(litCause || 'none'), litCause || 'none')
+                seen.litBuilds = g.litLayerBuilds
+                const view = g.litView
+                if (view && view !== seen.litView) {
+                    const prevA = viewDrop ? viewDrop.a : seen.litViewA
+                    if (prevA === null) add('lit-tiles', 'other', 'first')
+                    else if (prevA !== view.a) add('lit-tiles', 'zoom', 'scale')
+                    else if (!viewDrop) add('lit-tiles', 'state', 'replaced')
+                    else add('lit-tiles', STATE_CALLERS.test(viewDrop.caller) ? 'state' : 'other', viewDrop.caller)
+                    viewDrop = null
+                }
+                if (view) { seen.litViewA = view.a; viewDrop = null }
+                else if (viewDrop) seen.litViewA = viewDrop.a
+                seen.litView = view
+                for (const [name, field, prevField, key] of [['scene-layer', 'sceneLayer', 'scenePrev', 'key'], ['overlay-layer', 'overlayLayer', 'overlayPrev', 'revision']]) {
+                    const layer = g[field], prev = seen[prevField]
+                    if (layer && layer !== seen[field.replace('Layer', '')]) {
+                        if (!prev) add(name, 'other', 'first')
+                        else if (prev.a !== layer.a || prev.d !== layer.d) add(name, 'zoom', 'scale')
+                        else if (key === 'key' ? !sameKey(prev.key, layer.key) : prev.revision !== layer.revision) add(name, 'state', key)
+                        else add(name, 'outside', 'outside')
+                    }
+                    seen[field.replace('Layer', '')] = layer
+                    if (layer) seen[prevField] = layer
+                }
+                if (g.zoomRaster && g.zoomRaster !== seen.zoomRaster) add('zoom-raster', 'zoom', 'gesture')
+                seen.zoomRaster = g.zoomRaster
+            },
+            reset() { seen = null; litCause = null; litDropReason = 'other'; viewDrop = null }
+        }
+    })()
     const originalLoad = loadSprites
     loadSprites = function(...args) { if (active) counters.spriteLoads++; return originalLoad.apply(this, args) }
     for (const type of ['visibilitychange', 'focus', 'blur']) window.addEventListener(type, () => {
@@ -587,6 +749,7 @@
     function start(metadata = {}) {
         if (active) throw Error('Capture already active')
         wrapGrid()
+        sectorCounters.reset()
         work = freshWork()
         report = {schemaVersion:2, environment:'user-browser', performanceStatus:'user-device-performance-unverified',
             sourceCommits:{client:query.get('clientCommit'),server:query.get('serverCommit'),provenance:'user-supplied URL; verify against source hashes'}, ...metadata, userAgent:navigator.userAgent, viewport:[innerWidth,innerHeight], dpr:devicePixelRatio,
