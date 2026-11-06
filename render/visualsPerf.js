@@ -552,7 +552,7 @@
                 const drawn = litLayer.apply(this, args)
                 if (active && drawn) work.litLayer = true
                 return drawn
-            }, args => args[1] ? 'text' : 'units')
+            }, 'units')
         }
         // TASK-1560: a pan frame drawing the board from the unit sectors (the surface cache's path: drawCacheSectors; the lit
         // path: drawLitView with litFrame.units): work.unitSectors {drawn: sectors composited, live: live squares, built:
@@ -580,6 +580,10 @@
                 return liveUnits.apply(this, arguments)
             }, 'units')
         }
+        // TASK-1561: the overlay sectors' copies (units and texts over a live ground) in their own layer.
+        if (proto.drawUnitOverlays) proto.drawUnitOverlays = labelled(proto.drawUnitOverlays, 'sectors')
+        // TASK-1561: the cell texts a unit sector build or a live square draws (sectorCellTexts' copies) are texts.
+        if (proto.drawSectorTexts) proto.drawSectorTexts = labelled(proto.drawSectorTexts, 'text')
         if (proto.buildUnitSector) {
             const build = proto.buildUnitSector
             proto.buildUnitSector = function(...args) {

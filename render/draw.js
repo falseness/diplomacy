@@ -724,17 +724,47 @@ class InterfaceLayer {
                 canvas.addEventListener('contextlost', () => { this.cached = null })
         }
         const g = this.context
-        // A change in a few drawing calls' arguments (a timer's text) redraws only the calls round their boxes
-        // (InterfaceRecorder.dirtyRects).
+        // A change in a few drawing calls' arguments (a timer's text) redraws only the rectangles round their boxes
+        // (InterfaceRecorder.dirtyRects): TASK-1561: the calls meeting them made whole on a scratch canvas of the cache's
+        // size (the same pixels as a whole redraw there), the rectangles cleared and copied from it.
+        InterfaceRecorder.fullWhy = !this.cached ? 'no cache' : canvas.width !== W || canvas.height !== H || !this.rects ? 'canvas' : undefined
         const dirty = this.cached && canvas.width === W && canvas.height === H && this.rects ?
             InterfaceRecorder.dirtyRects(this.cached, recording, W, H) : null
+        // TASK-1561 (diagnostic): why a redraw is whole, by the first reason (stats.fullWhy, up to 40 kinds).
+        if (!dirty) {
+            const why = String(InterfaceRecorder.fullWhy).slice(0, 80), full = this.stats.fullWhy ||= {}
+            if (why in full || Object.keys(full).length < 40) full[why] = (full[why] || 0) + 1
+        }
         if (dirty) {
-            g.setTransform(1, 0, 0, 1, 0, 0)
-            for (const r of dirty.rects) g.clearRect(r.x, r.y, r.w, r.h)
+            let scratch = this.scratch
+            if (!scratch || (typeof this.scratchContext.isContextLost === 'function' && this.scratchContext.isContextLost())) {
+                scratch = this.scratch = document.createElement('canvas')
+                this.scratchContext = scratch.getContext('2d')
+            }
+            if (scratch.width !== W || scratch.height !== H) {
+                scratch.width = W
+                scratch.height = H
+            }
+            const s = this.scratchContext
+            s.setTransform(1, 0, 0, 1, 0, 0)
+            for (const r of dirty.rects) s.clearRect(r.x, r.y, r.w, r.h)
+            s.save()
+            applyCanvasState(s, recording.state)
+            s.beginPath()
+            this.recorder.replayOn(s, {calls: dirty.calls, labels: recording.labels})
+            s.restore()
             g.save()
-            applyCanvasState(g, recording.state)
-            g.beginPath()
-            this.recorder.replayOn(g, {calls: dirty.calls, labels: recording.labels})
+            g.setTransform(1, 0, 0, 1, 0, 0)
+            g.globalAlpha = 1
+            g.globalCompositeOperation = 'source-over'
+            if ('filter' in g) g.filter = 'none'
+            g.shadowBlur = 0
+            g.shadowOffsetX = g.shadowOffsetY = 0
+            g.shadowColor = 'rgba(0, 0, 0, 0)'
+            for (const r of dirty.rects) {
+                g.clearRect(r.x, r.y, r.w, r.h)
+                g.drawImage(scratch, r.x, r.y, r.w, r.h, r.x, r.y, r.w, r.h)
+            }
             g.restore()
             this.stats.partial = (this.stats.partial || 0) + 1
             recording.canvasKey = this.cached.canvasKey + 1
