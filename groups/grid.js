@@ -212,6 +212,23 @@ class Grid extends SpritesGroup {
         this.sectorGen = 0
         this.sectorWork = {stored: 0, pulled: 0, adopted: 0, kept: 0, dirtied: 0, removed: 0, clears: 0, evicted: 0}
         this.sectorClears = []
+        // TASK-1560 (Grid.unitSectors): the unit sectors (unitSectorPlan): the ground and the units pass a square of the board's
+        // device grid at the camera's scale, LRU under UNIT_SECTOR_BYTES (UNIT_SECTOR_PHONE_BYTES on a phone); the values each
+        // cell's units pass drew from (unitCellVals, unitSectorCheck); the frame's live squares (unitFrame, the cache's path).
+        this.unitSectors = typeof SectorCache === 'function' ? new SectorCache({size: LIT_TILE, pad: 0,
+            budget: typeof mobilePhone !== 'undefined' && mobilePhone ? UNIT_SECTOR_PHONE_BYTES : UNIT_SECTOR_BYTES}) : null
+        this.unitSectorKey = undefined
+        this.unitSectorSerial = -1
+        this.unitCellVals = new Map()
+        this.unitCellScratch = []
+        this.unitStandIn = undefined
+        this.unitSectorQueued = false
+        this.unitSectorWanted = undefined
+        this.unitFrame = undefined
+        this.unitSectorWork = {built: 0, drawn: 0, live: 0, frames: 0, clears: 0, dirtied: 0, checks: 0, evicted: 0}
+        this.unitSectorClears = []
+        this.unitSectorRefusals = {}
+        this.litLayerTextOnly = false
         // TASK-1546: the lit tile built a step a task (Grid.buildLitTiles: litTileStep), tiles started / given up.
         this.litTileJob = undefined
         this.litTileJobs = 0
@@ -569,6 +586,19 @@ class Grid extends SpritesGroup {
             if (cell.infoText.text != '' && !this.lod)
                 cell.infoText.draw(ctx)
             cell.infoText.text = ''
+            this.infoTextCells.delete(index)
+        }
+    }
+    // TASK-1560: the info texts the units pass set on the cells of range cleared, none drawn (as drawCellText with debug).
+    clearInfoTexts(range) {
+        if (!this.infoTextCells.size)
+            return
+        const h = this.arr[0].length
+        for (const index of [...this.infoTextCells]) {
+            const i = Math.floor(index / h), j = index % h
+            if (i < range.i0 || i >= range.i1 || j < range.j0 || j >= range.j1)
+                continue
+            this.arr[i][j].infoText.text = ''
             this.infoTextCells.delete(index)
         }
     }
@@ -4177,7 +4207,10 @@ class Grid extends SpritesGroup {
     // drawn: the frames draw those few cells directly and queue nothing until the view leaves it. Frames at rest, zoom
     // gestures, the surface cache's paths and level-of-detail frames never draw it.
     // Returns whether it drew the units and the cell texts.
-    drawLitLayer(ctx) {
+    // TASK-1560: textOnly (a frame whose units come from the unit sectors, with debug): the layer holds the cell texts only
+    // (litLayerTextOnly, in its key; the rasters skip the units pass).
+    drawLitLayer(ctx, textOnly = false) {
+        this.litLayerTextOnly = textOnly
         const screen = typeof gameEvent !== 'undefined' ? gameEvent.screen : undefined
         const t = ctx.getTransform()
         if (!Grid.litLayers || !otherSettings.atmosphericVisuals || !screen || !screen.surfaceMoving || screen.zoomGesture ||
@@ -4275,7 +4308,7 @@ class Grid extends SpritesGroup {
     // settings and fog of war.
     litLayerKey() {
         return [debug, this.drawLogicText, Grid.logicTextRevision, basis.r, otherSettings.alwaysDisplayHPBar,
-            otherSettings.alwaysDisplayMovesBar, isFogOfWar, this.arr.length, this.arr[0]?.length]
+            otherSettings.alwaysDisplayMovesBar, isFogOfWar, this.arr.length, this.arr[0]?.length, !!this.litLayerTextOnly]
     }
     litLayerKeyHolds(layer) {
         const key = this.litLayerKey()
@@ -4541,7 +4574,8 @@ class Grid extends SpritesGroup {
                 const lctx = canvas.getContext('2d')
                 lctx.save()
                 applyCanvasState(lctx, {...layer.state, transform})
-                this.drawOther(lctx, 'units', range)
+                if (!this.litLayerTextOnly)
+                    this.drawOther(lctx, 'units', range)
                 this.drawCellText(lctx, range)
                 lctx.restore()
                 lctx.getImageData(0, 0, 1, 1)
@@ -4704,7 +4738,8 @@ class Grid extends SpritesGroup {
                 for (const piece of parts)
                     lctx.clearRect(piece.x, piece.y, piece.w, piece.h)
             applyCanvasState(lctx, {...state, transform})
-            this.drawOther(lctx, 'units')
+            if (!this.litLayerTextOnly)
+                this.drawOther(lctx, 'units')
             this.drawCellText(lctx)
             // The key after the drawing (a logic text read the first time is made then, Grid.logicTextChanged).
             key = this.litLayerKey()
@@ -5104,6 +5139,427 @@ class Grid extends SpritesGroup {
             ctx.drawImage(composite.snapshot, r.ax, r.ay, r.w, r.h, r.x, r.y, r.w, r.h)
         ctx.restore()
     }
+    // TASK-1560 (SECTORS 4/11): UNIT SECTORS. During a pan (Screen.surfaceMoving, no zoom gesture) the units pass (the lit
+    // tiles' drawOther 'units'; the surface cache's drawStillUnits + drawEntityOverlays: still units with their bars, production
+    // silhouettes and previews with their production texts, building and portal bars, fogged portal previews) is drawn
+    // into board-space sectors together with the board picture under it, so a pan frame composites one image a sector and
+    // draws no unit call. A sector (Grid.unitSectors, a SectorCache of LIT_TILE squares on the board's device grid at the
+    // camera's exact scale, the lit tiles' grid: view e/f 0) holds its square of
+    //   - the ground the frame draws there: on the lit path the lit tile (its sector, TASK-1559) or, with none, the stand-in
+    //     (the surface cache drawn magnified or the stand-in preview, drawLitView's missing squares); on the surface cache's
+    //     path (drawCacheSectors) the cache (drawSurfaceCacheRect, the light baked in);
+    //   - over it the units pass of the cells reaching the square (drawRange of the sector's canvas), then their info
+    //     texts (drawCellText: the production texts the pass sets; with debug none: the frame draws the coordinate texts
+    //     instead, so they are cleared only, clearInfoTexts), in the frame's order.
+    // A frame draws a square's sector when it is clean (no cell reaching it changed since it was built: unitSectorCheck) and
+    // its ground is the one the frame would draw (the same tile, or the same stand-in, unitStandInToken); every other square
+    // is a LIVE square: its ground drawn as before and the units pass and info texts drawn live, clipped to the live squares
+    // (drawLiveSectorUnits), so a unit across a sector's edge is drawn once. A lit square whose tile meets the view's edge
+    // runs (the frame's light over the sky there comes after the tile and before the units, drawLitEdges) is always live.
+    // The sectors missing or not clean on the canvas and a ring of UNIT_SECTOR_AHEAD squares round it are built by one task
+    // between frames (queueUnitSectors, nearest the centre first, within UNIT_SECTOR_TASK_MS), drawn on new canvases (a kept
+    // recording of the last frame may still draw the old ones) and rasterized there by a one-pixel read.
+    // Live on top, as before (never in a sector): moveTween's moving units, onlineObservation's and remoteEffects' drawing,
+    // attack and heal effects (a unit they hide keeps the frames off the sectors: stillUnitsHidden), the loading cells, the
+    // chance of winning texts, debug's coordinate texts (on the lit path from the lit layer holding the cell texts only,
+    // drawLitLayer's textOnly; on the cache's path drawn directly, as before), the attack border and border (selection,
+    // hover), the selection marks and overlay, and the interface. A selection's logic texts keep the frames off the sectors
+    // (they replace the info texts of their cells).
+    // Not used at rest (settled frames are drawn as before), in zoom gestures, level-of-detail frames, with logic texts, an
+    // observed board, or (the sectors released) another scale, debug, setting or context state than the sectors' (unitSectorPlan).
+    // Grid.unitSectors false: as before.
+    // The plan of a frame on ctx on the unit sectors of kind ('lit' or 'cache'), null when it draws the units as before.
+    unitSectorPlan(ctx, kind) {
+        const screen = typeof gameEvent !== 'undefined' ? gameEvent.screen : undefined
+        const t = ctx.getTransform()
+        const refused = !Grid.unitSectors || !this.unitSectors || !otherSettings.atmosphericVisuals || !screen ? 'off' :
+            !screen.surfaceMoving ? 'rest' : screen.zoomGesture || screen.surfaceZooming ? 'zoom' :
+            typeof mainCanvas === 'undefined' || ctx.canvas !== mainCanvas || this !== grid || !this.arr.length ? 'canvas' :
+            t.b !== 0 || t.c !== 0 || !(t.a > 0) || t.a !== t.d ? 'transform' : this.lod ? 'lod' :
+            this.drawLogicText ? 'texts' : this.stillUnitsHidden() ? 'hidden' : this.isObserving() ? 'observing' : null
+        if (refused) {
+            this.unitSectorRefusals[kind + ':' + refused] = (this.unitSectorRefusals[kind + ':' + refused] || 0) + 1
+            return null
+        }
+        const state = canvasStateOf(ctx)
+        const key = [kind, t.a, basis.r, assets.size, otherSettings.alwaysDisplayHPBar, otherSettings.alwaysDisplayMovesBar,
+            isFogOfWar, this.arr.length, this.arr[0].length, !!debug, ...(kind === 'cache' ? this.cacheSectorKey() : [])]
+        const old = this.unitSectorKey
+        if (!old || old.key.length !== key.length || key.some((v, k) => v !== old.key[k]) ||
+                !sameCanvasState(state, old.state, LIT_LAYER_FREE_STATE)) {
+            this.clearUnitSectors(old ? 'key' : 'none')
+            this.unitSectorKey = {key, state}
+        }
+        const plan = {kind, t, level: t.a, state, key: this.unitSectorKey}
+        this.unitSectorLastPlan = plan
+        if (this.unitSectorSerial !== this.drawSerial) {
+            this.unitSectorSerial = this.drawSerial
+            this.unitSectors.beginFrame()
+        }
+        return plan
+    }
+    // Every unit sector released (the cells' kept values too: a new set is built from the board).
+    clearUnitSectors(reason) {
+        if (this.unitSectors?.entries.size) {
+            ++this.unitSectorWork.clears
+            this.unitSectorClears.push(reason)
+            if (this.unitSectorClears.length > 64)
+                this.unitSectorClears.splice(0, 32)
+        }
+        this.unitSectors?.clear()
+        this.unitCellVals.clear()
+        this.unitSectorWanted = undefined
+    }
+    // What the units pass draws on cell (i, j), as litLayerSignature lists it, in out (its length returned; 0: nothing).
+    unitCellValues(i, j, out) {
+        const cell = this.arr[i][j], building = cell.building
+        let n = 0
+        if (isFogOfWar && !this.fogOfWar[i][j]) {
+            if (!building.isDemonPortal)
+                return 0
+            const next = building.nextProduction
+            out[n++] = 'fog'; out[n++] = building; out[n++] = building.killed; out[n++] = !!next; out[n++] = next?.type
+            out[n++] = next?.roundsRemaining; out[n++] = cell.hexColor
+            return n
+        }
+        if (!this.isOverlayCell(cell))
+            return 0
+        const unit = cell.unit
+        out[n++] = unit; out[n++] = building; out[n++] = cell.hexColor; out[n++] = building.showsBar; out[n++] = building.hp
+        out[n++] = building.wasHitted; out[n++] = building.killed; out[n++] = building.hasBar && building.hpBar ? building.hpIncrease : 0
+        out[n++] = building.isBuildingProduction()
+        if (building.isBuildingProduction())
+            out[n++] = building.turns
+        if (building.isPreparingManufacture) {
+            const production = building.unitProduction
+            out[n++] = production; out[n++] = production?.name; out[n++] = production?.turns
+        }
+        else if (building.isDemonPortal) {
+            const next = building.nextProduction
+            out[n++] = !!next; out[n++] = next?.type; out[n++] = next?.roundsRemaining
+        }
+        if (unit.notEmpty()) {
+            out[n++] = unit.hp; out[n++] = unit.hpIncrease; out[n++] = unit.wasHitted; out[n++] = unit.moves
+            out[n++] = unit.bodyImageName; out[n++] = shouldShowMovesBar(unit)
+        }
+        return n
+    }
+    // The cells of range (a drawRange) compared with the values kept for them (unitCellVals): every cell that draws otherwise
+    // now dirties the unit sectors it reaches (its centre's box grown by drawRange's margin and a column) and keeps its new
+    // values. Kept values change only here, and a sector is built only after its range was compared (buildUnitSector), so a
+    // clean sector was drawn from the values kept for its cells.
+    unitSectorCheck(range) {
+        const h = this.arr[0].length, kept = this.unitCellVals, out = this.unitCellScratch ||= []
+        const reach = 4 * basis.r + assets.size + basis.offset.x
+        let boxes = null
+        for (let i = range.i0; i < range.i1; ++i) {
+            for (let j = range.j0; j < range.j1; ++j) {
+                const n = this.unitCellValues(i, j, out), index = i * h + j, old = kept.get(index)
+                if (!n && !old)
+                    continue
+                if (n && old && old.length === n) {
+                    let same = true
+                    for (let k = 0; k < n && same; ++k)
+                        same = Object.is(old[k], out[k])
+                    if (same)
+                        continue
+                }
+                if (n)
+                    kept.set(index, out.slice(0, n))
+                else
+                    kept.delete(index)
+                const x = i * basis.offset.x, y = (2 * j + (i & 1)) * basis.offset.y
+                ;(boxes ||= []).push({x: x - reach, y: y - reach, w: 2 * reach, h: 2 * reach})
+            }
+        }
+        ++this.unitSectorWork.checks
+        if (boxes && this.unitSectors.entries.size)
+            this.unitSectorWork.dirtied += this.unitSectors.dirtyCells(boxes).length
+    }
+    // The stand-in a lit frame draws for a square without its tile (standIn: drawLitView's, true = the surface cache as it
+    // matches, 'standin' = drawStandIn's source) as one object while what it draws from is the same.
+    unitStandInToken(standIn) {
+        const source = standIn === 'standin' ? this.standInSource() : 'exact'
+        const parts = [source, this.surfaceCache, this.surfaceCacheShown, this.surfaceCacheRevision, this.cellLayerRevision,
+            this.surfaceCacheBounds, source === 'preview' ? this.standInPreview : null, this.standInPreview?.canvas]
+        const token = this.unitStandIn
+        if (token && token.parts.every((v, k) => v === parts[k]))
+            return token
+        return this.unitStandIn = {parts, source}
+    }
+    // The device rectangle (identity transform) of square (u, v) on a cw x ch canvas, the grid placed at ox, oy; null off it.
+    unitSquareRect(u, v, ox, oy, cw, ch) {
+        const x0 = Math.max(0, u * LIT_TILE + ox), y0 = Math.max(0, v * LIT_TILE + oy)
+        const x1 = Math.min(cw, (u + 1) * LIT_TILE + ox), y1 = Math.min(ch, (v + 1) * LIT_TILE + oy)
+        return x0 < x1 && y0 < y1 ? {x: x0, y: y0, w: x1 - x0, h: y1 - y0} : null
+    }
+    // Why the surface cache is not drawn whole as the frame draws it, the light baked in (surfaceCacheSteady, but for a split
+    // under way that holds: the frame draws the cache's raster uncut, drawSurfaceCache); null when it is.
+    cacheSectorUnsteady() {
+        return !this.surfaceCache ? 'none' : !this.surfaceCacheLit ? 'unlit' : this.surfaceCacheBuild ? 'build' :
+            this.surfacePatchJob ? 'patch' : this.surfaceLayerJob ? 'layer' : this.surfaceCacheDirty ? 'dirty' :
+            this.surfaceSplitJob && !this.surfaceSplitHolds(this.surfaceSplitJob) ? 'split' : null
+    }
+    // What the cache sectors' ground is drawn from (sceneLayerKey and the split under way, which draws the raster uncut).
+    cacheSectorKey() {
+        return [...this.sceneLayerKey(), !!this.surfaceSplitJob]
+    }
+    // The squares (u, v ranges) at level the board and its units can draw on: mapDepth.bounds and the surface cache's grown by
+    // drawRange's margin.
+    unitBoardSquares(level) {
+        mapDepth.ensureGeometry(this)
+        const b = mapDepth.bounds, c = this.surfaceCacheBounds, m = 4 * basis.r + assets.size
+        let left = b.left, top = b.top, right = b.right, bottom = b.bottom
+        if (c) {
+            left = Math.min(left, c.left); top = Math.min(top, c.top)
+            right = Math.max(right, c.left + c.width); bottom = Math.max(bottom, c.top + c.height)
+        }
+        return {u0: Math.floor((left - m) * level / LIT_TILE), u1: Math.floor((right + m) * level / LIT_TILE),
+            v0: Math.floor((top - m) * level / LIT_TILE), v1: Math.floor((bottom + m) * level / LIT_TILE)}
+    }
+    // The clean sector (u, v) of plan whose ground is ground (a lit tile, null for none, or a stand-in token), else null.
+    freshUnitSector(plan, u, v, ground) {
+        const entry = this.unitSectors.get(SectorCache.key(plan.level, u, v))
+        return entry && !entry.dirty && entry.ground === ground && entry.kind === plan.kind ? entry : null
+    }
+    // The squares of view (a lit view's sector grid) its edge runs meet (drawLitEdges lights them after the tiles), kept with
+    // the runs they were found for.
+    unitEdgeSquares(view) {
+        const kept = view.unitEdgeSquares
+        if (kept && kept.edges === view.edges)
+            return kept.squares
+        const squares = new Set()
+        for (const run of view.edges || []) {
+            const u0 = Math.floor(run.x / LIT_TILE), u1 = Math.floor((run.x + run.w - 1) / LIT_TILE)
+            const v0 = Math.floor(run.y / LIT_TILE), v1 = Math.floor((run.y + run.h - 1) / LIT_TILE)
+            for (let v = v0; v <= v1; ++v)
+                for (let u = u0; u <= u1; ++u)
+                    squares.add(u + ',' + v)
+        }
+        view.unitEdgeSquares = {edges: view.edges, squares}
+        return squares
+    }
+    // A frame's sector drawn whole at its square's place (identity transform).
+    drawUnitSectorAt(ctx, entry, x, y) {
+        ctx.drawImage(entry.image, x, y)
+        this.unitSectors.use(entry.key)
+        ++this.unitSectorWork.drawn
+    }
+    // The units pass and info texts of the frame's live squares (frame: unitFrame, or a lit frame's units), clipped to them;
+    // then what the skipped units pass does besides drawing (a selected demon portal's panel kept current).
+    drawLiveSectorUnits(ctx, frame) {
+        const live = frame.live
+        if (live.length) {
+            const t = ctx.getTransform()
+            let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity
+            for (const r of live) {
+                x0 = Math.min(x0, r.x); y0 = Math.min(y0, r.y); x1 = Math.max(x1, r.x + r.w); y1 = Math.max(y1, r.y + r.h)
+            }
+            const transform = {a: t.a, b: 0, c: 0, d: t.d, e: t.e - x0, f: t.f - y0}
+            const range = this.drawRange({getTransform: () => transform, canvas: {width: x1 - x0, height: y1 - y0}})
+            ctx.save()
+            clipToDeviceRects(ctx, live)
+            ctx.setTransform(t.a, t.b, t.c, t.d, t.e, t.f)
+            if (frame.kind === 'lit')
+                this.drawOther(ctx, 'units', range)
+            else {
+                const h = this.arr[0].length
+                const cells = this.surfaceOverlayCells.filter(k => {
+                    const i = Math.floor(k / h), j = k - i * h
+                    return i >= range.i0 && i < range.i1 && j >= range.j0 && j < range.j1
+                })
+                this.drawStillUnits(ctx, cells)
+                this.drawEntityOverlays(ctx, cells)
+            }
+            if (debug)
+                this.clearInfoTexts(range)
+            else
+                this.drawCellText(ctx, range)
+            ctx.restore()
+            this.unitSectorWork.live += live.length
+        }
+        const portal = gameEvent.selected
+        if (portal?.isDemonPortal && !portal.killed && portal.nextProduction && this.arr[portal.coord.x]?.[portal.coord.y]?.building === portal &&
+                (!isFogOfWar || this.fogOfWar[portal.coord.x][portal.coord.y] || fogShowsPortalPreview(portal)))
+            entityInterface.refreshPortal(portal)
+        ++this.unitSectorWork.frames
+    }
+    // TASK-1560: a pan frame far out on the surface cache's path (drawn whole at or below its scale, the light baked in) draws
+    // the cache and the units from the unit sectors (live squares as before, clipped). Returns whether it drew the surface
+    // and the units (the frame then draws neither again).
+    drawCacheSectors(ctx) {
+        if (!Grid.unitSectors || !otherSettings.atmosphericVisuals || !this.canUseSurfaceCache())
+            return false
+        const refuse = reason => {
+            this.unitSectorRefusals['cache:' + reason] = (this.unitSectorRefusals['cache:' + reason] || 0) + 1
+            return false
+        }
+        const unsteady = this.cacheSectorUnsteady()
+        if (unsteady)
+            return refuse(unsteady)
+        const plan = this.unitSectorPlan(ctx, 'cache')
+        if (!plan)
+            return false
+        if (!this.surfaceStateMatches(ctx) || !this.surfaceCellLayerHolds())
+            return refuse('state')
+        const t = plan.t, cw = ctx.canvas.width, ch = ctx.canvas.height
+        const ox = Math.round(t.e), oy = Math.round(t.f)
+        this.unitSectorCheck(this.drawRange(ctx))
+        const range = this.litTileRange(cw, ch, ox, oy, 0), board = this.unitBoardSquares(plan.level)
+        const live = [], wanted = []
+        ctx.save()
+        ctx.setTransform(1, 0, 0, 1, 0, 0)
+        for (let v = Math.max(range.v0, board.v0); v <= Math.min(range.v1, board.v1); ++v) {
+            for (let u = Math.max(range.u0, board.u0); u <= Math.min(range.u1, board.u1); ++u) {
+                const entry = this.freshUnitSector(plan, u, v, 'cache')
+                if (entry) {
+                    this.drawUnitSectorAt(ctx, entry, u * LIT_TILE + ox, v * LIT_TILE + oy)
+                    continue
+                }
+                const r = this.unitSquareRect(u, v, ox, oy, cw, ch)
+                if (r)
+                    live.push(r)
+                wanted.push({u, v})
+            }
+        }
+        ctx.restore()
+        if (live.length) {
+            ctx.save()
+            clipToDeviceRects(ctx, live)
+            ctx.setTransform(t.a, t.b, t.c, t.d, t.e, t.f)
+            const left = -t.e / t.a, top = -t.f / t.d
+            this.drawSurfaceCacheRect(ctx, left, top, left + cw / t.a, top + ch / t.d)
+            ctx.restore()
+        }
+        this.unitFrame = {kind: 'cache', live, plan}
+        this.queueUnitSectors(plan, wanted, range, board, cw, ch, ox, oy)
+        return true
+    }
+    // The frame's wanted squares (on the canvas, nearest its centre first) and the ring UNIT_SECTOR_AHEAD round the canvas
+    // (within the board's squares, not clean) built by a task between frames.
+    queueUnitSectors(plan, wanted, range, board, cw, ch, ox, oy, skip) {
+        const cu = (cw / 2 - ox) / LIT_TILE - 0.5, cv = (ch / 2 - oy) / LIT_TILE - 0.5
+        const near = (p, q) => Math.hypot(p.u - cu, p.v - cv) - Math.hypot(q.u - cu, q.v - cv)
+        wanted.sort(near)
+        const ring = [], A = UNIT_SECTOR_AHEAD
+        for (let v = Math.max(range.v0 - A, board.v0); v <= Math.min(range.v1 + A, board.v1); ++v)
+            for (let u = Math.max(range.u0 - A, board.u0); u <= Math.min(range.u1 + A, board.u1); ++u) {
+                if (u >= range.u0 && u <= range.u1 && v >= range.v0 && v <= range.v1 || skip?.has(u + ',' + v))
+                    continue
+                const entry = this.unitSectors.get(SectorCache.key(plan.level, u, v))
+                if (!entry || entry.dirty || entry.kind !== plan.kind)
+                    ring.push({u, v})
+            }
+        ring.sort(near)
+        const list = wanted.concat(ring)
+        if (!list.length) {
+            this.unitSectorWanted = undefined
+            return
+        }
+        this.unitSectorWanted = {plan, list, standIn: plan.standIn, token: plan.token}
+        if (this.unitSectorQueued)
+            return
+        this.unitSectorQueued = true
+        setTimeout(gridTask(() => {
+            this.unitSectorQueued = false
+            const job = this.unitSectorWanted
+            this.unitSectorWanted = undefined
+            const screen = gameEvent.screen
+            if (!job || !screen.surfaceMoving || screen.zoomGesture || screen.surfaceZooming || this !== grid ||
+                    !!debug !== job.plan.key.key[9] || this.drawLogicText || this.stillUnitsHidden() || this.isObserving() || job.plan.key !== this.unitSectorKey ||
+                    typeof mainCtx === 'undefined' || mainCtx.getTransform().a !== job.plan.level)
+                return
+            const start = performance.now()
+            let last = 0
+            for (const {u, v} of job.list) {
+                if (performance.now() - start + last > UNIT_SECTOR_TASK_MS)
+                    break
+                const t0 = performance.now()
+                if (this.buildUnitSector(job, u, v))
+                    last = performance.now() - t0
+            }
+        }))
+    }
+    // Builds sector (u, v) of job's plan (its ground what a frame draws there now; none when that cannot be drawn here: a
+    // stale or edge-run tile, a stand-in other than the frame's, a surface job under way). Returns whether it built one.
+    buildUnitSector(job, u, v) {
+        const {plan} = job, level = plan.level, key = u + ',' + v
+        let ground, drawGround
+        const span = LIT_TILE / level, rect = {left: u * span, top: v * span, right: (u + 1) * span, bottom: (v + 1) * span}
+        // The stand-in and cache drawn over the square grown by a quarter of it (the canvas cuts it), so the source's
+        // sampling near the square's edge is the whole picture's.
+        const grown = {left: rect.left - span / 4, top: rect.top - span / 4, right: rect.right + span / 4, bottom: rect.bottom + span / 4}
+        if (plan.kind === 'cache') {
+            if (this.cacheSectorUnsteady() || this.cacheSectorKey().some((k, i) => k !== plan.key.key[UNIT_SECTOR_KEY_BASE + i]))
+                return false
+            ground = 'cache'
+            drawGround = g => this.drawSurfaceCacheRect(g, grown.left, grown.top, grown.right, grown.bottom)
+        }
+        else {
+            const view = this.litView
+            if (!view || view !== plan.view || view.a !== level || view.e !== 0 || view.f !== 0 || view.stale?.has(key) ||
+                    view.patch || view.layerJob)
+                return false
+            if (this.litHas(view, u, v)) {
+                const tile = view.tiles.get(key) || null
+                if (tile && this.unitEdgeSquares(view).has(key))
+                    return false
+                ground = tile
+                drawGround = g => {
+                    if (tile) {
+                        g.save()
+                        g.setTransform(1, 0, 0, 1, 0, 0)
+                        this.drawLitTileAt(g, tile, 0, 0, LIT_TILE, LIT_TILE)
+                        g.restore()
+                    }
+                }
+            }
+            else {
+                if (!job.standIn || this.surfacePatchJob || this.surfaceLayerJob || this.surfaceSplitJob || this.surfaceCacheBuild ||
+                        this.unitStandInToken(job.standIn) !== job.token)
+                    return false
+                ground = job.token
+                const source = job.token.source
+                drawGround = g => {
+                    if (source === 'preview')
+                        this.drawStandInRect(g, grown.left, grown.top, grown.right, grown.bottom, 'sector')
+                    else if (this.surfaceCache)
+                        this.drawSurfaceCacheRect(g, grown.left, grown.top, grown.right, grown.bottom)
+                }
+            }
+        }
+        // Already clean with that ground.
+        if (this.freshUnitSector(plan, u, v, ground))
+            return false
+        const canvas = document.createElement('canvas')
+        canvas.width = canvas.height = LIT_TILE
+        const g = canvas.getContext('2d')
+        const transform = {a: level, b: 0, c: 0, d: level, e: -u * LIT_TILE, f: -v * LIT_TILE}
+        applyCanvasState(g, {...plan.state, transform})
+        const range = this.drawRange(g)
+        // Compared first: the sector is drawn from the values its cells keep (unitSectorCheck).
+        this.unitSectorCheck(range)
+        drawGround(g)
+        if (plan.kind === 'lit')
+            this.drawOther(g, 'units', range)
+        else {
+            this.drawStillUnits(g)
+            this.drawEntityOverlays(g)
+        }
+        // The info texts the pass set (with debug the frame draws the coordinate texts instead: cleared only).
+        if (debug)
+            this.clearInfoTexts(range)
+        else
+            this.drawCellText(g, range)
+        g.getImageData(0, 0, 1, 1)
+        const before = this.unitSectors.evictions
+        const entry = this.unitSectors.put(level, u, v, canvas)
+        entry.ground = ground
+        entry.kind = plan.kind
+        this.unitSectorWork.evicted += this.unitSectors.evictions - before
+        ++this.unitSectorWork.built
+        return true
+    }
     // Above the surface cache's scale, pan frames and frames with the camera at rest draw the
     // board's surface, its buildings and the light over them (atmosphericLighting.draw's
     // multiply, color-dodge and bloom) already lit, at the camera's own scale (full resolution).
@@ -5178,6 +5634,21 @@ class Grid extends SpritesGroup {
         // A tile not built yet is drawn from the stand-in (the tasks build it, queueLitTiles); without one it is built now.
         // TASK-1553: the stand-in frameCover found (plan.standIn), if it looked.
         let standIn = plan.standIn, missing = null, stale = false
+        // TASK-1560: a pan frame draws a square's unit sector (its tile or stand-in and the units over it) where one is clean
+        // with the ground the frame draws there; the other squares within the board are live (their ground as before, the
+        // units drawn over them after drawLitEdges, drawLiveSectorUnits). Not with stale tiles (drawn with their changed cells).
+        const units = view.e === 0 && view.f === 0 && !view.stale?.size ? this.unitSectorPlan(ctx, 'lit') : null
+        if (!units && (view.e !== 0 || view.f !== 0 || view.stale?.size))
+            this.unitSectorRefusals['lit:view'] = (this.unitSectorRefusals['lit:view'] || 0) + 1
+        let composed = null, live = null, wanted = null, edges = null, board = null
+        if (units) {
+            this.unitSectorCheck(this.drawRange(ctx))
+            units.view = view
+            live = []
+            wanted = []
+            edges = this.unitEdgeSquares(view)
+            board = this.unitBoardSquares(units.level)
+        }
         // TASK-1559: the sectors drawn this frame are the cache's most recent and are not evicted before the next frame.
         this.beginSectorFrame()
         ctx.save()
@@ -5192,13 +5663,41 @@ class Grid extends SpritesGroup {
                     stale = true
                     continue
                 }
+                const inBoard = units && u >= board.u0 && u <= board.u1 && v >= board.v0 && v <= board.v1
                 // TASK-1544: without the cache to stand in, its stand-in (the stale cache or the preview, drawStandIn).
                 if (!this.litHas(view, u, v) && (standIn ??= this.litStandIn(ctx) || !!this.standInSource() && 'standin')) {
+                    if (inBoard) {
+                        units.standIn = standIn
+                        const entry = this.freshUnitSector(units, u, v, units.token ||= this.unitStandInToken(standIn))
+                        if (entry) {
+                            this.drawUnitSectorAt(ctx, entry, u * LIT_TILE + ox, v * LIT_TILE + oy)
+                            ;(composed ||= new Set()).add(u + ',' + v)
+                            continue
+                        }
+                        wanted.push({u, v})
+                        const r = this.unitSquareRect(u, v, ox, oy, cw, ch)
+                        if (r)
+                            live.push(r)
+                    }
                     (missing ||= new Set()).add(u + ',' + v)
                     continue
                 }
                 const tile = this.litTile(view, u, v)
                 this.useSector(view, u, v)
+                if (inBoard) {
+                    // A tile the edge runs meet stays live (the frame lights the runs over it before the units).
+                    const edge = !!tile && edges.has(u + ',' + v)
+                    const entry = !edge && this.freshUnitSector(units, u, v, tile || null)
+                    if (entry) {
+                        this.drawUnitSectorAt(ctx, entry, u * LIT_TILE + ox, v * LIT_TILE + oy)
+                        continue
+                    }
+                    if (!edge)
+                        wanted.push({u, v})
+                    const r = this.unitSquareRect(u, v, ox, oy, cw, ch)
+                    if (r)
+                        live.push(r)
+                }
                 if (tile)
                     this.drawLitTileAt(ctx, tile, u * LIT_TILE + ox, v * LIT_TILE + oy, cw, ch)
             }
@@ -5242,7 +5741,11 @@ class Grid extends SpritesGroup {
                     this.releaseStaleTile(view, key)
             }
         }
-        this.litFrame = {view, ox, oy, rest: false, missing, stale}
+        // (TASK-1560: a sector drawn with the stand-in's ground is a stand-in square to the lit edges.)
+        this.litFrame = {view, ox, oy, rest: false, missing: composed ? new Set([...(missing || []), ...composed]) : missing, stale,
+            units: units ? {kind: 'lit', live, plan: units} : undefined}
+        if (units)
+            this.queueUnitSectors(units, wanted, range, board, cw, ch, ox, oy)
         this.queueLitTiles(view, t, cw, ch)
         return true
     }
@@ -7018,7 +7521,10 @@ class Grid extends SpritesGroup {
         // draw it with the sky, drawZoomRaster).
         if (!pass && !scene)
             this.drawSlabShadow(ctx)
-        const surface = scene || this.drawMapSurface(ctx)
+        // TASK-1560: a pan frame on the surface cache's path draws the cache and the units from the unit sectors.
+        this.unitFrame = undefined
+        const sectored = !pass && !scene && this.drawCacheSectors(ctx)
+        const surface = scene || sectored || this.drawMapSurface(ctx)
         this.frameSurface = surface
         // Lit tiles (drawLitView) hold the buildings and the light but for the board's edge.
         const lit = surface === 'lit', cachedScene = surface === true, standIn = surface === 'standin'
@@ -7031,6 +7537,8 @@ class Grid extends SpritesGroup {
         if (scene) {
             // The light is baked into the cache (surfaceCacheSteady); the layer holds the overlays.
         }
+        else if (sectored)
+            this.drawLiveSectorUnits(ctx, this.unitFrame)
         else if (otherSettings.atmosphericVisuals) {
             // The light map lights terrain and buildings; units, silhouettes and
             // bars come after it, so the multiply never darkens them.
@@ -7049,11 +7557,18 @@ class Grid extends SpritesGroup {
             if (!cachedScene) {
                 if (!pass)
                     this.dropOverlayLayer()
+                // TASK-1560: the lit frame's unit sectors hold the units pass but on its live squares.
+                const sectorUnits = lit && this.litFrame?.units
                 // TASK-1515: a pan on the lit tiles draws the units, bars and cell texts from the lit layer.
-                layered = lit && this.drawLitLayer(ctx)
+                layered = !sectorUnits && lit && this.drawLitLayer(ctx)
+                // (With debug its cell texts from a lit layer of them only, as the lit layer held them.)
+                if (sectorUnits) {
+                    this.drawLiveSectorUnits(ctx, sectorUnits)
+                    layered = !!debug && this.drawLitLayer(ctx, true)
+                }
                 // TASK-1544: over a stand-in the cache path's units and overlays (buildings under construction, bars,
                 // productions) of every cell in view.
-                if (!layered && standIn) {
+                else if (!layered && standIn) {
                     this.drawStillUnits(ctx)
                     this.drawEntityOverlays(ctx)
                 }
@@ -9170,6 +9685,16 @@ Grid.skyBlocks = true
 Grid.litSectors = true
 // TASK-1559: the lit sectors' budget on a phone (SECTOR_CACHE_BYTES elsewhere).
 const LIT_SECTOR_PHONE_BYTES = 64 * 1024 * 1024
+// TASK-1560 (SECTORS 4/11): pan frames draw the units pass from the unit sectors (Grid.unitSectorPlan); false: as before.
+Grid.unitSectors = true
+// TASK-1560: the unit sectors' budget (UNIT_SECTOR_PHONE_BYTES on a phone), the ring of squares built ahead round the canvas,
+// and the time a build task between frames may take.
+const UNIT_SECTOR_BYTES = 128 * 1024 * 1024
+const UNIT_SECTOR_PHONE_BYTES = 32 * 1024 * 1024
+const UNIT_SECTOR_AHEAD = 1
+const UNIT_SECTOR_TASK_MS = 8
+// TASK-1560: the unit sectors' key (unitSectorPlan) before the cache sectors' ground key (cacheSectorKey): its length.
+const UNIT_SECTOR_KEY_BASE = 10
 // How often (ms) an idle frame compares the surface cache with the whole board (Grid.prepareSurfaceCache).
 const SURFACE_CACHE_CHECK_MS = 500
 // The surface cache's captured state (captureSurfaceState), swapped for a lit view's copy (withLitState).

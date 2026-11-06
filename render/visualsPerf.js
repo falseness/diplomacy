@@ -552,7 +552,41 @@
                 const drawn = litLayer.apply(this, args)
                 if (active && drawn) work.litLayer = true
                 return drawn
+            }, args => args[1] ? 'text' : 'units')
+        }
+        // TASK-1560: a pan frame drawing the board from the unit sectors (the surface cache's path: drawCacheSectors; the lit
+        // path: drawLitView with litFrame.units): work.unitSectors {drawn: sectors composited, live: live squares, built:
+        // sectors built by the tasks since the previous frame}.
+        const unitWork = () => work.unitSectors ||= {drawn: 0, live: 0, built: 0}
+        if (proto.drawCacheSectors) {
+            const cacheSectors = proto.drawCacheSectors
+            proto.drawCacheSectors = labelled(function(...args) {
+                const drawn = cacheSectors.apply(this, args)
+                if (active && drawn) work.renderPath = 'surface-cache'
+                return drawn
+            }, 'surface')
+        }
+        if (proto.drawUnitSectorAt) {
+            const at = proto.drawUnitSectorAt
+            proto.drawUnitSectorAt = function(...args) {
+                if (active) unitWork().drawn++
+                return at.apply(this, args)
+            }
+        }
+        if (proto.drawLiveSectorUnits) {
+            const liveUnits = proto.drawLiveSectorUnits
+            proto.drawLiveSectorUnits = labelled(function(ctx, frame) {
+                if (active) unitWork().live += frame.live.length
+                return liveUnits.apply(this, arguments)
             }, 'units')
+        }
+        if (proto.buildUnitSector) {
+            const build = proto.buildUnitSector
+            proto.buildUnitSector = function(...args) {
+                const built = build.apply(this, args)
+                if (active && built) unitWork().built++
+                return built
+            }
         }
         // TASK-1375: a level-of-detail frame that repeats the one on the canvas draws nothing.
         if (proto.endLodFrame) {
@@ -590,7 +624,7 @@
         // TASK-1557: the compositing functions (their drawImage copies of kept pictures are not live board calls) and the
         // stand-in classifiers.
         for (const name of ['drawSurfaceCache', 'drawSurfaceCacheRect', 'drawStandIn', 'drawStandInRect', 'drawZoomUnderlay', 'drawZoomRaster',
-            'drawSceneLayer', 'drawLitLayer', 'drawLitTileAt', 'drawHeldFrame', 'drawOverlaySnapshot', 'drawOverlayLayer']) {
+            'drawSceneLayer', 'drawLitLayer', 'drawLitTileAt', 'drawUnitSectorAt', 'drawHeldFrame', 'drawOverlaySnapshot', 'drawOverlayLayer']) {
             const original = proto[name]
             if (!original) continue
             proto[name] = function(...args) {
