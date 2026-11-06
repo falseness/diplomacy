@@ -198,6 +198,20 @@ class Grid extends SpritesGroup {
         this.litView = undefined
         this.litRestCanvas = undefined
         this.litTilePool = []
+        // TASK-1559 (Grid.litSectors): the lit tiles kept as board-space sectors (render/sectorCache.js; level = the view's
+        // device scale, a sector a LIT_TILE square of the board's device grid at that scale), owned by the cache (LRU under
+        // SECTOR_CACHE_BYTES; a tile evicted or released leaves the view, close), kept past the view that built them: a view
+        // made again at a scale finds them (adoptSectors: the cells changed since the view they were built for, sectorBasis,
+        // dirty only the sectors they reach, staleSectors), a pan back finds them.
+        // On a phone the budget is LIT_SECTOR_PHONE_BYTES (the browser's canvas memory is a few hundred MB in all).
+        this.sectors = typeof SectorCache === 'function' ? new SectorCache({size: LIT_TILE, pad: 0,
+            budget: typeof mobilePhone !== 'undefined' && mobilePhone ? LIT_SECTOR_PHONE_BYTES : SECTOR_CACHE_BYTES}) : null
+        this.sectorBasis = undefined
+        this.sectorOutline = undefined
+        this.sectorFrame = -1
+        this.sectorGen = 0
+        this.sectorWork = {stored: 0, pulled: 0, adopted: 0, kept: 0, dirtied: 0, removed: 0, clears: 0, evicted: 0}
+        this.sectorClears = []
         // TASK-1546: the lit tile built a step a task (Grid.buildLitTiles: litTileStep), tiles started / given up.
         this.litTileJob = undefined
         this.litTileJobs = 0
@@ -1537,23 +1551,64 @@ class Grid extends SpritesGroup {
             }
             return
         }
+        // TASK-1559: with sectors and no region, the cells changed since the view's state (surfaceStateMatches' list, as
+        // refreshLitTiles finds them) and the rectangles they draw on (surfaceCacheChangeRects), found before the view takes
+        // the board's state: only the sectors and tiles those reach are released (staleSectors), not every one.
+        const found = !region && view.sectorLevel ? this.cellLayerChangeRects(view) : null
         this.withLitState(view, () => this.captureSurfaceState())
         Object.assign(view, this.litEdges(view))
+        if (found) {
+            const reached = new Set(this.staleSectors(view, found))
+            for (const [key, tile] of [...view.tiles]) {
+                if (!reached.has(key))
+                    continue
+                view.tiles.delete(key)
+                this.releaseLitTile(tile)
+                view.patchedTiles = true
+            }
+            ++this.sectorWork.dirtied
+            return
+        }
         if (!region) {
             for (const tile of view.tiles.values())
                 this.releaseLitTile(tile)
             view.tiles.clear()
+            // TASK-1559: and every sector (drawn for the old states) when the change's cells are not known.
+            if (view.sectorLevel)
+                this.clearSectors('cell layer')
             return
         }
         this.releaseLitTilesIn(view, view.rest, region)
+    }
+    // TASK-1559: the change since view's captured state as surfaceCacheChangeRects' {cells, light} (world boxes), null when the
+    // board cannot be compared past a cell list (or a lamp or portal changed: their light reaches far), an observed board.
+    cellLayerChangeRects(view) {
+        if (this.isObserving())
+            return null
+        const changes = []
+        const matches = this.withLitState(view, () => {
+            const overlayCells = this.surfaceOverlayCells
+            this.surfaceOverlayCells = []
+            try {
+                return this.surfaceStateMatches(undefined, changes, true)
+            } finally {
+                this.surfaceOverlayCells = overlayCells
+            }
+        })
+        if (!matches || !changes.length)
+            return null
+        return this.withLitState(view, () => this.surfaceCacheChangeRects(changes)) || null
     }
     // The tiles of view whose squares meet the rest snapshot's pixel rectangle r grown by the edge runs' reach (a run joins
     // blocks up to 3 apart), released (built again one a task, LIT_TILE_PATCHED_BUDGET).
     releaseLitTilesIn(view, rest, r) {
         const grow = 4 * LIT_EDGE_BLOCK, ox = Math.round(rest.e - view.e), oy = Math.round(rest.f - view.f)
+        // TASK-1559: with sectors, those the region (the snapshot's pixels, in world units) reaches at every level (staleSectors).
+        const reached = view.sectorLevel ? new Set(this.staleSectorsIn(view,
+            {x: (r.x - rest.e) / view.a, y: (r.y - rest.f) / view.d, w: r.w / view.a, h: r.h / view.d})) : null
         for (const [key, tile] of view.tiles) {
             const [u, v] = key.split(',').map(Number), x = u * LIT_TILE + ox, y = v * LIT_TILE + oy
-            if (x < r.x + r.w + grow && x + LIT_TILE > r.x - grow && y < r.y + r.h + grow && y + LIT_TILE > r.y - grow) {
+            if (reached ? reached.has(key) : x < r.x + r.w + grow && x + LIT_TILE > r.x - grow && y < r.y + r.h + grow && y + LIT_TILE > r.y - grow) {
                 view.tiles.delete(key)
                 this.releaseLitTile(tile)
                 view.patchedTiles = true
@@ -5123,23 +5178,27 @@ class Grid extends SpritesGroup {
         // A tile not built yet is drawn from the stand-in (the tasks build it, queueLitTiles); without one it is built now.
         // TASK-1553: the stand-in frameCover found (plan.standIn), if it looked.
         let standIn = plan.standIn, missing = null, stale = false
+        // TASK-1559: the sectors drawn this frame are the cache's most recent and are not evicted before the next frame.
+        this.beginSectorFrame()
         ctx.save()
         ctx.setTransform(1, 0, 0, 1, 0, 0)
         for (let v = range.v0; v <= range.v1; ++v) {
             for (let u = range.u0; u <= range.u1; ++u) {
                 // TASK-1519: a stale tile (refreshLitTiles) drawn as it was until built again, the changes drawn over it below.
-                const old = view.stale && !view.tiles.has(u + ',' + v) ? view.stale.get(u + ',' + v) : undefined
+                const old = view.stale && !this.litHas(view, u, v) ? view.stale.get(u + ',' + v) : undefined
                 if (old) {
+                    this.useSector(view, u, v)
                     this.drawLitTileAt(ctx, old, u * LIT_TILE + ox, v * LIT_TILE + oy, cw, ch)
                     stale = true
                     continue
                 }
                 // TASK-1544: without the cache to stand in, its stand-in (the stale cache or the preview, drawStandIn).
-                if (!view.tiles.has(u + ',' + v) && (standIn ??= this.litStandIn(ctx) || !!this.standInSource() && 'standin')) {
+                if (!this.litHas(view, u, v) && (standIn ??= this.litStandIn(ctx) || !!this.standInSource() && 'standin')) {
                     (missing ||= new Set()).add(u + ',' + v)
                     continue
                 }
                 const tile = this.litTile(view, u, v)
+                this.useSector(view, u, v)
                 if (tile)
                     this.drawLitTileAt(ctx, tile, u * LIT_TILE + ox, v * LIT_TILE + oy, cw, ch)
             }
@@ -5164,13 +5223,16 @@ class Grid extends SpritesGroup {
         // Tiles more than a tile off the canvas go back to the pool.
         // TASK-1552 (Grid.litAhead): more than a tile off the ring built ahead (litAheadRange), while the camera moves more
         // than LIT_AHEAD_KEEP tiles off it (a pan back finds them built).
+        // TASK-1559: a sector's tile leaves the view only: the sector cache keeps it (its LRU budget releases it), so a pan
+        // back finds it (litHas).
         const keep = Grid.litAhead ? this.litAheadRange(view, cw, ch, ox, oy).range : range
         const off = Grid.litAhead && gameEvent.screen.surfaceMoving ? LIT_AHEAD_KEEP : 1
         for (const [key, tile] of view.tiles) {
             const [u, v] = key.split(',').map(Number)
             if (u < keep.u0 - off || u > keep.u1 + off || v < keep.v0 - off || v > keep.v1 + off) {
                 view.tiles.delete(key)
-                this.releaseLitTile(tile)
+                if (!this.sectorHolds(view, u, v, tile))
+                    this.releaseLitTile(tile)
             }
         }
         if (view.stale) {
@@ -5238,15 +5300,15 @@ class Grid extends SpritesGroup {
                 const made = this.stepLitView(ctx, t)
                 if (!made)
                     return {t, cache: true}
-                view = this.litView = made
+                view = this.setLitView(made, cw, ch)
             }
             else
-                view = this.litView = this.newLitView(t, ctx.canvas)
+                view = this.setLitView(this.newLitView(t, ctx.canvas), cw, ch)
         }
         // The rest snapshot's cell layer brought up to the board (TASK-1315); a view dropped for it is made again.
         // TASK-1372: so is one whose snapshot's split is behind the board.
         if (!this.followCellLayer('lit', ctx, t) || !this.litSplitHolds(view))
-            view = this.litView = this.newLitView(t, ctx.canvas)
+            view = this.setLitView(this.newLitView(t, ctx.canvas), cw, ch)
         // TASK-1377: a view that held and is still the one drawn vouches for the light map (atmosphericLighting.trust): the
         // frame's lightMap calls (the tiles, the lit edges) and the tasks building its tiles skip the whole board's light
         // state. exact: its whole state compared (litViewHolds' exact, not the rest snapshot's cell layer compare).
@@ -5274,7 +5336,7 @@ class Grid extends SpritesGroup {
         let missing = 0
         for (let v = range.v0; v <= range.v1; ++v)
             for (let u = range.u0; u <= range.u1; ++u)
-                if (!view.tiles.has(u + ',' + v) && !view.stale?.has(u + ',' + v))
+                if (!this.litHas(view, u, v) && !view.stale?.has(u + ',' + v))
                     ++missing
         return view.unbuilt = missing > LIT_FRAME_TILES && !this.litStandIn(ctx) && !this.standInSource()
     }
@@ -5348,9 +5410,12 @@ class Grid extends SpritesGroup {
             const r = this.patchRegion(found, L.mapPixel(), at, Infinity, Infinity), grow = 4 * LIT_EDGE_BLOCK
             const stale = view.stale ||= new Map()
             let staled = 0
+            // TASK-1559: with sectors, those the change reaches at every level (staleSectors: the view's own left dirty, the
+            // others released).
+            const reached = view.sectorLevel ? new Set(this.staleSectors(view, found)) : null
             for (const [key, tile] of view.tiles) {
                 const [u, v] = key.split(',').map(Number), x = u * LIT_TILE, y = v * LIT_TILE
-                if (x < r.x + r.w + grow && x + LIT_TILE > r.x - grow && y < r.y + r.h + grow && y + LIT_TILE > r.y - grow) {
+                if (reached ? reached.has(key) : x < r.x + r.w + grow && x + LIT_TILE > r.x - grow && y < r.y + r.h + grow && y + LIT_TILE > r.y - grow) {
                     view.tiles.delete(key)
                     if (stale.has(key))
                         this.releaseLitTile(stale.get(key))
@@ -5509,12 +5574,14 @@ class Grid extends SpritesGroup {
         view.mapScale = atmosphericLighting.mapScale
         Object.assign(view, this.litEdges(view))
         const r = job.region
+        // TASK-1559: with sectors, those the change reaches at every level (staleSectors), the view's own released here.
+        const reached = r && view.sectorLevel ? new Set(this.staleSectors(view, {cells: job.boxes, light: job.light})) : null
         if (r) {
             // The tiles whose squares meet the region grown by the edge runs' reach (a run joins blocks up to 3 apart).
             const grow = 4 * LIT_EDGE_BLOCK, ox = Math.round(job.rest.e - view.e), oy = Math.round(job.rest.f - view.f)
             for (const [key, tile] of view.tiles) {
                 const [u, v] = key.split(',').map(Number), x = u * LIT_TILE + ox, y = v * LIT_TILE + oy
-                if (x < r.x + r.w + grow && x + LIT_TILE > r.x - grow && y < r.y + r.h + grow && y + LIT_TILE > r.y - grow) {
+                if (reached ? reached.has(key) : x < r.x + r.w + grow && x + LIT_TILE > r.x - grow && y < r.y + r.h + grow && y + LIT_TILE > r.y - grow) {
                     view.tiles.delete(key)
                     this.releaseLitTile(tile)
                     view.patchedTiles = true
@@ -5573,7 +5640,7 @@ class Grid extends SpritesGroup {
             let run = null
             for (let u = range.u0; u <= range.u1; ++u) {
                 const key = u + ',' + v
-                const tile = view.tiles.get(key)
+                const tile = this.litHas(view, u, v) ? view.tiles.get(key) : undefined
                 if (tile && tile.litOpaque === mapDepth.outline && mapDepth.outline) {
                     run = null
                     continue
@@ -5637,7 +5704,7 @@ class Grid extends SpritesGroup {
             let built = false, stood = false
             for (let v = Math.floor((y0 - oy) / LIT_TILE); v <= Math.floor((y1 - 1 - oy) / LIT_TILE); ++v)
                 for (let u = Math.floor((x0 - ox) / LIT_TILE); u <= Math.floor((x1 - 1 - ox) / LIT_TILE); ++u) {
-                    const key = u + ',' + v, tile = view.tiles.get(key)
+                    const key = u + ',' + v, tile = this.litHas(view, u, v) ? view.tiles.get(key) : undefined
                     if (!mapDepth.outline)
                         return false
                     if (tile?.litOutline === mapDepth.outline)
@@ -5851,7 +5918,11 @@ class Grid extends SpritesGroup {
     *newLitViewSteps(t, main) {
         mapDepth.ensureGeometry(this)
         atmosphericLighting.lightMap(this)
-        const view = {a: t.a, d: t.d, e: t.e, f: t.f, cw: main.width, ch: main.height, tiles: new Map(),
+        // TASK-1559: with sectors (Grid.litSectors) the tiles' grid is the board's device grid at the scale (e, f 0: tile u, v
+        // is sector (t.a, u, v)), whatever the camera's offset; the frames move it by the camera's offset rounded to whole pixels.
+        const sectors = this.litSectorsOn()
+        const view = {a: t.a, d: t.d, e: sectors ? 0 : t.e, f: sectors ? 0 : t.f, cw: main.width, ch: main.height, tiles: new Map(),
+            sectorLevel: sectors ? t.a : 0, madeAt: {e: t.e, f: t.f},
             rest: null, state: [], overlayCells: [], rebuilds: atmosphericLighting.rebuilds,
             mapScale: atmosphericLighting.mapScale}
         this.withLitState(view, () => this.captureSurfaceState())
@@ -6049,12 +6120,13 @@ class Grid extends SpritesGroup {
     // TASK-1439: each build timed (litTileCost, a tile the board reaches).
     litTile(view, u, v) {
         const key = u + ',' + v
-        if (!view.tiles.has(key)) {
+        if (!this.litHas(view, u, v)) {
             const start = performance.now(), tile = this.buildLitTile(view, u, v)
             if (tile)
                 litTileCost.add(performance.now() - start)
             view.tiles.set(key, tile)
             this.releaseStaleTile(view, key)
+            this.storeSector(view, u, v, tile)
         }
         return view.tiles.get(key)
     }
@@ -6089,7 +6161,7 @@ class Grid extends SpritesGroup {
             tiles.unshift(...tiles.splice(k, 1))
         }
         for (const {u, v} of tiles) {
-            if (view.tiles.has(u + ',' + v))
+            if (this.litHas(view, u, v))
                 continue
             if (stepped) {
                 for (;;) {
@@ -6160,6 +6232,7 @@ class Grid extends SpritesGroup {
             litTileCost.add(job.ms)
         view.tiles.set(key, tile)
         this.releaseStaleTile(view, key)
+        this.storeSector(view, u, v, tile)
         return true
     }
     // TASK-1546: whether the tile under way still draws its view as a tile built now would: the view is the board's, the tile
@@ -6206,7 +6279,7 @@ class Grid extends SpritesGroup {
         const cu = (cw / 2 - ox) / LIT_TILE - 0.5, cv = (ch / 2 - oy) / LIT_TILE - 0.5
         for (let v = range.v0; v <= range.v1; ++v)
             for (let u = range.u0; u <= range.u1; ++u)
-                if (!view.tiles.has(u + ',' + v)) {
+                if (!this.litHas(view, u, v)) {
                     const shown = u >= shownRange.u0 && u <= shownRange.u1 && v >= shownRange.v0 && v <= shownRange.v1
                     missing.push({u, v, shown, far: ahead && !shown ? LIT_AHEAD_LATER + this.litAheadWhen(ahead, u, v, !moving) :
                         Math.hypot(u - cu, v - cv)})
@@ -6245,7 +6318,7 @@ class Grid extends SpritesGroup {
             if (banding && !gameEvent.screen.surfaceMoving) {
                 // The tiles on the canvas the frames draw from the stand-in first (at most LIT_TILE_BUDGET a task, a view
                 // the frames draw live LIT_FIRST_TILE_BUDGET), then the bands.
-                const shown = missing.filter(m => m.shown && !view.tiles.has(m.u + ',' + m.v))
+                const shown = missing.filter(m => m.shown && !this.litHas(view, m.u, m.v))
                 if (shown.length) {
                     // TASK-1377: the task's tiles compare the board's light state once (atmosphericLighting.checkedOnce).
                     atmosphericLighting.checkedOnce(this, () =>
@@ -6270,7 +6343,7 @@ class Grid extends SpritesGroup {
                 return
             atmosphericLighting.checkedOnce(this, () => this.buildLitTiles(view, missing, ahead && moving ? LIT_AHEAD_CAP : budget,
                 !moving || view.unbuilt || ahead))
-            if (ahead && moving && ++this.litAheadTasks < LIT_AHEAD_TASKS && missing.some(m => !view.tiles.has(m.u + ',' + m.v)))
+            if (ahead && moving && ++this.litAheadTasks < LIT_AHEAD_TASKS && missing.some(m => !this.litHas(view, m.u, m.v)))
                 this.queueLitTiles(view, t, cw, ch)
         }))
     }
@@ -6414,7 +6487,10 @@ class Grid extends SpritesGroup {
                 continue
             const px = X + (k & 1) * Q, py = Y + (k >> 1) * Q
             part.gradientSource = gradients
-            part.litWindow = {left: Math.min(0, -px), top: Math.min(0, -py), right: Math.max(Q, view.cw - px), bottom: Math.max(Q, view.ch - py)}
+            // TASK-1559: a sector's quarter draws the same whatever the camera: its window is its own square (drawRange and
+            // onCanvas add their hexagon margins round it).
+            part.litWindow = view.sectorLevel ? {left: 0, top: 0, right: Q, bottom: Q} :
+                {left: Math.min(0, -px), top: Math.min(0, -py), right: Math.max(Q, view.cw - px), bottom: Math.max(Q, view.ch - py)}
             const inside = this.litSquareOpaque(view, px, py, px + Q, py + Q)
             quarters.push({part, g: part.getContext('2d'), px, py, inside, clear: part.litDrawn && !inside,
                 underlay: {left: (px - view.e) / view.a, top: (py - view.f) / view.d, right: (px + Q - view.e) / view.a, bottom: (py + Q - view.f) / view.d}})
@@ -6594,9 +6670,20 @@ class Grid extends SpritesGroup {
         this.litEdgeRuns = {view, edges: view.edges, ox, oy, cw, ch, squares, runs}
         atmosphericLighting.drawEdges(ctx, this, runs)
     }
+    // TASK-1559: a tile released: through the sector cache when it holds it (remove: close takes it out of the view and frees
+    // it), else freed at once.
     releaseLitTile(tile) {
         if (!tile)
             return
+        const key = tile.sectorKey
+        if (key && this.sectors?.get(key)?.image === tile) {
+            this.sectors.remove(key)
+            return
+        }
+        this.freeLitTile(tile)
+    }
+    // A tile's quarters back to the pool (TASK-1559: also as the sector cache's close).
+    freeLitTile(tile) {
         for (const part of tile.parts) {
             if (!part)
                 continue
@@ -6607,18 +6694,247 @@ class Grid extends SpritesGroup {
         }
         tile.parts = []
     }
+    // TASK-1559: a sectors view's tiles stay in the sector cache (the next view adopts those its board still draws alike:
+    // adoptSectors against this view's state, sectorBasis); its stale tiles are released.
     dropLitView() {
-        if (this.litView) {
-            for (const tile of this.litView.tiles.values())
-                this.releaseLitTile(tile)
-            this.releaseStaleTile(this.litView)
+        const view = this.litView
+        if (view) {
+            if (view.sectorLevel && this.sectors) {
+                this.releaseStaleTile(view)
+                for (const [key, tile] of view.tiles) {
+                    const [u, v] = key.split(',').map(Number)
+                    if (!this.sectorHolds(view, u, v, tile))
+                        this.releaseLitTile(tile)
+                }
+                this.sectorBasis = view
+            }
+            else {
+                for (const tile of view.tiles.values())
+                    this.releaseLitTile(tile)
+                this.releaseStaleTile(view)
+            }
+            view.tiles = new Map()
         }
         this.litView = undefined
         this.litEdgeRuns = undefined
     }
+    // TASK-1559 (SECTORS 3/11): lit tiles as sectors. Whether this board keeps its lit tiles as sectors (Grid.litSectors).
+    litSectorsOn() {
+        return !!(Grid.litSectors && this.sectors)
+    }
+    // The sector key of view's tile (u, v), null when view keeps no sectors.
+    sectorKey(view, u, v) {
+        return view.sectorLevel && this.sectors ? SectorCache.key(view.sectorLevel, u, v) : null
+    }
+    // Whether view has tile (u, v): in its tiles, else a clean sector of its level taken from the cache (built for the light
+    // map, outline and board state the view draws: entry.version the cache's generation, sectorGen; dirty ones are not).
+    litHas(view, u, v) {
+        const key = u + ',' + v
+        if (view.tiles.has(key))
+            return true
+        const skey = view === this.litView && this.sectorKey(view, u, v)
+        const entry = skey && this.sectors.get(skey)
+        if (!entry || entry.dirty || entry.version !== this.sectorGeneration() || entry.d !== view.d ||
+                entry.image && !entry.image.parts.length)
+            return false
+        view.tiles.set(key, entry.image)
+        ++this.sectorWork.pulled
+        return true
+    }
+    // Whether the cache holds tile as view's sector (u, v).
+    sectorHolds(view, u, v, tile) {
+        const key = this.sectorKey(view, u, v)
+        return !!key && !!tile && this.sectors.get(key)?.image === tile
+    }
+    // The generation the cache's sectors were built for (sectorGen: one more on every clear, clearSectors); a tile stored
+    // after a clear never mixes with one from before it.
+    sectorGeneration() {
+        return this.sectorGen
+    }
+    // A tile view built (null: the board does not reach it) stored as its sector; the entry it replaces (a dirty one) is freed
+    // unless it is still drawn as view's stale tile.
+    storeSector(view, u, v, tile) {
+        const key = view === this.litView && this.sectorKey(view, u, v)
+        if (!key)
+            return
+        const old = this.sectors.get(key)
+        if (old && old.image === tile)
+            return
+        if (old) {
+            this.sectors.entries.delete(key)
+            this.sectors.bytes -= old.bytes
+            if (old.image && view.stale?.get(u + ',' + v) !== old.image)
+                this.freeLitTile(old.image)
+        }
+        if (this.sectorOutline !== mapDepth.outline) {
+            if (this.sectors.entries.size)
+                this.clearSectors('outline')
+            this.sectorOutline = mapDepth.outline
+        }
+        let bytes = 0
+        if (tile) {
+            tile.sectorKey = key
+            tile.close = () => this.closeSectorTile(tile, u + ',' + v)
+            bytes = tile.parts.filter(Boolean).length * LIT_TILE_PART ** 2 * 4
+        }
+        const before = this.sectors.evictions
+        const entry = this.sectors.put(view.sectorLevel, u, v, tile, {version: this.sectorGeneration(), bytes})
+        entry.d = view.d
+        this.sectorWork.evicted += this.sectors.evictions - before
+        ++this.sectorWork.stored
+    }
+    // The cache's close of a tile (evicted, removed or cleared): out of the lit view (its tiles or stale tiles), then freed.
+    closeSectorTile(tile, uv) {
+        const view = this.litView
+        if (view) {
+            if (view.tiles.get(uv) === tile)
+                view.tiles.delete(uv)
+            if (view.stale?.get(uv) === tile) {
+                view.stale.delete(uv)
+                if (!view.stale.size)
+                    view.stale = view.refresh = undefined
+            }
+        }
+        tile.sectorKey = undefined
+        this.freeLitTile(tile)
+    }
+    // Once a frame (drawSerial): the cache's frame, so the sectors this frame draws (useSector) are not evicted till the next.
+    beginSectorFrame() {
+        if (this.sectors && this.sectorFrame !== this.drawSerial) {
+            this.sectorFrame = this.drawSerial
+            this.sectors.beginFrame()
+        }
+    }
+    useSector(view, u, v) {
+        const key = this.sectorKey(view, u, v)
+        if (key)
+            this.sectors.use(key)
+    }
+    // Every sector released (reason counted: sectorClears, the frame's ground-sectors full rebuild).
+    clearSectors(reason) {
+        const sectors = this.sectors
+        if (!sectors)
+            return
+        if (sectors.entries.size) {
+            ++this.sectorWork.clears
+            this.sectorClears.push(reason)
+            if (this.sectorClears.length > 64)
+                this.sectorClears.splice(0, 32)
+        }
+        sectors.clear()
+        ++this.sectorGen
+        this.sectorBasis = undefined
+    }
+    // The sectors the board change found (surfaceCacheChangeRects' cells and light, world boxes) reaches, at every level: each
+    // world box (the light's grown by a light map pixel) grown by 3 device pixels at the sector's level and the edge
+    // runs' reach (4 LIT_EDGE_BLOCK: a run joins blocks up to 3 apart), as refreshLitTiles and finishLitPatch found the tiles
+    // before (SectorCache.dirtyCells). Those that are view's tiles are left dirty for the caller (returned: their u,v keys);
+    // the others are released (built again when a frame reaches them).
+    staleSectors(view, found) {
+        if (!this.sectors || !this.sectors.entries.size)
+            return []
+        const texel = atmosphericLighting.mapPixel()
+        const boxes = [...found.cells, ...found.light.map(r => ({x0: r.x0 - texel, y0: r.y0 - texel, x1: r.x1 + texel, y1: r.y1 + texel}))]
+        if (!boxes.length)
+            return []
+        // Grown by the territory glow's cool spill past its warm reach (TERRITORY.cool.reach - reach hex radii): the change's
+        // light rectangles give the warm reach only where the owner's colour is not known to be blue (probes/dirty-probe-g:
+        // a kept sector 3.7 radii from a changed cell 2/255 off), and a kept sector is never drawn again unless dirtied.
+        const T = atmosphericLighting.TERRITORY, m = T.cool ? Math.max(0, T.cool.reach - T.reach) * basis.r : 0
+        return this.staleSectorsIn(view, boxes.map(r => ({x: r.x0 - m, y: r.y0 - m, w: r.x1 - r.x0 + 2 * m, h: r.y1 - r.y0 + 2 * m})))
+    }
+    // staleSectors for world rectangles rects (a rectangle or a list; not yet grown), each on its own (not their union).
+    staleSectorsIn(view, rects) {
+        const sectors = this.sectors
+        if (!sectors || !sectors.entries.size)
+            return []
+        const kept = []
+        for (const skey of sectors.dirtyCells(Array.isArray(rects) ? rects : [rects], level => (3 + 4 * LIT_EDGE_BLOCK) / level)) {
+            const entry = sectors.get(skey), uv = entry.u + ',' + entry.v
+            if (view && entry.level === view.sectorLevel && entry.image && (view.tiles.get(uv) === entry.image || view.stale?.get(uv) === entry.image)) {
+                kept.push(uv)
+                continue
+            }
+            sectors.remove(skey)
+            ++this.sectorWork.removed
+        }
+        return kept
+    }
+    // TASK-1559: a new lit view (planLitView) takes the sectors kept: none (cleared) when the light map or the outline differ
+    // from those they were built for or the board cannot be compared with the last view's state (sectorBasis: an observed
+    // board, another board state past a cell list, a lamp or portal change); else the board's cells changed since that state
+    // (surfaceStateMatches' list, as refreshLitTiles finds them) dirty the sectors they reach (staleSectors), the others are
+    // the view's tiles where its frames reach them (litHas). view.sectorAdopt: what was done; view.sectorsOnCanvas: the clean
+    // sectors on the canvas it was made at (visualsPerf: a view finding none is a full rebuild).
+    adoptSectors(view, cw, ch) {
+        const sectors = this.sectors
+        const basis = this.sectorBasis
+        this.sectorBasis = undefined
+        if (!view.sectorLevel || !sectors)
+            return
+        ++this.sectorWork.adopted
+        const L = atmosphericLighting
+        const done = what => {
+            view.sectorAdopt = what
+            let on = 0
+            if (sectors.entries.size) {
+                const ox = Math.round(view.madeAt.e), oy = Math.round(view.madeAt.f), r = this.litTileRange(cw, ch, ox, oy, 0)
+                for (let v = r.v0; v <= r.v1; ++v)
+                    for (let u = r.u0; u <= r.u1; ++u) {
+                        const e = sectors.get(SectorCache.key(view.sectorLevel, u, v))
+                        if (e && !e.dirty && e.version === this.sectorGeneration() && e.d === view.d) ++on
+                    }
+            }
+            view.sectorsOnCanvas = on
+        }
+        if (!sectors.entries.size)
+            return done('empty')
+        const refuse = !basis ? 'no basis' : this.isObserving() ? 'observed' : this.sectorOutline !== mapDepth.outline ? 'outline' :
+            basis.rebuilds !== L.rebuilds || basis.mapScale !== L.mapScale ? 'light map' : null
+        if (refuse) {
+            this.clearSectors(refuse)
+            return done('cleared')
+        }
+        const changes = []
+        const matches = this.withLitState(basis, () => {
+            const overlayCells = this.surfaceOverlayCells
+            this.surfaceOverlayCells = []
+            try {
+                return this.surfaceStateMatches(undefined, changes, true)
+            } finally {
+                this.surfaceOverlayCells = overlayCells
+            }
+        })
+        if (!matches) {
+            this.clearSectors('board')
+            return done('cleared')
+        }
+        if (!changes.length) {
+            ++this.sectorWork.kept
+            return done('kept')
+        }
+        const found = this.withLitState(basis, () => this.surfaceCacheChangeRects(changes))
+        if (!found) {
+            this.clearSectors('lamp or portal')
+            return done('cleared')
+        }
+        this.staleSectors(null, found)
+        ++this.sectorWork.dirtied
+        return done('dirtied')
+    }
+    // A new lit view taken (planLitView, a start's steps): its sectors adopted.
+    setLitView(view, cw, ch) {
+        if (this.litView && this.litView !== view)
+            this.dropLitView()
+        this.litView = view
+        this.adoptSectors(view, cw, ch)
+        return view
+    }
     // Releases every lit canvas (the surface cache draws the board).
     releaseLitCanvases() {
         this.dropLitView()
+        // TASK-1559: the sectors too (the surface cache draws the board).
+        this.clearSectors('released')
         for (const part of this.litTilePool)
             part.width = part.height = 0
         this.litTilePool.length = 0
@@ -6642,8 +6958,14 @@ class Grid extends SpritesGroup {
     // buffer.
     litTileBytes() {
         let parts = this.litTilePool.length
+        // TASK-1559: the sectors' tiles (the view's among them) as the cache counts them.
+        if (this.sectors?.entries.size)
+            parts += this.sectors.bytes / (LIT_TILE_PART ** 2 * 4)
         if (this.litView)
-            for (const tile of this.litView.tiles.values()) if (tile) parts += tile.parts.filter(Boolean).length
+            for (const [key, tile] of this.litView.tiles) {
+                const [u, v] = key.split(',').map(Number)
+                if (tile && !this.sectorHolds(this.litView, u, v, tile)) parts += tile.parts.filter(Boolean).length
+            }
         const rest = this.litRestCanvas ? this.litRestCanvas.width * this.litRestCanvas.height * 4 : 0
         const buffer = this.litPatchBuffer ? this.litPatchBuffer.width * this.litPatchBuffer.height * 4 : 0
         return parts * LIT_TILE_PART ** 2 * 4 + rest + buffer
@@ -7084,7 +7406,7 @@ class Grid extends SpritesGroup {
         let made
         while (!(made = viewSteps.next()).done)
             yield ['view', false]
-        const view = this.litView = made.value
+        const view = this.setLitView(made.value, cw, ch)
         yield ['view', false]
         const ox = Math.round(t.e - view.e), oy = Math.round(t.f - view.f)
         const range = this.litTileRange(cw, ch, ox, oy, 0), tiles = []
@@ -8843,6 +9165,11 @@ Grid.zoomBitmapLitSkips = true
 Grid.litViewSteps = true
 // TASK-1545: a frame on the lit tiles draws only the sky's blocks the board leaves open (Grid.coverSkyBlocks).
 Grid.skyBlocks = true
+// TASK-1559 (SECTORS 3/11): the lit tiles kept as board-space sectors in the board's SectorCache (Grid.litHas, adoptSectors,
+// staleSectors); false: tiles on the grid of the view's own transform, released with it, as before.
+Grid.litSectors = true
+// TASK-1559: the lit sectors' budget on a phone (SECTOR_CACHE_BYTES elsewhere).
+const LIT_SECTOR_PHONE_BYTES = 64 * 1024 * 1024
 // How often (ms) an idle frame compares the surface cache with the whole board (Grid.prepareSurfaceCache).
 const SURFACE_CACHE_CHECK_MS = 500
 // The surface cache's captured state (captureSurfaceState), swapped for a lit view's copy (withLitState).

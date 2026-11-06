@@ -128,15 +128,17 @@ class SectorCache {
     }
     get overBudget() { return this.bytes > this.budget }
     // Marks the cached sectors overlapping the cells' boxes (grown by pad) dirty at every level; returns their keys.
-    dirtyCells(cells) {
+    // TASK-1559: padAt(level), optional: board units the boxes are grown by besides at that level (a reach given in device
+    // pixels, as the lit tiles' edge runs').
+    dirtyCells(cells, padAt) {
         const boxes = [...cells].map(cell => {
             const b = sectorCellBox(cell, this.radius)
             return {x: b.x - this.pad, y: b.y - this.pad, w: b.w + 2 * this.pad, h: b.h + 2 * this.pad}
         })
         const marked = []
         for (const entry of this.entries.values()) {
-            const r = this.sectorRect(entry.level, entry.u, entry.v)
-            if (boxes.some(b => b.x < r.x + r.w && b.x + b.w > r.x && b.y < r.y + r.h && b.y + b.h > r.y)) {
+            const r = this.sectorRect(entry.level, entry.u, entry.v), m = padAt ? padAt(entry.level) : 0
+            if (boxes.some(b => b.x - m < r.x + r.w && b.x + b.w + m > r.x && b.y - m < r.y + r.h && b.y + b.h + m > r.y)) {
                 entry.dirty = true
                 marked.push(entry.key)
             }

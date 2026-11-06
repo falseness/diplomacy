@@ -638,6 +638,7 @@
         const mainScale = () => typeof mainCtx !== 'undefined' ? mainCtx.getTransform().a : null
         const sameKey = (a, b) => !!a && !!b && a.length === b.length && a.every((v, k) => v === b[k])
         const snapshot = g => ({board: g, litBuilds: g.litLayerBuilds, litView: g.litView, litViewA: g.litView?.a ?? null,
+            sectorClears: g.sectorWork ? g.sectorWork.clears : 0,
             scene: g.sceneLayer, scenePrev: g.sceneLayer || null, overlay: g.overlayLayer, overlayPrev: g.overlayLayer || null, zoomRaster: g.zoomRaster})
         return {
             wrap(proto) {
@@ -670,10 +671,26 @@
                 if (!seen || seen.board !== g) { seen = snapshot(g); return }
                 for (let n = seen.litBuilds; n < g.litLayerBuilds; ++n) add('lit-layer', litReason(litCause || 'none'), litCause || 'none')
                 seen.litBuilds = g.litLayerBuilds
+                // TASK-1559: the lit sectors dropped whole because they no longer draw the board (Grid.clearSectors), as
+                // ground-sectors: zoom in a zoom gesture, else by its cause (state: the board, light map, cell layer, lamp or
+                // portal, outline; other: no basis, observed). 'released' (releaseLitCanvases: the surface cache draws the
+                // board, the lit path is not in use) frees them without a rebuild: work.sectorReleases (the lit view made
+                // when the lit path is back finds no sectors and counts as lit-tiles then).
+                const clears = g.sectorWork ? g.sectorWork.clears : 0
+                if (clears > seen.sectorClears) {
+                    const reasons = g.sectorClears.slice(-(clears - seen.sectorClears))
+                    for (const cause of reasons) {
+                        if (cause === 'released') { work.sectorReleases = (work.sectorReleases || 0) + 1; continue }
+                        add('ground-sectors', /light map|board|cell layer|lamp|outline/.test(cause) ? (zoomingNow() ? 'zoom' : 'state') : 'other', cause.replace(/ /g, '-'))
+                    }
+                }
+                seen.sectorClears = clears
                 const view = g.litView
                 if (view && view !== seen.litView) {
                     const prevA = viewDrop ? viewDrop.a : seen.litViewA
-                    if (prevA === null) add('lit-tiles', 'other', 'first')
+                    // TASK-1559: a view that took kept sectors on its canvas (Grid.adoptSectors) is not every tile built again.
+                    if (view.sectorAdopt && view.sectorsOnCanvas > 0) work.litSectorAdoptions = (work.litSectorAdoptions || 0) + 1
+                    else if (prevA === null) add('lit-tiles', 'other', 'first')
                     else if (prevA !== view.a) add('lit-tiles', 'zoom', 'scale')
                     else if (!viewDrop) add('lit-tiles', 'state', 'replaced')
                     else add('lit-tiles', STATE_CALLERS.test(viewDrop.caller) ? 'state' : 'other', viewDrop.caller)

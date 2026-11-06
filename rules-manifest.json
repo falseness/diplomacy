@@ -1,7 +1,7 @@
 {
   "format": 1,
   "algorithm": "sha256(path NUL bytes NUL ...)",
-  "rulesVersion": "38156b9d5a129265c29d5fb967909410e313e2f692371e60c89ab350cd210f5a",
+  "rulesVersion": "af351b32bc72cc5a6736e73f387ac0213305fa981d31038c9e5ed74e67ad1dc7",
   "scripts": [
     {
       "path": "options/assert.js",
@@ -310,8 +310,8 @@
     },
     {
       "path": "groups/grid.js",
-      "sha256": "9d0345fc7d15a219a66fbea3b79ed081ee9e06cbd307a7b193931a362277dbd5",
-      "bytes": 533122
+      "sha256": "0d6e56c2febcadaf983096ed46df031d0f3a136cf05121a6b5b5bb90a1a2dbca",
+      "bytes": 550706
     },
     {
       "path": "sprites/entities/hpBar.js",
