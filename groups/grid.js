@@ -5585,8 +5585,11 @@ class Grid extends SpritesGroup {
         return !!(this.levelSettle || this.sectorRest) && !screen.zoomGesture
     }
     endLevels(why) {
-        if (this.levelSettle || this.sectorRest)
+        if (this.levelSettle || this.sectorRest) {
             this.levelWork.ends[why] = (this.levelWork.ends[why] || 0) + 1
+            // (TASK-1562: a still frame held from a level frame is not the rest path's picture: the next frame draws it.)
+            this.dropHeldFrame()
+        }
         this.levelSettle = this.sectorRest = undefined
     }
     // Whether entry can be drawn stretched (at another level than it was built for): clean, and its ground still the board's
@@ -5773,13 +5776,14 @@ class Grid extends SpritesGroup {
         if (!levels && !pan)
             return false
         const t = ctx.getTransform()
-        let standIn
+        let standIn, viewPending = false
         if (this.canUseSurfaceCache()) {
             if (this.surfaceCache || !this.standInPreviewFits())
                 return false
             standIn = 'standin'
         }
         else {
+            viewPending = true
             let plan = this.litPlan
             if (plan === undefined || plan && (plan.t.a !== t.a || plan.t.d !== t.d || plan.t.e !== t.e || plan.t.f !== t.f))
                 plan = this.litPlan = this.planLitView(ctx)
@@ -5790,7 +5794,10 @@ class Grid extends SpritesGroup {
         if (!standIn)
             return false
         // Kind 'standin': the units drawn as the frame drawing the stand-in draws them (drawStillUnits + drawEntityOverlays).
-        const units = this.unitSectorPlan(ctx, 'standin', levels)
+        // TASK-1562: on the lit path (the view of the camera's level pending) kind 'lit' on the stand-in's ground: the sectors
+        // the lit frames build for their squares without a tile (drawLitView's stand-in squares: the same token, ground and
+        // units pass, drawOther), so those frames draw these as they are instead of building every square again.
+        const units = this.unitSectorPlan(ctx, viewPending ? 'lit' : 'standin', levels)
         if (!units)
             return false
         this.litPlan = undefined

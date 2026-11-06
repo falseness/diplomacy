@@ -206,6 +206,24 @@ class Screen {
         if (!Number.isFinite(zoom) || zoom <= 0 || !pos || !Number.isFinite(pos.x) || !Number.isFinite(pos.y))
             return
 
+        // TASK-1562: on the zoom levels (Grid.levelsOn) an input the limit clamps to no scale change (a zoom key held, or a
+        // keyboard step finishing, at mapBorder.scale.max or .min) ends the gesture: the camera has stopped, so the next
+        // frame settles (levelSettle: the camera's level built) instead of the frames staying in zoom mode while the key is
+        // held. The camera stays as it is (not even a rounding step: the levels are keyed by the exact scale). A new input
+        // that changes the scale starts a new gesture (on the levels nothing is captured or rebuilt for it). Off the levels:
+        // as before (TASK-1374: a gesture held against a limit keeps the zoom raster).
+        // (Only with the scale exactly at the limit: a step that ended a rounding off it is applied, so the next input puts
+        // the camera at the limit exactly, as before.)
+        if (requested !== 1 && (canvas.scale === mapBorder.scale.max || canvas.scale === mapBorder.scale.min) &&
+                Math.abs(canvas.scale * zoom - canvas.scale) <= canvas.scale * 1e-9 &&
+                typeof grid !== 'undefined' && grid && typeof grid.levelsOn === 'function' && grid.levelsOn()) {
+            const now = performance.now()
+            this.zoomGestureUntil = Math.min(this.zoomGestureUntil || 0, now)
+            this.zoomGestureFrames = 0
+            this.surfaceZoomUntil = Math.min(this.surfaceZoomUntil || 0, now)
+            this.surfaceZoomFrames = 0
+            return
+        }
         // Reuse the existing board raster while scaling. This is only a render
         // hint: input anchors, sensitivity and limits remain unchanged. A gesture held
         // against a zoom limit is still a gesture: it keeps the raster too, rather than
