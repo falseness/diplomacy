@@ -23,6 +23,11 @@ const SECTOR_WORKER_MAX_FAILURES = 3
 // picture at a time, so builds recorded past it wait, go stale as the camera moves on, and their recording was main-thread
 // work for nothing. A build finished frees a place (onDrain: the board's builds go on).
 const SECTOR_WORKER_QUEUE = 3
+// TASK-1565: a worker whose median drawing time over its last SECTOR_WORKER_RATE_SAMPLES builds is over this many ms an op is
+// slow (SectorWorker.noteRate: the main-thread path from then on). Offline a lit tile is ~0.05 ms an op in a Worker; on a
+// software canvas next to a busy page 0.12-0.7 (the median of the first builds, artifacts/TASK-1564/change.md, TASK-1565 dev).
+const SECTOR_WORKER_SLOW_MS_PER_OP = 0.08
+const SECTOR_WORKER_RATE_SAMPLES = 8
 
 if (typeof importScripts === 'function' && typeof document === 'undefined' && typeof window === 'undefined') {
     // ---- worker side ----
@@ -75,6 +80,8 @@ if (typeof importScripts === 'function' && typeof document === 'undefined' && ty
 // The content version of canvas sprites: every drawing call on a 2D context, and every size set, counts on its canvas
 // (sectorDraws), so a sprite's key changes with its pixels (SectorRecorder.key). Installed when the worker starts (not in
 // headless contexts or with the fallback).
+// TASK-1565: the page's drawing calls since the wrapper was installed (sectorCountDraws).
+let sectorDrawTotal = 0
 let sectorDrawCountsOn = false
 function sectorCountDraws() {
     if (sectorDrawCountsOn || typeof CanvasRenderingContext2D === 'undefined' || typeof HTMLCanvasElement === 'undefined')
@@ -90,6 +97,8 @@ function sectorCountDraws() {
             const canvas = this.canvas
             if (canvas)
                 canvas.sectorDraws = (canvas.sectorDraws || 0) + 1
+            // TASK-1565: every drawing call of the page counted (Grid.frameCalls: the build-ahead budget's real calls).
+            ++sectorDrawTotal
             return call.apply(this, arguments)
         }
     }
@@ -123,12 +132,14 @@ const SectorWorker = {
     spriteBytes: 0,
     use: 0,
     counters: {builtWorker: 0, builtMain: 0, builtMainMoving: 0, fallback: 0, posted: 0, dropped: 0, failed: 0, depth: 0, depthMax: 0, spriteBytes: 0,
-        spritesSent: 0, spritesDropped: 0, workerMs: 0},
+        spritesSent: 0, spritesDropped: 0, workerMs: 0, slow: 0},
+    // TASK-1565: the worker's recent drawing times (ms an op, the last SECTOR_WORKER_RATE_SAMPLES builds).
+    rates: [],
     // Whether the builds go to the worker now (started on the first call).
     on() {
         if (this.state === 'on')
             return true
-        if (this.state === 'failed' || !this.wanted())
+        if (this.state === 'failed' || this.state === 'slow' || !this.wanted())
             return false
         return this.start()
     },
@@ -269,14 +280,14 @@ const SectorWorker = {
             if (s.sent)
                 continue
             const bitmap = s.bitmap || await s.promise
-            if (this.state !== 'on' || !this.inflight.has(job.id))
+            if (!this.worker || !this.inflight.has(job.id))
                 return
             s.bitmap = null
             s.sent = true
             add.push([key, bitmap])
             ++this.counters.spritesSent
         }
-        if (this.state !== 'on' || !this.inflight.has(job.id))
+        if (!this.worker || !this.inflight.has(job.id))
             return
         const drops = this.pendingDrops
         this.pendingDrops = null
@@ -347,11 +358,33 @@ const SectorWorker = {
         k.ms += m.ms || 0
         k.ops += m.ops || 0
         k.max = Math.max(k.max, m.ms || 0)
+        this.noteRate(m.ms, m.ops)
         const run = () => {
             job.onDone(m.out)
             this.onDrain?.()
         }
         typeof gridTask === 'function' ? gridTask(run)() : run()
+    },
+    // TASK-1565: SOFTWARE CANVAS DETECTION. Where the worker draws far slower than it can (the median of its last
+    // SECTOR_WORKER_RATE_SAMPLES builds over SECTOR_WORKER_SLOW_MS_PER_OP ms an op: on a software canvas, --disable-gpu, a
+    // worker's drawImage waits on the page's main-thread canvas work, ~0.7 ms an op against ~0.05 offline,
+    // artifacts/TASK-1564/change.md), the builds go to the budgeted main-thread path from then on (state 'slow'; the builds in
+    // flight still come back). Grid.sectorWorkerSlow false: never.
+    noteRate(ms, ops) {
+        if (!(ops > 0) || !(ms >= 0))
+            return
+        const r = this.rates
+        r.push(ms / ops)
+        if (r.length > SECTOR_WORKER_RATE_SAMPLES)
+            r.shift()
+        if (this.state !== 'on' || r.length < SECTOR_WORKER_RATE_SAMPLES || typeof Grid !== 'undefined' && Grid.sectorWorkerSlow === false)
+            return
+        const sorted = [...r].sort((a, b) => a - b), median = sorted[sorted.length >> 1]
+        if (median <= SECTOR_WORKER_SLOW_MS_PER_OP)
+            return
+        this.state = 'slow'
+        this.reason = 'slow: ' + median.toFixed(3) + ' ms an op'
+        ++this.counters.slow
     },
     // A sector picture made: in the worker (stored, or dropped as no longer wanted) or on the main thread (fallback: the
     // worker not used for it).

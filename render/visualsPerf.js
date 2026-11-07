@@ -66,6 +66,11 @@
             // thread (sectorsBuiltMain; workerFallback: of those, made here though the worker could have made them, or with it
             // off), the pictures dropped as stale, the builds in flight now (workerQueueDepth) and at most since.
             frame.work.sectorWorker = sectorWorkerDelta()
+            // TASK-1565: the sector caches' bytes now (the lit tiles' and the unit sectors' SectorCache together:
+            // SECTOR_CACHE_BYTES at most) and the builds ahead of the camera since the previous frame (Grid.sectorAhead).
+            const board = typeof grid !== 'undefined' ? grid : null
+            frame.work.sectorBytes = board ? (board.sectors?.bytes || 0) + (board.unitSectors?.bytes || 0) + (board.unitSectorAlt?.cache.bytes || 0) : null
+            frame.work.sectorAhead = sectorAheadDelta(board)
             frame.work.standInPx = Math.round(work.standInPx)
             frame.work.standInPxBy = Object.fromEntries(Object.entries(work.standInPx ? work.standInPxBy : {}).map(([k, v]) => [k, Math.round(v)]))
             frame.work.layerFullRebuildCount = Object.values(work.layerFullRebuild).reduce((a, b) => a + b, 0)
@@ -79,6 +84,19 @@
             if (document.hidden) report.invalidReasons.push('hidden-tab')
             frame = null
         }
+    }
+    let sectorAheadLast = null
+    const sectorAheadDelta = board => {
+        const c = board?.aheadWork
+        if (!c)
+            return null
+        const last = sectorAheadLast || {}, out = {}
+        for (const k of Object.keys(c))
+            if (typeof c[k] === 'number' && k !== 'ring')
+                out[k] = c[k] - (last[k] || 0)
+        out.ring = c.ring
+        sectorAheadLast = {...c}
+        return out
     }
     let sectorWorkerLast = null
     const sectorWorkerDelta = () => {
@@ -252,6 +270,9 @@
         drawZoomRaster: board => (g, source, args, area) => { if (source === board.zoomRaster?.canvas) addStandIn('zoom-raster', area) },
         // TASK-1562: the sectors of other levels stretched to the camera (and the underlay under them).
         drawStretchedSectors: () => (g, source, args, area) => addStandIn('stretched', area),
+        // TASK-1565: a unit sector whose ground is a stand-in (the surface cache magnified or its preview: Grid.drawStandInSector),
+        // the stand-in under exact units.
+        drawStandInSector: () => (g, source, args, area) => addStandIn('sector-standin', area),
         drawSurfaceCacheRect: () => (g, source, args, area) => {
             if (args.length !== 8 || !args[2]) return
             const f = Math.hypot(g.getTransform().a, g.getTransform().b) * args[6] / args[2]
@@ -682,7 +703,7 @@
         // TASK-1557: the compositing functions (their drawImage copies of kept pictures are not live board calls) and the
         // stand-in classifiers.
         for (const name of ['drawSurfaceCache', 'drawSurfaceCacheRect', 'drawStandIn', 'drawStandInRect', 'drawZoomUnderlay', 'drawZoomRaster', 'drawStretchedSectors',
-            'drawSceneLayer', 'drawLitLayer', 'drawLitTileAt', 'drawUnitSectorAt', 'drawHeldFrame', 'drawOverlaySnapshot', 'drawOverlayLayer']) {
+            'drawSceneLayer', 'drawLitLayer', 'drawLitTileAt', 'drawUnitSectorAt', 'drawStandInSector', 'drawHeldFrame', 'drawOverlaySnapshot', 'drawOverlayLayer']) {
             const original = proto[name]
             if (!original) continue
             proto[name] = function(...args) {

@@ -205,7 +205,7 @@ class Grid extends SpritesGroup {
         // dirty only the sectors they reach, staleSectors), a pan back finds them.
         // On a phone the budget is LIT_SECTOR_PHONE_BYTES (the browser's canvas memory is a few hundred MB in all).
         this.sectors = typeof SectorCache === 'function' ? new SectorCache({size: LIT_TILE, pad: 0,
-            budget: typeof mobilePhone !== 'undefined' && mobilePhone ? LIT_SECTOR_PHONE_BYTES : SECTOR_CACHE_BYTES}) : null
+            budget: typeof mobilePhone !== 'undefined' && mobilePhone ? LIT_SECTOR_PHONE_BYTES : LIT_SECTOR_BYTES}) : null
         this.sectorBasis = undefined
         this.sectorOutline = undefined
         this.sectorFrame = -1
@@ -249,6 +249,15 @@ class Grid extends SpritesGroup {
         // TASK-1564: builds not started for a full Worker queue (Grid.sectorWorkerBusy).
         this.litWorkerStops = 0
         this.unitWorkerStops = 0
+        // TASK-1565 (Grid.sectorAhead): the sectors built ahead of the camera (visualsPerf work.sectorAhead): lit tiles and unit
+        // sectors built (tiles, units), queued in a frame's ring (queued: the last frame's list; ring: its squares), builds
+        // given up because their square left the ring (cancelled), and the camera's motion (sectorMotion).
+        this.aheadWork = {tiles: 0, tilesMoving: 0, units: 0, unitsMoving: 0, cancelled: 0, queued: 0, ring: 0, tileSteps: 0, tileStepCalls: 0,
+            composed: 0}
+        // TASK-1565: the draw calls a lit tile's steps record (litTileSteps' recorders count them in calls.n while calls is set).
+        this.litStepHolder = {calls: null}
+        this.aheadUnitRatio = 1
+        this.sectorMotion = undefined
         this.unitSectorClears = []
         this.unitSectorRefusals = {}
         // TASK-1546: the lit tile built a step a task (Grid.buildLitTiles: litTileStep), tiles started / given up.
@@ -3218,7 +3227,7 @@ class Grid extends SpritesGroup {
             setTimeout(gridTask(() => {
                 this.surfaceCacheQueued = false
                 // TASK-1562: none after a zoom (Grid.zoomQuiet: its finish composes the whole cache, ~14 MP).
-                if (free() && !Grid.zoomQuiet())
+                if (free() && (!Grid.zoomQuiet() || this.cacheUrgent()))
                     this.surfaceSplitStep()
             }))
             return
@@ -3234,7 +3243,8 @@ class Grid extends SpritesGroup {
                 return
             // TASK-1562: after a zoom (Grid.zoomQuiet) one step of ZOOM_QUIET_STEP_MS a frame (an owned tile is pieces:
             // ownedTileSteps); the next frame's call queues it again.
-            const quiet = Grid.zoomQuiet()
+            // TASK-1565: not while there is no cache (cacheUrgent).
+            const quiet = Grid.zoomQuiet() && !this.cacheUrgent()
             if (quiet && !Grid.oncePerFrame('surface')) {
                 ++this.levelWork.quietStops
                 return
@@ -3247,6 +3257,12 @@ class Grid extends SpritesGroup {
             } while (!quiet && (this.surfaceCacheBuild || this.standInWanted()) && performance.now() - start < budget - SURFACE_STEP_MS)
             this.queueStandInTask()
         }))
+    }
+    // TASK-1565 (Grid.sectorAhead): while the board has no surface cache (its first build, or a rebuild: the frames at the
+    // cache's scales draw the stand-in and sectors on it) the build does not wait for a zoom's quiet or the camera at rest
+    // (Grid.zoomQuiet, Grid.cameraBusy): its steps run as before TASK-1562, so the sectors there get their exact ground.
+    cacheUrgent() {
+        return !!Grid.sectorAhead && this === grid && !this.surfaceCache
     }
     // A step of the surface cache's build: a stage, or (TASK-1473, with a budget in ms: the between-frames tasks) a step
     // of the work a stage or the finish would otherwise do at once, while the time spent and the last piece's fit in the
@@ -3305,12 +3321,12 @@ class Grid extends SpritesGroup {
             }
             // TASK-1562: the finish (several MP: the patch buffer, the cell layer) and the whole stages (the bake) wait between
             // frames for the camera at rest and a zoom's quiet over (Grid.cameraBusy).
-            if (budget < Infinity && Grid.cameraBusy())
+            if (budget < Infinity && Grid.cameraBusy() && !this.cacheUrgent())
                 return
             this.finishSurfaceCacheStep(build)
             return
         }
-        if (budget < Infinity && !SURFACE_CACHE_STAGE_STEPS[build.stage] && Grid.cameraBusy())
+        if (budget < Infinity && !SURFACE_CACHE_STAGE_STEPS[build.stage] && Grid.cameraBusy() && !this.cacheUrgent())
             return
         ++this.surfaceCacheStages
         // TASK-1518: between frames a stage with steps (SURFACE_CACHE_STAGE_STEPS) runs them.
@@ -5283,6 +5299,53 @@ class Grid extends SpritesGroup {
     //   - Live squares are drawn per disjoint rectangle with its own cells (drawLiveSectorUnits), not their bounding box.
     //   - Debug turned on or off keeps the other state's sectors aside (unitSectorAlt).
     // The plan of a frame on ctx on the unit sectors of kind ('lit' or 'cache'), null when it draws the units as before.
+    // TASK-1565 (SECTORS 9/11, Grid.sectorAhead): BUILD AHEAD. The frames on the lit tiles and the surface cache's path queue the
+    // sectors of the camera's level (lit tiles: queueLitTiles; unit sectors: queueUnitSectors / restUnitSectors) for the
+    // canvas's squares (nearest its centre first) and a ring round them (aheadRange: SECTOR_AHEAD_RING squares, more on the
+    // sides the camera moves to: the squares it crosses in LIT_AHEAD_MS at its velocity, sectorMotion, at most LIT_AHEAD_MAX),
+    // the ring's in the order the camera reaches them (aheadWhen), while the camera moves and at rest. A build under way for a
+    // square that left the ring is given up (cancelled), so are queued ones (the lists are the frame's). While the camera
+    // moves the builds between two frames share LEVEL_FRAME_CALLS (levelWorkLeft, as after a zoom) with AHEAD_TILE_STEPS
+    // lit tile steps, so a pan frame and its builds stay under a heavy frame's 500 calls; a square whose tile is missing gets
+    // an overlay sector (its units and texts, drawn over the stand-in, then over the tile when it comes) instead of a sector
+    // on the stand-in's ground. The sector caches keep SECTOR_CACHE_BYTES together (LIT_SECTOR_BYTES + UNIT_SECTOR_BYTES,
+    // LRU). The stand-in is drawn only for a square whose tile is still missing.
+    // The camera's motion (device pixels a ms, smoothed over LIT_MOTION_SMOOTH_MS; again from 0 after LIT_MOTION_GAP_MS
+    // without a frame or at another scale) from a frame's camera transform t.
+    followSectorMotion(t) {
+        const now = performance.now(), m = this.sectorMotion
+        if (!m || m.a !== t.a || now - m.time > LIT_MOTION_GAP_MS) {
+            this.sectorMotion = {a: t.a, e: t.e, f: t.f, time: now, vx: 0, vy: 0}
+            return
+        }
+        const dt = now - m.time
+        if (dt <= 0)
+            return
+        const k = Math.min(1, dt / LIT_MOTION_SMOOTH_MS)
+        m.vx += ((t.e - m.e) / dt - m.vx) * k
+        m.vy += ((t.f - m.f) / dt - m.vy) * k
+        m.e = t.e
+        m.f = t.f
+        m.time = now
+    }
+    // Whether the build-ahead runs (and the camera moves: moving).
+    aheadOn(moving = false) {
+        return !!Grid.sectorAhead && (!moving || typeof gameEvent !== 'undefined' && !!gameEvent.screen?.surfaceMoving)
+    }
+    // The squares of range (litTileRange of the canvas) grown by the ring: {range, mx, my, ox, oy, cw, ch} (the canvas's motion
+    // over the board's squares, mx/my, device pixels a ms; 0 at rest or without a motion at the camera's scale a).
+    aheadRange(range, a, ox, oy, cw, ch, ring = SECTOR_AHEAD_RING) {
+        const m = this.sectorMotion && this.sectorMotion.a === a && performance.now() - this.sectorMotion.time <= LIT_MOTION_GAP_MS ?
+            this.sectorMotion : null
+        const mx = m ? -m.vx : 0, my = m ? -m.vy : 0
+        const r = {u0: range.u0 - ring, u1: range.u1 + ring, v0: range.v0 - ring, v1: range.v1 + ring}
+        const reach = speed => Math.min(LIT_AHEAD_MAX, Math.ceil(Math.abs(speed) * LIT_AHEAD_MS / LIT_TILE))
+        if (mx > 0) r.u1 += reach(mx)
+        else if (mx < 0) r.u0 -= reach(mx)
+        if (my > 0) r.v1 += reach(my)
+        else if (my < 0) r.v0 -= reach(my)
+        return {range: r, ox, oy, cw, ch, mx, my}
+    }
     unitSectorPlan(ctx, kind, rest = false) {
         const screen = typeof gameEvent !== 'undefined' ? gameEvent.screen : undefined
         const t = ctx.getTransform()
@@ -5321,9 +5384,12 @@ class Grid extends SpritesGroup {
                     this.unitSectors = alt ? alt.cache : this.newUnitSectorCache()
                     this.unitSectorKey = {key, state}
                 }
-                this.unitSectors.budget = kept.cache.budget
-                kept.cache.budget = Math.floor(this.unitSectors.budget * UNIT_SECTOR_ALT_SHARE)
+                // TASK-1565: the two sets within the unit sectors' budget together (SECTOR_CACHE_BYTES with the lit sectors).
+                const base = this.unitSectorBudget()
+                kept.cache.budget = Math.floor(base * UNIT_SECTOR_ALT_SHARE)
+                this.unitSectors.budget = base - kept.cache.budget
                 kept.cache.evict()
+                this.unitSectors.evict()
                 this.unitSectorAlt = kept
                 this.unitSectorWanted = undefined
                 this.unitSectorBuilding = undefined
@@ -5355,7 +5421,7 @@ class Grid extends SpritesGroup {
         }
         this.unitSectors?.clear()
         if (this.unitSectorAlt) {
-            this.unitSectors.budget = Math.max(this.unitSectors.budget, this.unitSectorAlt.cache.budget)
+            this.unitSectors.budget = this.unitSectorBudget()
             this.unitSectorAlt.cache.clear()
             this.unitSectorAlt = undefined
         }
@@ -5365,8 +5431,10 @@ class Grid extends SpritesGroup {
     }
     // TASK-1561: an empty unit sector cache (LIT_TILE squares, UNIT_SECTOR_BYTES, UNIT_SECTOR_PHONE_BYTES on a phone).
     newUnitSectorCache() {
-        return new SectorCache({size: LIT_TILE, pad: 0,
-            budget: typeof mobilePhone !== 'undefined' && mobilePhone ? UNIT_SECTOR_PHONE_BYTES : UNIT_SECTOR_BYTES})
+        return new SectorCache({size: LIT_TILE, pad: 0, budget: this.unitSectorBudget()})
+    }
+    unitSectorBudget() {
+        return typeof mobilePhone !== 'undefined' && mobilePhone ? UNIT_SECTOR_PHONE_BYTES : UNIT_SECTOR_BYTES
     }
     // What the units pass draws on cell (i, j), as litLayerSignature lists it, in out (its length returned; 0: nothing).
     unitCellValues(i, j, out) {
@@ -5447,7 +5515,7 @@ class Grid extends SpritesGroup {
         const token = this.unitStandIn
         if (token && token.parts.every((v, k) => v === parts[k]))
             return token
-        return this.unitStandIn = {parts, source}
+        return this.unitStandIn = {parts, source, standIn: true}
     }
     // The device rectangle (identity transform) of square (u, v) on a cw x ch canvas, the grid placed at ox, oy; null off it.
     unitSquareRect(u, v, ox, oy, cw, ch) {
@@ -5584,10 +5652,34 @@ class Grid extends SpritesGroup {
     }
     // A frame's sector drawn whole at its square's place (identity transform).
     drawUnitSectorAt(ctx, entry, x, y) {
-        ctx.drawImage(entry.image, x, y)
+        // TASK-1565: a sector built on a stand-in's ground (unitStandInToken) is the stand-in under its units.
+        if (entry.ground?.standIn)
+            this.drawStandInSector(ctx, entry.image, x, y)
+        else
+            ctx.drawImage(entry.image, x, y)
         this.unitSectors.use(entry.key)
         ++this.unitSectorWork.drawn
         this.countLevelDraws(1)
+    }
+    // TASK-1565: the whole sector of square (u, v) of plan units made from its built tile and its overlay sector (over): the
+    // tile's quarters, then the overlay, on a sector canvas (as a frame draws them there), stored as the square's sector on that
+    // tile (the overlay's kind, tag and epoch). Null when the board is not the one in play.
+    composeUnitSector(units, u, v, tile, over) {
+        if (this !== grid || typeof document === 'undefined')
+            return null
+        const c = this.aheadComposed?.serial === this.drawSerial ? this.aheadComposed : this.aheadComposed = {serial: this.drawSerial, n: 0}
+        ++c.n
+        const canvas = document.createElement('canvas')
+        canvas.width = canvas.height = LIT_TILE
+        const g = canvas.getContext('2d')
+        this.drawLitTileAt(g, tile, 0, 0, LIT_TILE, LIT_TILE)
+        g.drawImage(over.image, 0, 0)
+        ++this.aheadWork.composed
+        return this.storeUnitSector(units.level, u, v, canvas, tile, over.kind, over.tag, over.epoch)
+    }
+    // TASK-1565: a unit sector on a stand-in's ground drawn (visualsPerf counts it as stand-in pixels, 'sector-standin').
+    drawStandInSector(ctx, image, x, y) {
+        ctx.drawImage(image, x, y)
     }
     // TASK-1562: the sector copies the frame being drawn made (levelDraws: its draw calls the level budget leaves room for).
     countLevelDraws(n) {
@@ -6125,15 +6217,23 @@ class Grid extends SpritesGroup {
         const first = plan.first?.size ? p => plan.first.has(p.u + ',' + p.v) ? 0 : 1 : null
         wanted.sort(first ? (p, q) => first(p) - first(q) || near(p, q) : near)
         const ring = [], A = UNIT_SECTOR_AHEAD
-        for (let v = Math.max(range.v0 - A, board.v0); v <= Math.min(range.v1 + A, board.v1); ++v)
-            for (let u = Math.max(range.u0 - A, board.u0); u <= Math.min(range.u1 + A, board.u1); ++u) {
+        // TASK-1565 (Grid.sectorAhead): the ring grown on the sides the camera moves to (aheadRange), its squares in the order
+        // the camera reaches them (aheadWhen; at rest nearest first).
+        const ahead = this.aheadOn() ? this.aheadRange(range, plan.level, ox, oy, cw, ch) : null
+        const R = ahead ? ahead.range : {u0: range.u0 - A, u1: range.u1 + A, v0: range.v0 - A, v1: range.v1 + A}
+        for (let v = Math.max(R.v0, board.v0); v <= Math.min(R.v1, board.v1); ++v)
+            for (let u = Math.max(R.u0, board.u0); u <= Math.min(R.u1, board.u1); ++u) {
                 if (u >= range.u0 && u <= range.u1 && v >= range.v0 && v <= range.v1)
                     continue
                 const entry = this.unitSectors.get(SectorCache.key(plan.level, u, v))
                 if (!entry || !this.unitEntryFits(entry, plan))
-                    ring.push({u, v})
+                    ring.push(ahead ? {u, v, when: this.litAheadWhen(ahead, u, v, !this.aheadOn(true))} : {u, v})
             }
-        ring.sort(near)
+        ring.sort(ahead ? (p, q) => p.when - q.when || near(p, q) : near)
+        if (ahead) {
+            this.aheadWork.queued = wanted.length + ring.length
+            this.aheadWork.ring = (R.u1 - R.u0 + 1) * (R.v1 - R.v0 + 1)
+        }
         // TASK-1561: the squares drawn from an overlay sector (upgrades) after the ring: a whole sector there saves the frame
         // its ground's copy only.
         const list = upgrades?.length ? wanted.concat(ring, upgrades.sort(near)) : wanted.concat(ring)
@@ -6171,8 +6271,11 @@ class Grid extends SpritesGroup {
         const frame = this.unitFrame || this.litFrame?.units
         // TASK-1562: a level frame's (levelMode) live squares burst too; its other builds share LEVEL_FRAME_CALLS a frame with
         // the lit tiles' steps (levelWorkLeft), the rest left to the next frame's task.
-        const levels = this.levelMode()
-        const burst = (!job.plan.rest || levels) && !!frame && frame.plan?.key === job.plan.key && frame.liveCost > UNIT_SECTOR_BURST_COST
+        // TASK-1565 (Grid.sectorAhead): a moving camera's builds too (with the lit tiles' steps: buildLitTiles).
+        const levels = this.levelMode() || this.aheadOn(true)
+        // TASK-1565: while the camera moves (not a zoom's levels) only when its frames are heavy anyway (Grid.lastFrameCalls).
+        const burst = (!job.plan.rest || levels) && !!frame && frame.plan?.key === job.plan.key && frame.liveCost > UNIT_SECTOR_BURST_COST &&
+            (this.levelMode() || !this.aheadOn(true) || Grid.lastFrameCalls > AHEAD_BURST_FRAME_CALLS)
         const left = levels && !burst ? Grid.levelWorkLeft() : null
         // With no square stretched or live (the sectors left are upgrades onto built tiles) the lit tiles' steps keep their
         // share of the frame's budget.
@@ -6181,7 +6284,13 @@ class Grid extends SpritesGroup {
             left.calls -= LEVEL_TILE_STEPS * LEVEL_TILE_STEP_CALLS / 2
         // The frame's own calls are in it too: its sector copies (levelDraws), live squares (liveCost) and the rest of a
         // frame (LEVEL_FRAME_BASE: the sky, the interface, the borders), within LEVEL_FRAME_TOTAL.
-        if (left) {
+        // TASK-1565: a moving camera's (not a zoom's levels): the room the last frame's real calls leave (aheadCallsLeft), the
+        // calls recorded counted by their real calls' ratio (aheadUnitRatio).
+        const ahead = !!left && !this.levelMode()
+        if (ahead)
+            left.calls = (Grid.aheadCallsLeft() - (this.aheadTilesShown?.serial === this.drawSerial && this.aheadTilesShown.n ?
+                AHEAD_TILE_STEPS * litStepCalls.mean / 2 : 0)) / this.aheadUnitRatio
+        else if (left) {
             const drawn = this.levelDraws?.serial === this.drawSerial ? this.levelDraws.n : 0
             left.calls = Math.min(left.calls, LEVEL_FRAME_TOTAL - LEVEL_FRAME_BASE - drawn - (frame?.liveCost || 0))
         }
@@ -6196,10 +6305,30 @@ class Grid extends SpritesGroup {
             ++this.unitSectorWork.bursts
         let last = 0
         const fits = () => performance.now() - start + last <= ms && calls.n < calls.max && !calls.full
+        // TASK-1565: a moving camera's task spends the calls it really made (the page's count), and learns their ratio to the
+        // calls it recorded (aheadUnitRatio, 1-4).
+        const real0 = Grid.frameCallsNow()
+        const spend = () => {
+            if (!left)
+                return
+            if (!ahead) {
+                Grid.levelSpend(calls.n)
+                return
+            }
+            const real = Grid.frameCallsNow() - real0
+            if (calls.n >= 20)
+                this.aheadUnitRatio = Math.min(4, Math.max(1, this.aheadUnitRatio * 0.7 + real / calls.n * 0.3))
+            Grid.levelSpend(real)
+        }
         const open = this.unitSectorBuilding
         if (open) {
             if (open.plan.key !== job.plan.key || open.plan.level !== job.plan.level)
                 this.unitSectorBuilding = undefined
+            // TASK-1565: a build whose square left the frame's ring (its list): given up.
+            else if (this.aheadOn() && !job.list.some(p => p.u === open.u && p.v === open.v)) {
+                this.unitSectorBuilding = undefined
+                ++this.aheadWork.cancelled
+            }
             else
                 this.buildUnitSector(job, open.u, open.v, calls)
         }
@@ -6214,17 +6343,20 @@ class Grid extends SpritesGroup {
             if (Grid.sectorWorkerBusy()) {
                 ++this.unitWorkerStops
                 this.unitSectorWanted ||= {...job, list: job.list.slice(k), onCanvas: Math.max(0, (job.onCanvas || 0) - k)}
-                if (left)
-                    Grid.levelSpend(calls.n)
+                spend()
                 return
             }
+            // TASK-1565: a moving camera's builds within the frame's offscreen megapixels too (Grid.aheadMpLeft).
+            if (ahead && Grid.aheadMpLeft() < AHEAD_SECTOR_MP)
+                break
             const {u, v} = job.list[k]
             const t0 = performance.now()
             if (this.buildUnitSector(job, u, v, calls))
                 last = performance.now() - t0
+            if (ahead)
+                Grid.aheadMpSpend(AHEAD_SECTOR_MP)
         }
-        if (left)
-            Grid.levelSpend(calls.n)
+        spend()
         // A cut build, and the squares the task did not reach, by the next task, though no frame queues one (a frame's own
         // list replaces it; a pan stopped stops a pan's job: the check above).
         // TASK-1562: a level frame's job by the next frame's task (its budget spent).
@@ -6292,6 +6424,10 @@ class Grid extends SpritesGroup {
         if (!job.standIn || this.surfacePatchJob || this.surfaceLayerJob || this.surfaceSplitJob || this.surfaceCacheBuild ||
                 this.unitStandInToken(job.standIn) !== job.token)
             return overlay('standin')
+        // TASK-1565 (Grid.sectorAhead): a square whose tile is missing gets an overlay (drawn over the stand-in now and over its
+        // tile when built) rather than a sector on the stand-in's ground (built again when the tile comes).
+        if (this.aheadOn())
+            return overlay('ahead')
         const source = job.token.source
         return {ground: job.token, draw: g => {
             if (source === 'preview')
@@ -6409,6 +6545,11 @@ class Grid extends SpritesGroup {
         ++this.unitSectorWork.built
         if (ground === UNIT_OVERLAY)
             ++this.unitSectorWork.overlays
+        if (this.aheadOn()) {
+            ++this.aheadWork.units
+            if (this.aheadOn(true))
+                ++this.aheadWork.unitsMoving
+        }
         return entry
     }
     // TASK-1564: a unit sector's picture back from the Worker (out: [[0, ImageBitmap]]): stored as buildUnitSector stores one
@@ -6623,8 +6764,13 @@ class Grid extends SpritesGroup {
                             continue
                         }
                         // TASK-1561: the units and texts from an overlay sector over the stand-in, else live.
+                        // TASK-1565 (Grid.sectorAhead): an overlay there is not upgraded before the tile is built (it would be
+                        // an overlay again).
                         const over = this.freshUnitSector(units, u, v, UNIT_OVERLAY)
-                        ;(over ? upgrades : wanted).push({u, v})
+                        if (!over)
+                            wanted.push({u, v})
+                        else if (!this.aheadOn())
+                            upgrades.push({u, v})
                         const r = this.unitSquareRect(u, v, ox, oy, cw, ch)
                         if (over)
                             overlays.push({entry: over, x: u * LIT_TILE + ox, y: v * LIT_TILE + oy})
@@ -6663,6 +6809,17 @@ class Grid extends SpritesGroup {
                     }
                     // TASK-1561: else the units and texts from an overlay sector over the tile (an edge-run tile's is one), else live.
                     const over = this.freshUnitSector(units, u, v, UNIT_OVERLAY)
+                    // TASK-1565 (Grid.sectorAhead): an overlay over a built tile (not an edge-run one) made a whole sector at once
+                    // (the tile's quarters and the overlay drawn into it: what the frame draws there), AHEAD_COMPOSE_FRAME a frame,
+                    // so the next frames draw one picture there instead of the quarters and the overlay.
+                    if (over && tile && !edge && this.aheadOn() && (this.aheadComposed?.serial === this.drawSerial ? this.aheadComposed.n : 0) <
+                            Math.min(AHEAD_COMPOSE_FRAME, Math.floor((AHEAD_FRAME_MP - Grid.aheadPrevMp()) / AHEAD_COMPOSE_MP))) {
+                        const whole = this.composeUnitSector(units, u, v, tile, over)
+                        if (whole) {
+                            this.drawUnitSectorAt(ctx, whole, u * LIT_TILE + ox, v * LIT_TILE + oy)
+                            continue
+                        }
+                    }
                     if (!over)
                         wanted.push({u, v})
                     else if (!edge)
@@ -6685,6 +6842,8 @@ class Grid extends SpritesGroup {
             }
         }
         ctx.restore()
+        // TASK-1565: the canvas's squares whose tile is missing this frame (unitSectorTask keeps the lit steps' share for them).
+        this.aheadTilesShown = {serial: this.drawSerial, n: missing ? missing.size : 0}
         if (lv)
             this.drawLevelStretch(ctx, t, lv, cw, ch, ox, oy)
         if (missing) {
@@ -7656,6 +7815,11 @@ class Grid extends SpritesGroup {
             const under = list.find(m => m.u === job.u && m.v === job.v)
             if (under)
                 tiles.unshift(under)
+            // TASK-1565: the tile under way left the ring (the list is the frame's ring): given up.
+            else if (this.aheadOn()) {
+                this.dropLitTileJob()
+                ++this.aheadWork.cancelled
+            }
         }
         if (stepped && job && job.view === view && tiles.some(m => m.u === job.u && m.v === job.v)) {
             const k = tiles.findIndex(m => m.u === job.u && m.v === job.v)
@@ -7664,6 +7828,11 @@ class Grid extends SpritesGroup {
         // TASK-1562: after a zoom (levelMode) at most LEVEL_TILE_STEPS steps between two frames, within the frames' budget
         // (levelWorkLeft, LEVEL_TILE_STEP_CALLS a step), the rest by the next frame's task.
         const levels = stepped && this.levelMode()
+        // TASK-1565: while the camera moves (Grid.sectorAhead) the steps between two frames share the frame's budget
+        // (levelWorkLeft) too, at most AHEAD_TILE_STEPS, each spending the calls it made (litStepHolder; LEVEL_TILE_STEP_CALLS
+        // its estimate before the first).
+        const ahead = stepped && !levels && this.aheadOn(true)
+        const stepCalls = {n: 0, max: Infinity}
         for (const {u, v} of tiles) {
             if (this.litHas(view, u, v) || this.litPending(view, u, v))
                 continue
@@ -7684,16 +7853,42 @@ class Grid extends SpritesGroup {
                         }
                         Grid.levelSpend(LEVEL_TILE_STEP_CALLS, 1)
                     }
-                    if (performance.now() - start + last > budget && !(atLeastOne && !steps)) {
+                    else if (ahead) {
+                        // The next step's estimate: the most the last steps of its kind (its index in the tile's steps) made.
+                        const job = this.litTileJob, next = job && job.view === view && job.u === u && job.v === v ? job.count : 0
+                        if (Grid.levelWorkLeft().tileSteps >= AHEAD_TILE_STEPS || Grid.aheadCallsLeft() < litStepCalls.at(next) ||
+                                Grid.aheadMpLeft() < AHEAD_STEP_MP) {
+                            ++this.levelWork.budgetStops
+                            return
+                        }
+                    }
+                    if (performance.now() - start + last > budget && !(atLeastOne && !steps) && !ahead) {
                         // At rest the tile under way goes on in the next task at once (queueLitTileSteps), not a frame later.
                         if (budget === LIT_REST_TASK_MS && this.litTileJob)
                             this.queueLitTileSteps()
                         return
                     }
-                    const t0 = performance.now(), done = this.litTileStep(view, u, v)
+                    const t0 = performance.now(), n0 = Grid.frameCallsNow()
+                    const index = this.litTileJob && this.litTileJob.view === view && this.litTileJob.u === u && this.litTileJob.v === v ?
+                        this.litTileJob.count : 0
+                    this.litStepHolder.calls = stepCalls
+                    let done
+                    try {
+                        done = this.litTileStep(view, u, v)
+                    } finally {
+                        this.litStepHolder.calls = null
+                    }
                     last = performance.now() - t0
                     litTileStepCost.add(last)
                     ++steps
+                    if (ahead) {
+                        const n = Grid.frameCallsNow() - n0
+                        litStepCalls.add(n, index)
+                        Grid.levelSpend(n, 1)
+                        Grid.aheadMpSpend(AHEAD_STEP_MP)
+                        ++this.aheadWork.tileSteps
+                        this.aheadWork.tileStepCalls += n
+                    }
                     if (done)
                         break
                 }
@@ -7749,6 +7944,11 @@ class Grid extends SpritesGroup {
         const tile = step.value
         if (tile)
             litTileCost.add(job.ms)
+        if (tile && this.aheadOn()) {
+            ++this.aheadWork.tiles
+            if (this.aheadOn(true))
+                ++this.aheadWork.tilesMoving
+        }
         // TASK-1564: its quarters made in the Worker: stored when they come back (litTileArrived).
         if (tile?.workerPending)
             return true
@@ -7860,7 +8060,7 @@ class Grid extends SpritesGroup {
             // task), and the next task queued at once while ring tiles are missing, at most LIT_AHEAD_TASKS tasks between two
             // frames (litAheadTasks, reset by the frame), each within LIT_TASK_MS but for its first step.
             // Only with Grid.litAheadMoving (off: TASK-1552 measured the builds' offscreen drawing doubling the heavy pan frames).
-            const ahead = Grid.litAhead && Grid.litAheadMoving
+            const ahead = Grid.litAhead && (Grid.litAheadMoving || this.aheadOn())
             if (moving && !view.unbuilt && litTileCost.ms > LIT_TASK_MS && !ahead)
                 return
             atmosphericLighting.checkedOnce(this, () => this.buildLitTiles(view, missing, ahead && moving ? LIT_AHEAD_CAP : budget,
@@ -8028,7 +8228,7 @@ class Grid extends SpritesGroup {
             sector = this.sectorSnapshot('lit', level, u, v, range)
             for (const q of quarters) {
                 const k = tile.parts.indexOf(q.part)
-                q.recorder = new SectorRecorder(q.g, sector.snapshot, sector.sink, k)
+                q.recorder = new SectorRecorder(q.g, sector.snapshot, sector.sink, k, this.litStepHolder)
                 q.recorder.entry.x = (k & 1) * Q
                 q.recorder.entry.y = (k >> 1) * Q
                 q.g = q.recorder.context
@@ -8657,6 +8857,9 @@ class Grid extends SpritesGroup {
             this.drawSlabShadow(ctx)
         // TASK-1560: a pan frame on the surface cache's path draws the cache and the units from the unit sectors.
         this.unitFrame = undefined
+        // TASK-1565: the camera's motion the sectors are built ahead along (aheadRange).
+        if (!pass && this === grid && Grid.sectorAhead)
+            this.followSectorMotion(ctx.getTransform())
         // TASK-1561: a frame at rest has them built for the pan that may follow (with the state a pan frame plans them in).
         if (!pass && !scene)
             this.restUnitSectors(ctx)
@@ -11154,6 +11357,31 @@ Grid.litAhead = true
 // built ~2.7 tiles a second against ~7.5 a second that the pan shows (318 distinct tiles, ~42 s), so frames still drew ~63 of 66
 // tiles from the stand-in, while its ~0.63 MP of offscreen drawing a tile doubled the heavy pan frames (14 -> 28-36).
 Grid.litAheadMoving = false
+// TASK-1565 (SECTORS 9/11): the sectors of the camera's level built ahead of it, in a ring, while it moves and at rest, within
+// a frame's budget (Grid.aheadRange, queueLitTiles, queueUnitSectors); false: as TASK-1564.
+Grid.sectorAhead = true
+// TASK-1565: the ring of squares round the canvas (besides the squares the camera's motion reaches: aheadRange), and the lit
+// tile steps the builds between two frames of a moving camera make at most (each counted LEVEL_TILE_STEP_CALLS in the
+// frame's LEVEL_FRAME_CALLS).
+const SECTOR_AHEAD_RING = 1
+const AHEAD_TILE_STEPS = 8
+// TASK-1565: a moving camera's frame and the builds before it at most this many draw calls together (Grid.aheadCallsLeft).
+const AHEAD_FRAME_TOTAL = 370
+const AHEAD_FRAME_SAMPLES = 5
+// TASK-1565: the whole sectors a lit frame makes from a built tile and its overlay at most (Grid.composeUnitSector: 5 draw calls
+// and ~0.13 MP each).
+const AHEAD_COMPOSE_FRAME = 3
+// TASK-1565: the offscreen megapixels the builds between two frames of a moving camera and its composes draw at most (about:
+// a lit tile step ~0.045 MP, a unit sector ~0.1, a compose ~0.13 on the user's capture replayed, artifacts/TASK-1565), so the
+// frame stays under a heavy frame's 1 MP offscreen (Grid.aheadMpLeft).
+const AHEAD_FRAME_MP = 0.7
+const AHEAD_STEP_MP = 0.05
+const AHEAD_SECTOR_MP = 0.1
+const AHEAD_COMPOSE_MP = 0.13
+// TASK-1565: a moving camera's live squares are built in a burst (unitSectorTask) only when its frames draw more than this.
+const AHEAD_BURST_FRAME_CALLS = 500
+// TASK-1565: a lit tile step's draw calls before any was counted (litStepCalls).
+const LEVEL_TILE_STEP_CALLS_FIRST = 80
 // TASK-1546: the lit layer drawn by tasks of steps (Grid.queueLitLayer: litLayerRasterSteps), at most LIT_LAYER_TASK_MS a task
 // but its first step; false: in one task as before.
 Grid.litLayerSteps = true
@@ -11174,6 +11402,9 @@ Grid.unitSectors = true
 // TASK-1560: the unit sectors' budget (UNIT_SECTOR_PHONE_BYTES on a phone), the ring of squares built ahead round the canvas,
 // and the time a build task between frames may take.
 const UNIT_SECTOR_BYTES = 128 * 1024 * 1024
+// TASK-1565: elsewhere the lit sectors and the unit sectors (UNIT_SECTOR_BYTES, both debug sets) share SECTOR_CACHE_BYTES
+// (render/sectorCache.js; the server loads grid.js without it: no sectors there).
+const LIT_SECTOR_BYTES = (typeof SECTOR_CACHE_BYTES !== 'undefined' ? SECTOR_CACHE_BYTES : 256 * 1024 * 1024) - UNIT_SECTOR_BYTES
 const UNIT_SECTOR_PHONE_BYTES = 32 * 1024 * 1024
 const UNIT_SECTOR_AHEAD = 1
 const UNIT_SECTOR_TASK_MS = 8
@@ -11284,15 +11515,63 @@ Grid.oncePerFrame = tag => {
 }
 // The frame number (drawAll) and the level work the tasks did since that frame began.
 Grid.frameNo = 0
-Grid.levelFrameWork = {frame: -1, calls: 0, tileSteps: 0}
+Grid.levelFrameWork = {frame: -1, calls: 0, tileSteps: 0, mp: 0, prevMp: 0}
 Grid.levelWorkLeft = () => {
     const w = Grid.levelFrameWork
     if (w.frame !== Grid.frameNo) {
+        // TASK-1565: the offscreen megapixels the builds before this frame made (about: aheadMp), for its composes.
+        w.prevMp = w.frame === Grid.frameNo - 1 ? w.mp : 0
         w.frame = Grid.frameNo
         w.calls = 0
         w.tileSteps = 0
+        w.mp = 0
     }
     return {calls: LEVEL_FRAME_CALLS - w.calls, tileSteps: w.tileSteps}
+}
+// TASK-1565: the offscreen megapixels (about) the builds between two frames of a moving camera still may draw (a heavy frame:
+// over 1 MP offscreen): AHEAD_FRAME_MP less AHEAD_STEP_MP a lit tile step and AHEAD_SECTOR_MP a unit sector spent; spend(mp).
+Grid.aheadMpLeft = () => {
+    Grid.levelWorkLeft()
+    return AHEAD_FRAME_MP - Grid.levelFrameWork.mp
+}
+// The builds' offscreen megapixels before the frame being drawn (its composes draw within the rest).
+Grid.aheadPrevMp = () => {
+    Grid.levelWorkLeft()
+    return Grid.levelFrameWork.prevMp
+}
+Grid.aheadMpSpend = mp => {
+    Grid.levelWorkLeft()
+    Grid.levelFrameWork.mp += mp
+}
+// TASK-1565: THE FRAME'S REAL DRAW CALLS (Grid.sectorAhead). Every drawing call of the page is counted (sectorCountDraws,
+// render/sectorWorker.js: sectorDrawTotal); drawAll marks a frame's own calls (frameBegin / frameFinish: lastFrameCalls), so the
+// builds between two frames of a moving camera spend their real calls (frameCallsNow deltas) within AHEAD_FRAME_TOTAL less the
+// last frame's own (aheadCallsLeft): a frame and the builds before it stay under a heavy frame's 500 calls.
+Grid.lastFrameCalls = 0
+Grid.frameCallsStart = 0
+Grid.frameCallsNow = () => typeof sectorDrawTotal !== 'undefined' ? sectorDrawTotal : 0
+Grid.frameBegin = () => {
+    if (!Grid.sectorAhead)
+        return
+    if (typeof sectorCountDraws === 'function')
+        sectorCountDraws()
+    Grid.frameCallsStart = Grid.frameCallsNow()
+}
+Grid.recentFrameCalls = []
+Grid.frameFinish = () => {
+    if (!Grid.sectorAhead)
+        return
+    // The most of the last AHEAD_FRAME_SAMPLES frames' own calls (a frame's varies with the squares it draws live).
+    const recent = Grid.recentFrameCalls
+    recent.push(Grid.frameCallsNow() - Grid.frameCallsStart)
+    if (recent.length > AHEAD_FRAME_SAMPLES)
+        recent.shift()
+    Grid.lastFrameCalls = Math.max(...recent)
+}
+// The calls the builds before the next frame may still make while the camera moves (levelWorkLeft's, within the frame's room).
+Grid.aheadCallsLeft = () => {
+    const left = Grid.levelWorkLeft()
+    return Math.min(left.calls, AHEAD_FRAME_TOTAL - Grid.lastFrameCalls - Grid.levelFrameWork.calls)
 }
 Grid.levelSpend = (calls, tileSteps = 0) => {
     Grid.levelWorkLeft()
@@ -11382,6 +11661,28 @@ const litTileStepCost = {
         if (this.samples.length > LIT_COST_SAMPLES)
             this.samples.shift()
         this.ms = this.samples.reduce((a, b) => a + b, 0) / this.samples.length
+    }
+}
+// TASK-1565: the draw calls of a lit tile's steps built while the camera moves (Grid.buildLitTiles' ahead budget): the mean of
+// the last LIT_COST_SAMPLES, and by the step's index in its tile the most of the last LIT_COST_SAMPLES of that index (at(k);
+// LEVEL_TILE_STEP_CALLS before the first).
+const litStepCalls = {
+    samples: [],
+    mean: LEVEL_TILE_STEP_CALLS_FIRST,
+    byIndex: [],
+    add(n, index = 0) {
+        this.samples.push(n)
+        if (this.samples.length > LIT_COST_SAMPLES)
+            this.samples.shift()
+        this.mean = this.samples.reduce((a, b) => a + b, 0) / this.samples.length
+        const list = this.byIndex[index] ||= []
+        list.push(n)
+        if (list.length > LIT_COST_SAMPLES)
+            list.shift()
+    },
+    at(index) {
+        const list = this.byIndex[index]
+        return list?.length ? Math.max(...list) : LEVEL_TILE_STEP_CALLS_FIRST
     }
 }
 const litTileCost = {

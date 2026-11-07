@@ -895,8 +895,11 @@ function drawInterfaceTo(interfaceCtx) {
 
 function drawAll() {
     // TASK-1562: the frame's number (the work tasks between two frames may do: Grid.levelWorkLeft).
-    if (typeof Grid !== 'undefined')
+    if (typeof Grid !== 'undefined') {
         ++Grid.frameNo
+        // TASK-1565: the frame's own draw calls counted (Grid.lastFrameCalls: the build-ahead budget).
+        Grid.frameBegin?.()
+    }
     // TASK-1517: a zoom gesture whose raster is still made keeps the frame on screen (Grid.holdZoomFrame).
     if (typeof grid !== 'undefined' && grid?.holdZoomFrame?.())
         return
@@ -911,6 +914,8 @@ function drawAll() {
         return
     drawMain()
     drawInterface()
+    if (typeof Grid !== 'undefined')
+        Grid.frameFinish?.()
         //mainCtx.clearRect(-basis.offset.x, -basis.offset.y * 2, width, height)
 
     //grid.draw(mainCtx)
