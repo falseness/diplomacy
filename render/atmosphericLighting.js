@@ -194,6 +194,12 @@ const atmosphericLighting = {
     // TASK-1545: counts every drawing on (or reset of) the light map's and gain's canvases, so copies of their pixels
     // (edgeTileSet) know when they are stale (rebuilds alone does not: a quiet owner sync keeps it).
     mapEdits: 0,
+    // TASK-1563: the light map's (map, gain) content version: mapEdits and the staged and region build steps drawn into them
+    // since (mapSteps), called on the canvas (SectorRecorder.key).
+    mapSteps: 0,
+    sectorVersion() {
+        return atmosphericLighting.mapEdits + '.' + atmosphericLighting.mapSteps
+    },
     // TASK-1377: work counters: lightState builds, sameLightState full comparisons and lightMap calls answered by the trust
     // below without either.
     work: {lightStates: 0, stateCompares: 0, trusted: 0},
@@ -587,6 +593,7 @@ const atmosphericLighting = {
                 steps: this.buildSteps(this.collect(board), bounds, scale, false, fine), fine}
         }
         const step = this.staged.steps.next(), done = step.done
+        ++this.mapSteps
         // TASK-1518: whether the step was heavy to rasterize (RASTER_STEP).
         this.stagedRaster = step.value === RASTER_STEP
         if (!done) return false
@@ -676,6 +683,7 @@ const atmosphericLighting = {
                     done = steps.next().done
                 } finally {
                     this.clipWindow = clip
+                    ++this.mapSteps
                 }
                 if (done)
                     break
@@ -774,6 +782,8 @@ const atmosphericLighting = {
     canvasFor(name, bounds, scale) {
         ++this.mapEdits
         const surface = this[name] || document.createElement('canvas')
+        // TASK-1563: the map's content version for sector snapshots (SectorRecorder.key).
+        surface.sectorVersion = this.sectorVersion
         atmosphericBackground.watch(surface)
         surface.width = Math.max(1, Math.ceil((bounds.right - bounds.left) * scale))
         surface.height = Math.max(1, Math.ceil((bounds.bottom - bounds.top) * scale))

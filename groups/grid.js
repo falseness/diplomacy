@@ -879,7 +879,10 @@ class Grid extends SpritesGroup {
                 cellIndex.set(i * h + j, snapshot.cells.length)
                 snapshot.cells.push(this.sectorCellRow(i, j))
             }
-        return {snapshot, sink: {sprites: new Map(), cellIndex, h, cellRow: (i, j) => this.sectorCellRow(i, j)}}
+        // freeze: a consumer keeps the snapshot past its build (Grid.onSectorSnapshot, a later Worker), so a sprite redrawn
+        // in place (sectorVersion) goes into the map as a copy of the version the recording drew (SectorRecorder.key).
+        return {snapshot, sink: {sprites: new Map(), cellIndex, h, cellRow: (i, j) => this.sectorCellRow(i, j),
+            freeze: !!Grid.onSectorSnapshot}}
     }
     // TASK-1563: a cell's row in a sector snapshot: [i, j, flags (SECTOR_CELL_*), the unit's class or null, the building's
     // class or null, the hexagon's owner colour (null: unknown)].
@@ -7931,6 +7934,7 @@ class Grid extends SpritesGroup {
                 continue
             const px = X + (k & 1) * Q, py = Y + (k >> 1) * Q
             part.gradientSource = gradients
+            sectorEdited(part)
             // TASK-1559: a sector's quarter draws the same whatever the camera: its window is its own square (drawRange and
             // onCanvas add their hexagon margins round it).
             part.litWindow = view.sectorLevel ? {left: 0, top: 0, right: Q, bottom: Q} :
@@ -9958,6 +9962,32 @@ const SECTOR_QUERY_CALLS = new Set(['getTransform', 'measureText', 'getLineDash'
 const SECTOR_GRADIENT_OWNER = {sectorGradients: true}
 const sectorScratchPool = []
 let sectorValueKeys = new WeakMap(), sectorValueSerial = 0
+// TASK-1563: sprites a recording draws that their owners redraw in place (the light map's multiply and gain canvases, a
+// lit tile's pooled quarters) carry sectorVersion(), called on the canvas: their content version, changed by every edit
+// (atmosphericLighting.sectorVersion, sectorEditsVersion). Such a sprite's key holds the version, and a snapshot kept
+// past its build holds a copy of that version (sectorFrozen: one copy per canvas and version, never drawn into again), so
+// its sprites are the pixels the recording drew whenever and wherever (a Worker) it is drawn.
+const sectorFrozenCopies = new WeakMap()
+function sectorFrozen(canvas, version) {
+    const kept = sectorFrozenCopies.get(canvas)
+    if (kept && kept.version === version)
+        return kept.copy
+    const copy = document.createElement('canvas')
+    copy.width = canvas.width
+    copy.height = canvas.height
+    if (canvas.width && canvas.height)
+        copy.getContext('2d').drawImage(canvas, 0, 0)
+    sectorFrozenCopies.set(canvas, {version, copy})
+    return copy
+}
+// sectorVersion for a canvas whose editor bumps its sectorEdits (sectorEdited).
+function sectorEditsVersion() {
+    return this.sectorEdits || 0
+}
+function sectorEdited(canvas) {
+    canvas.sectorEdits = (canvas.sectorEdits || 0) + 1
+    canvas.sectorVersion = sectorEditsVersion
+}
 class SectorRecorder {
     // target: the real 2D context the runs are drawn on; snapshot: Grid.sectorSnapshot's (its targets get {k, segs});
     // sink: {sprites (key -> image), cellIndex (board index -> index in snapshot.cells)}.
@@ -10046,6 +10076,12 @@ class SectorRecorder {
         let key = sectorValueKeys.get(value)
         if (key === undefined)
             sectorValueKeys.set(value, key = 'k' + (++sectorValueSerial))
+        if (typeof value.sectorVersion === 'function') {
+            const version = value.sectorVersion()
+            key += '@' + version
+            if (this.sink.freeze)
+                value = sectorFrozen(value, version)
+        }
         this.sink.sprites.set(key, value)
         return key
     }
