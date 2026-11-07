@@ -83,14 +83,22 @@ if (typeof importScripts === 'function' && typeof document === 'undefined' && ty
                 ctx.save()
                 let saves = 0
                 SectorDraw.drawSegs(ctx, target.segs, sprites)
+                // (a whole lit tile's op draws over its quarters: counted once a quarter, as the quarters' recordings were, for
+                // the slow test's ms an op, SECTOR_WORKER_SLOW_MS_PER_OP)
+                const weight = target.crops ? target.crops.length : 1
                 for (const seg of target.segs) {
-                    ops += seg.o.length
+                    ops += seg.o.length * weight
                     for (const op of seg.o)
                         saves += op[0] === 'save' ? 1 : op[0] === 'restore' ? -1 : 0
                 }
                 for (let k = Math.max(0, saves); k >= 0; --k)
                     ctx.restore()
-                pending.push(createImageBitmap(canvas).then(bitmap => [target.k, bitmap]))
+                // TASK-1565 pass 6: a whole lit tile (Grid.litTileWhole) cut into its quarters ([k, x, y, w, h] each).
+                if (target.crops)
+                    for (const [k, x, y, w, h] of target.crops)
+                        pending.push(createImageBitmap(canvas, x, y, w, h).then(bitmap => [k, bitmap]))
+                else
+                    pending.push(createImageBitmap(canvas).then(bitmap => [target.k, bitmap]))
             }
             const out = await Promise.all(pending)
             postMessage({t: 'built', id: m.id, out, ms: performance.now() - t0, ops}, out.map(o => o[1]))
@@ -326,7 +334,8 @@ const SectorWorker = {
         this.inflight.set(id, job)
         this.counters.depth = this.inflight.size
         this.counters.depthMax = Math.max(this.counters.depthMax, this.counters.depth)
-        const targets = snapshot.targets.map(t => ({k: t.k, w: t.w, h: t.h, segs: t.segs}))
+        const targets = snapshot.targets.map(t => t.crops ? {k: t.k, w: t.w, h: t.h, segs: t.segs, crops: t.crops} :
+            {k: t.k, w: t.w, h: t.h, segs: t.segs})
         this.chain = this.chain.then(() => this.post(job, targets)).catch(error => this.jobFailed(id, 'post: ' + error))
         ++this.counters.posted
         return id

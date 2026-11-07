@@ -1475,15 +1475,29 @@ const atmosphericLighting = {
     // of a few hundred hexagons is traced once a tile, not once a quarter. Null otherwise (the caller traces ctx's path).
     pathMemo: null,
     // same: whether two cells trace the same hexagon (the same cell object by default).
+    // TASK-1565 pass 7: the memo is kept across a board state's lit tiles (Grid.litStepMemo): the last PATH_MEMO_PATHS paths
+    // of a kind kept (the tile rows' own), the latest used first.
+    PATH_MEMO_PATHS: 8,
     memoPath(kind, cells, add, same = (a, b) => a === b) {
         const memo = this.pathMemo
         if (!memo) return null
-        const kept = memo.get(kind)
-        if (kept && kept.cells.length === cells.length && kept.cells.every((cell, k) => same(cell, cells[k]))) return kept.path
+        let list = memo.get(kind)
+        if (!list) memo.set(kind, list = [])
+        for (let n = 0; n < list.length; ++n) {
+            const kept = list[n]
+            if (kept.cells.length === cells.length && kept.cells.every((cell, k) => same(cell, cells[k]))) {
+                if (n) {
+                    list.splice(n, 1)
+                    list.unshift(kept)
+                }
+                return kept.path
+            }
+        }
         // TASK-1563: a SectorPath, so a lit tile's sector snapshot (SectorRecorder) keeps it.
         const path = new SectorPath()
         add(path)
-        memo.set(kind, {cells, path})
+        list.unshift({cells, path})
+        if (list.length > this.PATH_MEMO_PATHS) list.pop()
         return path
     },
     drawTile(ctx, hexagon) {

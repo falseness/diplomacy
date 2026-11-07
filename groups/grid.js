@@ -254,10 +254,11 @@ class Grid extends SpritesGroup {
         // given up because their square left the ring (cancelled), and the camera's motion (sectorMotion).
         // TASK-1565 rework: tileStepMs (main-thread ms the steps took), and why the builds between two frames stopped: stopSteps
         // (AHEAD_TILE_STEPS), stopCalls (aheadCallsLeft), stopMp (aheadMpLeft), stopTime (AHEAD_WORKER_FRAME_MS), stopQueue (the
-        // Worker's queue full).
+        // Worker's queue full); TASK-1565 pass 6: whole (lit tiles recorded whole, Grid.litTileWhole); pass 7: levelSteps, levelStepMs
+        // (a settle's lit tile steps with the Worker drawing, bounded by their time).
         this.aheadWork = {tiles: 0, tilesMoving: 0, units: 0, unitsMoving: 0, cancelled: 0, queued: 0, ring: 0, tileSteps: 0, tileStepCalls: 0,
             composed: 0, tileStepMs: 0, stopSteps: 0, stopCalls: 0, stopMp: 0, stopTime: 0, stopQueue: 0, litTasks: 0, litOtherView: 0,
-            litZooming: 0, litDefers: 0, litBehind: 0}
+            litZooming: 0, litDefers: 0, litBehind: 0, whole: 0, levelSteps: 0, levelStepMs: 0}
         // TASK-1565: the draw calls a lit tile's steps record (litTileSteps' recorders count them in calls.n while calls is set).
         this.litStepHolder = {calls: null}
         this.aheadUnitRatio = 1
@@ -269,6 +270,14 @@ class Grid extends SpritesGroup {
         this.litTileJobs = 0
         this.litTileJobsDropped = 0
         this.litTileStepsQueued = false
+        // TASK-1565 pass 6: the canvas a whole lit tile (Grid.litTileWhole) the worker cannot make is drawn on.
+        this.litWholeCanvas = null
+        // TASK-1565 pass 7: the lit tiles' shared memo (litStepMemo), the board state it holds for, its hits and resets.
+        this.litMemo = new Map()
+        this.litMemoSig = null
+        this.litMemoEpoch = 0
+        this.litMemoHits = 0
+        this.litMemoResets = 0
         this.litTileStepTasks = 0
         // TASK-1552: the camera's motion over the lit view (Grid.followLitMotion) and the ahead tasks since the last frame.
         this.litMotion = undefined
@@ -539,12 +548,24 @@ class Grid extends SpritesGroup {
     drawHexagons(ctx, part) {
         const atmosphericTransform = otherSettings.atmosphericVisuals ? ctx.getTransform() : undefined
         // TASK-1563: a sector recording (SectorRecorder) is told the cell each tile is drawn for.
-        const mark = ctx.sectorCell, cells = mark ? [] : null
-        const hexagons = [], tiles = []
+        const mark = ctx.sectorCell
+        let hexagons = [], tiles = [], cells = mark ? [] : null
         const range = this.drawRange(ctx, true), drawn = this.drawRange(ctx)
         // A patch's clipped redraw draws the tiles of the cells reaching its clip (atmosphericLighting.clipWindow).
         const clip = atmosphericLighting.clipWindow
-        for (let i = range.i0; i < range.i1; ++i) {
+        // TASK-1565 pass 7: while a lit tile is built (atmosphericLighting.pathMemo, kept across the tiles of a board state:
+        // Grid.litStepMemo), the walk of the whole rows is made once for the ranges, not once a step and a tile.
+        const memo = !clip && atmosphericLighting.pathMemo, memoKey = memo && 'hex|' + [range.i0, range.i1, range.j0, range.j1,
+            drawn.i0, drawn.i1].join()
+        const kept = memo && memo.get(memoKey), pairs = memo ? [] : cells
+        if (kept) {
+            hexagons = kept.hexagons
+            tiles = kept.tiles
+            if (cells)
+                cells = kept.cells
+            ++this.litMemoHits
+        }
+        else for (let i = range.i0; i < range.i1; ++i) {
             for (let j = range.j0; j < range.j1; ++j) {
                 if (this.arr[i][j].building.isMapEdge)
                     continue
@@ -555,10 +576,14 @@ class Grid extends SpritesGroup {
                 hexagons.push(hexagon)
                 if (i >= drawn.i0 && i < drawn.i1 && (!clip || atmosphericLighting.inClipWindow([{pos: hexagon.calcPos()}]).length)) {
                     tiles.push(hexagon)
-                    cells?.push(i, j)
+                    pairs?.push(i, j)
                 }
             }
         }
+        if (cells && pairs !== cells)
+            cells = pairs
+        if (memo && !kept)
+            memo.set(memoKey, {hexagons, tiles, cells: pairs})
         // Grout under the drawn cells only: hidden cells keep their fog tile.
         if (otherSettings.atmosphericVisuals && (!part || (part.grout ?? part.k === 0)))
             atmosphericLighting.drawGrout(ctx, hexagons)
@@ -2809,6 +2834,8 @@ class Grid extends SpritesGroup {
         }
     }
     captureSurfaceState() {
+        // TASK-1565 pass 7: the lit tiles' shared memo (litStepMemo) holds for the board as it was.
+        ++this.litMemoEpoch
         const state = new Uint16Array(this.arr.length * this.arr[0].length)
         const buildings = new Array(state.length)
         const units = new Array(state.length)
@@ -7857,7 +7884,20 @@ class Grid extends SpritesGroup {
             }
             if (stepped) {
                 for (;;) {
-                    if (levels) {
+                    // TASK-1565 pass 7: with the Worker drawing, a settle's steps (levels) are bounded by their recording time
+                    // as the ahead steps are (AHEAD_WORKER_FRAME_MS / CATCHUP for a square on the canvas), not LEVEL_TILE_STEPS:
+                    // a whole-tile recording with the shared row memo (litStepMemo) takes ~1.5 ms a tile, and 4 steps a frame
+                    // built half a tile a frame (artifacts/TASK-1565/preview/new-memo1: 3 s after the zoom to 0.151).
+                    if (levels && Grid.aheadInWorker()) {
+                        Grid.levelWorkLeft()
+                        if (Grid.levelFrameWork.ms > 0 && Grid.levelFrameWork.ms + litTileStepCost.ms > (shown ? AHEAD_WORKER_CATCHUP_MS :
+                                AHEAD_WORKER_FRAME_MS)) {
+                            ++this.aheadWork.stopTime
+                            ++this.levelWork.budgetStops
+                            return
+                        }
+                    }
+                    else if (levels) {
                         const left = Grid.levelWorkLeft()
                         if (left.tileSteps >= LEVEL_TILE_STEPS || left.calls < LEVEL_TILE_STEP_CALLS) {
                             ++this.levelWork.budgetStops
@@ -7872,8 +7912,11 @@ class Grid extends SpritesGroup {
                         // offscreen pixels there and next to no real calls, so its cost is the recording's time
                         // (AHEAD_WORKER_FRAME_MS between two frames, with the next step's estimate litTileStepCost.ms), not
                         // AHEAD_TILE_STEPS or the megapixels.
+                        // TASK-1565 pass 7: nor the frame's draw calls (aheadCallsLeft): its real calls are a handful (artifacts/
+                        // TASK-1565/preview/new-memo3-ahead.out: 12 for 267 steps) and a frame of ~380 calls (over AHEAD_FRAME_TOTAL)
+                        // stopped every lit tile (runs of 1447624a: superseded-1447624a/new-after-2 pan@0.151, 0 tiles in 38 frames).
                         const inWorker = Grid.aheadInWorker()
-                        const stop = Grid.aheadCallsLeft() < litStepCalls.at(next) ? 'stopCalls' :
+                        const stop = !inWorker && Grid.aheadCallsLeft() < litStepCalls.at(next) ? 'stopCalls' :
                             // (the first step between two frames always runs: a step estimate over the budget would stop
                             // them all, and with no step the estimate never comes down)
                             inWorker ? (Grid.levelFrameWork.ms > 0 && Grid.levelFrameWork.ms + litTileStepCost.ms > (shown ?
@@ -7885,7 +7928,8 @@ class Grid extends SpritesGroup {
                             return
                         }
                     }
-                    if (performance.now() - start + last > budget && !(atLeastOne && !steps) && !ahead) {
+                    // (TASK-1565 pass 7: nor a settle's with the Worker drawing: bounded by their time above, not LIT_TASK_MS)
+                    if (performance.now() - start + last > budget && !(atLeastOne && !steps) && !ahead && !(levels && Grid.aheadInWorker())) {
                         // At rest the tile under way goes on in the next task at once (queueLitTileSteps), not a frame later.
                         if (budget === LIT_REST_TASK_MS && this.litTileJob)
                             this.queueLitTileSteps()
@@ -7904,6 +7948,11 @@ class Grid extends SpritesGroup {
                     last = performance.now() - t0
                     litTileStepCost.add(last)
                     ++steps
+                    if (levels && Grid.aheadInWorker()) {
+                        Grid.levelFrameWork.ms += last
+                        ++this.aheadWork.levelSteps
+                        this.aheadWork.levelStepMs += last
+                    }
                     if (ahead) {
                         const n = Grid.frameCallsNow() - n0
                         litStepCalls.add(n, index)
@@ -8254,31 +8303,58 @@ class Grid extends SpritesGroup {
         }
         // TASK-1563: the quarters drawn through SectorDraw: each step recorded into the tile's sector snapshot (a quarter a
         // target, q.g its recording context), then the step's runs drawn on the quarter (flush).
-        let sector = null
+        let sector = null, whole = null, drawn = quarters
         if (Grid.sectorModule) {
             const level = view.a, transform = {a: level, b: 0, c: 0, d: level, e: view.e - X, f: view.f - Y}
             const range = this.drawRange({getTransform: () => transform, canvas: {width: LIT_TILE, height: LIT_TILE}}, true)
             sector = this.sectorSnapshot('lit', level, u, v, range)
-            for (const q of quarters) {
-                const k = tile.parts.indexOf(q.part)
-                q.recorder = new SectorRecorder(q.g, sector.snapshot, sector.sink, k, this.litStepHolder)
-                q.recorder.entry.x = (k & 1) * Q
-                q.recorder.entry.y = (k >> 1) * Q
-                q.g = q.recorder.context
+            // TASK-1565 pass 6 (Grid.litTileWhole): with the Worker drawing the pictures, the tile's steps are recorded once,
+            // on the whole tile (a LIT_TILE canvas: litWholeCanvas), not once a quarter: the steps' cell walks, union paths
+            // and casters (drawShadows, the grout) were made ~4 times a tile on the main thread (artifacts/TASK-1565/preview/
+            // new-prof-breakdown.out). The worker draws the tile once and cuts the quarters out of it (the target's crops); a
+            // build the worker cannot make (mainOnly) is drawn on the whole canvas and copied into the quarters
+            // (litWholeToQuarters).
+            if (Grid.litTileWhole && sector.sink.worker && quarters.length) {
+                const canvas = this.litWholeCanvas ||= document.createElement('canvas')
+                if (canvas.width !== LIT_TILE || canvas.height !== LIT_TILE) {
+                    canvas.width = LIT_TILE
+                    canvas.height = LIT_TILE
+                }
+                canvas.gradientSource = gradients
+                canvas.litWindow = view.sectorLevel ? {left: 0, top: 0, right: LIT_TILE, bottom: LIT_TILE} :
+                    {left: Math.min(0, -X), top: Math.min(0, -Y), right: Math.max(LIT_TILE, view.cw - X), bottom: Math.max(LIT_TILE, view.ch - Y)}
+                whole = {part: canvas, g: canvas.getContext('2d'), px: X, py: Y, size: LIT_TILE, whole: true,
+                    inside: this.litSquareOpaque(view, X, Y, X + LIT_TILE, Y + LIT_TILE),
+                    underlay: {left: (X - view.e) / view.a, top: (Y - view.f) / view.d, right: (X + LIT_TILE - view.e) / view.a,
+                        bottom: (Y + LIT_TILE - view.f) / view.d}}
+                whole.recorder = new SectorRecorder(whole.g, sector.snapshot, sector.sink, -1, this.litStepHolder)
+                whole.recorder.entry.crops = quarters.map(q => [tile.parts.indexOf(q.part), q.px - X, q.py - Y, Q, Q])
+                whole.g = whole.recorder.context
+                drawn = [whole]
+                ++this.aheadWork.whole
             }
+            else
+                for (const q of quarters) {
+                    const k = tile.parts.indexOf(q.part)
+                    q.recorder = new SectorRecorder(q.g, sector.snapshot, sector.sink, k, this.litStepHolder)
+                    q.recorder.entry.x = (k & 1) * Q
+                    q.recorder.entry.y = (k >> 1) * Q
+                    q.g = q.recorder.context
+                }
         }
         const flush = () => {
             if (sector)
-                for (const q of quarters)
+                for (const q of drawn)
                     q.recorder.flush()
         }
         // A step drawn into each quarter, the union paths it traces shared by the quarters (atmosphericLighting.pathMemo), the
         // lamp overlays and cell tiles drawn from their crop boxes (cropOverlays).
+        const memo = this.litStepMemo(view)
         const each = draw => {
-            atmosphericLighting.pathMemo = new Map()
+            atmosphericLighting.pathMemo = memo
             atmosphericLighting.cropOverlays = true
             try {
-                for (const q of quarters) {
+                for (const q of drawn) {
                     q.g.setTransform(view.a, 0, 0, view.d, view.e - q.px, view.f - q.py)
                     draw(q.g, q)
                 }
@@ -8288,13 +8364,14 @@ class Grid extends SpritesGroup {
             }
         }
         let done = false
-        for (const q of quarters)
+        for (const q of drawn)
             q.g.save()
         try {
-            for (const {g, clear} of quarters) {
+            for (const {g, clear, whole: all} of drawn) {
                 g.setTransform(1, 0, 0, 1, 0, 0)
-                if (clear)
-                    g.clearRect(0, 0, Q, Q)
+                // (the whole canvas is drawn on only by a build the worker cannot make: cleared first then)
+                if (clear || all)
+                    g.clearRect(0, 0, all ? LIT_TILE : Q, all ? LIT_TILE : Q)
                 // As drawMain leaves the main canvas before the board.
                 g.lineJoin = 'round'
                 g.lineCap = 'round'
@@ -8323,13 +8400,13 @@ class Grid extends SpritesGroup {
                 yield
             }
             // The light everywhere on the quarter but in the edge runs (even-odd: they do not overlap).
-            for (const {g, px, py} of quarters) {
+            for (const {g, px, py, size = Q} of drawn) {
                 g.setTransform(1, 0, 0, 1, 0, 0)
                 g.beginPath()
-                g.rect(0, 0, Q, Q)
+                g.rect(0, 0, size, size)
                 for (const run of view.edges) {
                     const x0 = Math.max(run.x - px, 0), y0 = Math.max(run.y - py, 0)
-                    const x1 = Math.min(run.x + run.w - px, Q), y1 = Math.min(run.y + run.h - py, Q)
+                    const x1 = Math.min(run.x + run.w - px, size), y1 = Math.min(run.y + run.h - py, size)
                     if (x0 < x1 && y0 < y1) g.rect(x0, y0, x1 - x0, y1 - y0)
                 }
                 g.clip('evenodd')
@@ -8337,10 +8414,10 @@ class Grid extends SpritesGroup {
             each(g => atmosphericLighting.lightTile(g, this, view.outline))
             done = true
         } finally {
-            for (const q of quarters)
+            for (const q of drawn)
                 q.g.restore()
             if (sector)
-                for (const q of quarters)
+                for (const q of drawn)
                     q.recorder.end()
             if (!done)
                 this.releaseLitTile(tile)
@@ -8360,8 +8437,44 @@ class Grid extends SpritesGroup {
                 tile.workerPending = rec
                 ;(view.workerTiles ||= new Map()).set(key, rec)
             }
+            else if (whole)
+                this.litWholeToQuarters(whole.part, quarters, X, Y)
         }
         return tile
+    }
+    // TASK-1565 pass 7: the memo (atmosphericLighting.pathMemo) a lit tile's steps share: the row walks (drawHexagons, collect)
+    // and union paths (memoPath: the grout, the shadows' clip, the fog's) of whole board rows are the same for every tile of a
+    // tile row at a level, and the lamps (collect of the whole board) for every tile: kept across the tiles while the board
+    // state they were made from holds (the view, its edges and outline, the light map, the sector generation and every
+    // capture of the board's state, captureSurfaceState: litMemoEpoch), at most LIT_MEMO_KEYS entries. Grid.litRowMemo false
+    // or an observed board: a memo a tile, as before (TASK-1552: a step's).
+    litStepMemo(view) {
+        if (!Grid.litRowMemo || this.isObserving())
+            return new Map()
+        const L = atmosphericLighting, sig = this.litMemoSig
+        if (!sig || sig.view !== view || sig.edges !== view.edges || sig.outline !== view.outline || sig.rebuilds !== L.rebuilds ||
+                sig.mapScale !== L.mapScale || sig.gen !== this.sectorGen || sig.epoch !== this.litMemoEpoch ||
+                sig.fog !== isFogOfWar || sig.visuals !== otherSettings.atmosphericVisuals || sig.r !== basis.r ||
+                this.litMemo.size > LIT_MEMO_KEYS) {
+            this.litMemo = new Map()
+            this.litMemoSig = {view, edges: view.edges, outline: view.outline, rebuilds: L.rebuilds, mapScale: L.mapScale,
+                gen: this.sectorGen, epoch: this.litMemoEpoch, fog: isFogOfWar, visuals: otherSettings.atmosphericVisuals, r: basis.r}
+            ++this.litMemoResets
+        }
+        return this.litMemo
+    }
+    // TASK-1565 pass 6: a whole tile drawn on the main thread after all (Grid.litTileWhole, the worker could not make it):
+    // its quarters copied out of the whole canvas.
+    litWholeToQuarters(canvas, quarters, X, Y) {
+        for (const q of quarters) {
+            const g = q.part.getContext('2d')
+            g.save()
+            g.setTransform(1, 0, 0, 1, 0, 0)
+            g.globalAlpha = 1
+            g.globalCompositeOperation = 'copy'
+            g.drawImage(canvas, X - q.px, Y - q.py)
+            g.restore()
+        }
     }
     // TASK-1545: a lit tile is kept as its four LIT_TILE_PART squares, each a canvas of its own (litTilePool): a frame draws
     // (and its canvas records) only the quarters on the canvas, not whole tiles a quarter of which is in view along the
@@ -11382,6 +11495,11 @@ Grid.litPartSkips = true
 // TASK-1546: lit tiles built by the tasks between frames a step at a time (Grid.buildLitTiles, litTileSteps); false: a tile a
 // task at once as before.
 Grid.litTileSteps = true
+// TASK-1565 pass 6: with the Worker drawing, a lit tile's steps recorded once on the whole tile, not once a quarter
+// (Grid.litTileSteps); false: a recording a quarter as before.
+Grid.litTileWhole = true
+// TASK-1565 pass 7: the lit tiles' row walks and union paths kept across tiles (Grid.litStepMemo); false: a memo a tile.
+Grid.litRowMemo = true
 // TASK-1552: lit tiles built ahead of the camera, at rest and while it moves (Grid.queueLitTiles, litAheadRange); false: only
 // within a tile of the canvas and none while the camera moves when a tile does not fit LIT_TASK_MS, as before.
 Grid.litAhead = true
@@ -11738,6 +11856,8 @@ const litTileCost = {
     }
 }
 // The direct draw's surface and buildings in parts (Grid.drawLitScene), a part a step of a lit view patch.
+// TASK-1565 pass 7: the most entries the lit tiles' shared memo (Grid.litStepMemo) holds before it starts again.
+const LIT_MEMO_KEYS = 256
 const LIT_SCENE_PARTS = [
     (grid, g, underlay) => {
         mapDepth.drawUnderlay(g, grid, underlay)
