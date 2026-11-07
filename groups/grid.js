@@ -3281,11 +3281,18 @@ class Grid extends SpritesGroup {
                 return
             }
             // TASK-1544: with no cache yet the stand-in preview is built first (a few steps of a coarse raster).
-            const start = performance.now()
+            // TASK-1566 (Grid.urgentGestureCalls): a build without a cache (cacheUrgent) during a zoom gesture runs its steps while
+            // their real draw calls (Grid.frameCallsNow) stay within the room the frame's own leave under a heavy frame
+            // (AHEAD_FRAME_TOTAL less Grid.lastFrameCalls), at least one step (such gesture frames were 600-1600 calls: several
+            // stages between two frames).
+            const start = performance.now(), calls0 = Grid.frameCallsNow()
+            const gesture = Grid.urgentGestureCalls && !quiet && (gameEvent.screen.zoomGesture || gameEvent.screen.surfaceZooming)
+            const room = gesture ? AHEAD_FRAME_TOTAL - Grid.lastFrameCalls : Infinity
             do {
                 if (!this.standInPreviewStep(quiet ? ZOOM_QUIET_STEP_MS : SURFACE_STEP_MS))
                     this.surfaceCacheBuildStep(quiet ? ZOOM_QUIET_STEP_MS : SURFACE_STEP_MS)
-            } while (!quiet && (this.surfaceCacheBuild || this.standInWanted()) && performance.now() - start < budget - SURFACE_STEP_MS)
+            } while (!quiet && (this.surfaceCacheBuild || this.standInWanted()) && performance.now() - start < budget - SURFACE_STEP_MS &&
+                Grid.frameCallsNow() - calls0 < room)
             this.queueStandInTask()
         }))
     }
@@ -8546,9 +8553,12 @@ class Grid extends SpritesGroup {
             return
         const cw = ctx.canvas.width, ch = ctx.canvas.height, squares = missing ? [...missing].join(';') : ''
         const kept = this.litEdgeRuns
+        // TASK-1566: the camera moving (a pan or zoom under way, not the hold after it): the lamp overlays' copies at a nearby phase.
+        const screen = typeof gameEvent !== 'undefined' ? gameEvent.screen : null
+        const moving = !!screen && !!(screen.zoomGesture || screen.surfaceZooming || performance.now() < screen.surfacePanUntil || screen.surfacePanFrames > 0)
         if (Grid.litTrust && kept && kept.view === view && kept.edges === view.edges && kept.ox === ox && kept.oy === oy && kept.cw === cw &&
                 kept.ch === ch && kept.squares === squares) {
-            atmosphericLighting.drawEdges(ctx, this, kept.runs)
+            atmosphericLighting.drawEdges(ctx, this, kept.runs, moving)
             return
         }
         ++this.litWork.edgeRuns
@@ -8577,7 +8587,7 @@ class Grid extends SpritesGroup {
                             Math.min(run.x + run.w, (u + 1) * LIT_TILE), Math.min(run.y + run.h, (v + 1) * LIT_TILE))
         }
         this.litEdgeRuns = {view, edges: view.edges, ox, oy, cw, ch, squares, runs}
-        atmosphericLighting.drawEdges(ctx, this, runs)
+        atmosphericLighting.drawEdges(ctx, this, runs, moving)
     }
     // TASK-1564: whether view's tile (u, v) is being made in the Worker (litTileSteps).
     litPending(view, u, v) {
@@ -11589,6 +11599,8 @@ const UNIT_SECTOR_BURST_MS = 100
 Grid.unitSectorsAtRest = true
 // TASK-1562 (SECTORS 6/11): zoom levels (Grid.drawZoomSectors, levelSettle, sectorRest). False: the zoom raster as before.
 Grid.zoomLevels = true
+// TASK-1566: a surface cache build without a cache during a zoom gesture bounded by its real draw calls (prepareSurfaceCache).
+Grid.urgentGestureCalls = true
 // TASK-1563: sector builds (lit tiles' quarters, unit sectors) recorded into a sector snapshot (SectorRecorder) and drawn
 // by SectorDraw (render/sectorDraw.js) from it; false: drawn directly by the board's drawing code (the pre-TASK-1563 path,
 // kept for the equivalence audit).

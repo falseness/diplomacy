@@ -2183,7 +2183,9 @@ const atmosphericLighting = {
     // (its map part grown as in lightTile, but within draw()'s on-screen part, whose edge draw()'s
     // sampling clamps at), then the bloom of the lamps reaching them clipped to all the runs, over
     // the frame's own pixels (the sky under the board's edge), as draw() lights them.
-    drawEdges(ctx, board, runs) {
+    // TASK-1566: moving (the live frame of a camera pan or zoom, Grid.drawLitEdges) lets the lamp overlays' copies be reused at a
+    // nearby sub-pixel phase (scaledCopy).
+    drawEdges(ctx, board, runs, moving) {
         if (!otherSettings.atmosphericVisuals || !runs.length) return
         const map = this.lightMap(board)
         if (!map) return
@@ -2215,7 +2217,7 @@ const atmosphericLighting = {
                 Math.max(viewLeft, (x0 - t.e) / t.a - grow), Math.max(viewTop, (y0 - t.f) / t.d - grow),
                 Math.min(viewRight, (x1 - t.e) / t.a + grow), Math.min(viewBottom, (y1 - t.f) / t.d + grow))
         }
-        this.bloom(ctx, board, {runs})
+        this.bloom(ctx, board, {runs, moving})
         ctx.restore()
     },
     // TASK-1545: drawEdges' multiply and color-dodge from tiles of the light map and gain (edgeTileSet: EDGE_TILE map pixels a
@@ -2862,7 +2864,7 @@ const atmosphericLighting = {
     },
     // reach: the radius a lamp is drawn within of the canvas (the bloom's own by default); runs:
     // only the lamps within BLOOM_TILE_REACH of one of these device rectangles (drawEdges).
-    bloom(ctx, board, {reach, runs} = {}) {
+    bloom(ctx, board, {reach, runs, moving} = {}) {
         const r = basis.r * this.BLOOM.radius
         let sources = this.visibleSources(ctx, this.collect(board, false, false).sources, reach || r, basis.r * 0.23)
         if (runs) {
@@ -2872,7 +2874,7 @@ const atmosphericLighting = {
                 (pos.y + far) * t.d + t.f >= run.y && (pos.y - far) * t.d + t.f <= run.y + run.h))
         }
         if (!sources.length) return
-        if (runs && this.drawBloomCopies(ctx, board, sources, r)) return
+        if (runs && this.drawBloomCopies(ctx, board, sources, r, moving)) return
         ctx.save()
         for (const source of sources) {
             const building = this.lampBuilding(board, source)
@@ -2948,7 +2950,13 @@ const atmosphericLighting = {
     // overlay and place while its scale and phase hold (a pan changes the phase: drawn again), dropped when not drawn for
     // SCALED_COPY_AGE of these frames. False (nothing drawn) when off, for a transform that is not a positive scale or an
     // overlay not at least SCALED_COPY_MIN times larger than its copy; bloom then draws the overlays.
+    // TASK-1566: while the camera moves (moving: the live frame's edge blocks, never a snapshot, tile or sector), a copy is kept per
+    // SCALED_COPY_PHASES sub-pixel phases a device pixel each way (the overlay drawn up to 1 / (2 x SCALED_COPY_PHASES) px off its
+    // place), so a pan reuses the copies of the phases it crosses instead of drawing every lamp's copies again each frame
+    // (their offscreen pixels were the main thread's offscreen drawing in over half the lit pan frames); a settled frame draws
+    // the exact phase as before.
     scaledCopies: true,
+    SCALED_COPY_PHASES: 2,
     SCALED_COPY_MIN: 4,
     SCALED_COPY_AGE: 120,
     scaledCopyMap: new Map(),
@@ -2956,7 +2964,7 @@ const atmosphericLighting = {
     scaledCopyNext: 0,
     scaledCopyClock: 0,
     scaledCopyBuilds: 0,
-    drawBloomCopies(ctx, board, sources, r) {
+    drawBloomCopies(ctx, board, sources, r, moving) {
         const t = ctx.getTransform()
         if (!this.scaledCopies || t.b !== 0 || t.c !== 0 || t.a <= 0 || t.d <= 0) return false
         const draws = []
@@ -2964,14 +2972,14 @@ const atmosphericLighting = {
             const building = this.lampBuilding(board, source)
             const image = building && cachedImages[board.getEntityBodyImageName(building)]
             if (!image || !image.width || !building.pos) {
-                const c = this.core(source), copy = this.scaledCopy(ctx, t, this.bloomImage(), c.x - r, c.y - r, 2 * r, 2 * r)
+                const c = this.core(source), copy = this.scaledCopy(ctx, t, this.bloomImage(), c.x - r, c.y - r, 2 * r, 2 * r, moving)
                 if (!copy) return false
                 draws.push(['screen', copy])
                 continue
             }
             const {shade, glow, pad} = this.lampOverlay(image, source.name)
-            const a = this.scaledCopy(ctx, t, shade, building.pos.x, building.pos.y, shade.width, shade.height)
-            const b = a && this.scaledCopy(ctx, t, glow, building.pos.x - pad, building.pos.y - pad, glow.width, glow.height)
+            const a = this.scaledCopy(ctx, t, shade, building.pos.x, building.pos.y, shade.width, shade.height, moving)
+            const b = a && this.scaledCopy(ctx, t, glow, building.pos.x - pad, building.pos.y - pad, glow.width, glow.height, moving)
             if (!b) return false
             draws.push(['multiply', a], ['screen', b])
         }
@@ -2986,15 +2994,23 @@ const atmosphericLighting = {
         return true
     },
     // The copy of image drawn at x, y, w x h (world) under transform t of ctx (drawBloomCopies): {canvas, X0, Y0}, its top left
-    // device pixel; null when image is not SCALED_COPY_MIN times the copy's area.
-    scaledCopy(ctx, t, image, x, y, w, h) {
+    // device pixel; null when image is not SCALED_COPY_MIN times the copy's area. moving (TASK-1566): the phase rounded to
+    // 1 / SCALED_COPY_PHASES px, a copy per rounded phase.
+    scaledCopy(ctx, t, image, x, y, w, h, moving) {
         if (!image || !image.width || !image.height) return null
-        const X = x * t.a + t.e, Y = y * t.d + t.f, X0 = Math.floor(X), Y0 = Math.floor(Y)
+        let X = x * t.a + t.e, Y = y * t.d + t.f
+        const Q = moving ? this.SCALED_COPY_PHASES : 0
+        if (Q) {
+            X = Math.round(X * Q) / Q
+            Y = Math.round(Y * Q) / Q
+        }
+        const X0 = Math.floor(X), Y0 = Math.floor(Y)
         const cw = Math.ceil(X + w * t.a) - X0, ch = Math.ceil(Y + h * t.d) - Y0
         if (cw <= 0 || ch <= 0 || cw * ch * this.SCALED_COPY_MIN > image.width * image.height) return null
         let id = this.scaledCopyIds.get(image)
         if (id === undefined) this.scaledCopyIds.set(image, id = ++this.scaledCopyNext)
-        const key = id + ':' + x + ':' + y + ':' + w + ':' + h, fx = X - X0, fy = Y - Y0
+        const fx = X - X0, fy = Y - Y0
+        const key = id + ':' + x + ':' + y + ':' + w + ':' + h + (Q ? ':' + fx + ':' + fy : '')
         let copy = this.scaledCopyMap.get(key)
         if (!copy || copy.image !== image || copy.iw !== image.width || copy.ih !== image.height || copy.a !== t.a || copy.d !== t.d ||
                 copy.fx !== fx || copy.fy !== fy || copy.smoothing !== ctx.imageSmoothingEnabled || copy.quality !== ctx.imageSmoothingQuality) {
