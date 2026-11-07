@@ -62,6 +62,10 @@
             // main thread (every offscreen draw these wrappers see runs on it) and the stand-in pixels rounded.
             sectorCounters.frameEnd()
             frame.work.mainOffscreenMP = frame.work.offscreenMegapixels
+            // TASK-1564: the sector pictures made since the previous frame in the Worker (sectorsBuiltWorker) and on the main
+            // thread (sectorsBuiltMain; workerFallback: of those, made here though the worker could have made them, or with it
+            // off), the pictures dropped as stale, the builds in flight now (workerQueueDepth) and at most since.
+            frame.work.sectorWorker = sectorWorkerDelta()
             frame.work.standInPx = Math.round(work.standInPx)
             frame.work.standInPxBy = Object.fromEntries(Object.entries(work.standInPx ? work.standInPxBy : {}).map(([k, v]) => [k, Math.round(v)]))
             frame.work.layerFullRebuildCount = Object.values(work.layerFullRebuild).reduce((a, b) => a + b, 0)
@@ -75,6 +79,22 @@
             if (document.hidden) report.invalidReasons.push('hidden-tab')
             frame = null
         }
+    }
+    let sectorWorkerLast = null
+    const sectorWorkerDelta = () => {
+        if (typeof SectorWorker === 'undefined')
+            return null
+        const c = SectorWorker.counters, last = sectorWorkerLast || {}
+        const out = {state: SectorWorker.state}
+        for (const k of ['builtWorker', 'builtMain', 'builtMainMoving', 'fallback', 'posted', 'dropped', 'failed', 'spritesSent', 'spritesDropped'])
+            out[k] = c[k] - (last[k] || 0)
+        out.workerMs = Math.round((c.workerMs - (last.workerMs || 0)) * 10) / 10
+        out.depth = c.depth
+        out.depthMax = c.depthMax
+        out.spriteMB = Math.round(c.spriteBytes / 1e5) / 10
+        c.depthMax = c.depth
+        sectorWorkerLast = {...c}
+        return out
     }
     let coverageSerial = null, coverageLast = null
     const levelCoverage = () => {

@@ -246,6 +246,9 @@ class Grid extends SpritesGroup {
         // unit sector checks found changed (a cut build begins again when it moved).
         this.unitSectorBuilding = undefined
         this.unitCellChanges = 0
+        // TASK-1564: builds not started for a full Worker queue (Grid.sectorWorkerBusy).
+        this.litWorkerStops = 0
+        this.unitWorkerStops = 0
         this.unitSectorClears = []
         this.unitSectorRefusals = {}
         // TASK-1546: the lit tile built a step a task (Grid.buildLitTiles: litTileStep), tiles started / given up.
@@ -881,8 +884,11 @@ class Grid extends SpritesGroup {
             }
         // freeze: a consumer keeps the snapshot past its build (Grid.onSectorSnapshot, a later Worker), so a sprite redrawn
         // in place (sectorVersion) goes into the map as a copy of the version the recording drew (SectorRecorder.key).
+        // TASK-1564: worker: the snapshot's pictures are made in the Worker (SectorWorker; its recorders draw nothing here,
+        // sectorSubmit), unless a recorder finds it cannot (mainOnly: a pixel read, an opaque value).
         return {snapshot, sink: {sprites: new Map(), cellIndex, h, cellRow: (i, j) => this.sectorCellRow(i, j),
-            freeze: !!Grid.onSectorSnapshot}}
+            freeze: !!Grid.onSectorSnapshot, worker: !this.sectorSync && Grid.sectorWorkerOn(), sync: !!this.sectorSync,
+            mainOnly: false, recorders: []}}
     }
     // TASK-1563: a cell's row in a sector snapshot: [i, j, flags (SECTOR_CELL_*), the unit's class or null, the building's
     // class or null, the hexagon's owner colour (null: unknown)].
@@ -5339,6 +5345,8 @@ class Grid extends SpritesGroup {
     }
     // Every unit sector released (the cells' kept values too: a new set is built from the board).
     clearUnitSectors(reason) {
+        // TASK-1564: the pictures under way in the Worker dropped when they come back.
+        this.unitWorkerSectors = undefined
         if (this.unitSectors?.entries.size) {
             ++this.unitSectorWork.clears
             this.unitSectorClears.push(reason)
@@ -6202,6 +6210,14 @@ class Grid extends SpritesGroup {
                 calls.max = Math.min(calls.max, calls.n + UNIT_SECTOR_TASK_CALLS)
             if (this.unitSectorBuilding || !fits())
                 break
+            // TASK-1564: no new build while the Worker's queue is full: the rest when a picture comes back (onDrain).
+            if (Grid.sectorWorkerBusy()) {
+                ++this.unitWorkerStops
+                this.unitSectorWanted ||= {...job, list: job.list.slice(k), onCanvas: Math.max(0, (job.onCanvas || 0) - k)}
+                if (left)
+                    Grid.levelSpend(calls.n)
+                return
+            }
             const {u, v} = job.list[k]
             const t0 = performance.now()
             if (this.buildUnitSector(job, u, v, calls))
@@ -6302,6 +6318,11 @@ class Grid extends SpritesGroup {
             const entry = this.unitSectors.get(SectorCache.key(level, u, v))
             if (entry && this.unitEntryFits(entry, plan) && entry.ground === ground)
                 return false
+            // TASK-1564: or being made in the Worker for that plan and ground with the cells as they are.
+            const pending = this.unitWorkerSectors?.get(SectorCache.key(level, u, v))
+            if (pending && pending.cache === this.unitSectors && pending.planKey === plan.key && pending.ground === ground &&
+                    pending.changes === this.unitCellChanges && pending.epoch === this.unitGroundEpoch)
+                return false
             const transform = {a: level, b: 0, c: 0, d: level, e: -u * LIT_TILE, f: -v * LIT_TILE}
             const range = this.drawRange({getTransform: () => transform, canvas: {width: LIT_TILE, height: LIT_TILE}})
             // Compared first: the sector is drawn from the values its cells keep (unitSectorCheck).
@@ -6363,19 +6384,52 @@ class Grid extends SpritesGroup {
         if (b.recorder) {
             b.recorder.end()
             Grid.onSectorSnapshot?.(b.sector.snapshot, b.sector.sink.sprites, [b.canvas])
+            // TASK-1564: the picture made in the Worker: stored when it comes back (unitSectorArrived).
+            const key = SectorCache.key(level, u, v)
+            const rec = {key, level, u, v, cache: this.unitSectors, planKey: plan.key, ground, kind: plan.kind, tag: plan.tag,
+                changes: b.changes, epoch: this.unitGroundEpoch}
+            if (this.sectorSubmit(b.sector, out => this.unitSectorArrived(rec, out), () => this.unitSectorFailed(rec))) {
+                (this.unitWorkerSectors ||= new Map()).set(key, rec)
+                return false
+            }
         }
         b.canvas.getContext('2d').getImageData(0, 0, 1, 1)
+        this.storeUnitSector(level, u, v, b.canvas, ground, plan.kind, plan.tag, this.unitGroundEpoch)
+        return true
+    }
+    // A unit sector picture stored (built here, or back from the Worker).
+    storeUnitSector(level, u, v, image, ground, kind, tag, epoch) {
         const before = this.unitSectors.evictions
-        const entry = this.unitSectors.put(level, u, v, b.canvas)
+        const entry = this.unitSectors.put(level, u, v, image)
         entry.ground = ground
-        entry.kind = plan.kind
-        entry.tag = plan.tag
-        entry.epoch = this.unitGroundEpoch
+        entry.kind = kind
+        entry.tag = tag
+        entry.epoch = epoch
         this.unitSectorWork.evicted += this.unitSectors.evictions - before
         ++this.unitSectorWork.built
         if (ground === UNIT_OVERLAY)
             ++this.unitSectorWork.overlays
-        return true
+        return entry
+    }
+    // TASK-1564: a unit sector's picture back from the Worker (out: [[0, ImageBitmap]]): stored as buildUnitSector stores one
+    // built here; dropped (a stale version) when another build of the square was sent since, the cache is another (debug
+    // toggled), or a cell the units pass draws or the grounds changed since it was recorded (unitCellChanges, unitGroundEpoch).
+    unitSectorArrived(rec, out) {
+        const mine = this.unitWorkerSectors?.get(rec.key) === rec
+        if (mine)
+            this.unitWorkerSectors.delete(rec.key)
+        if (!mine || this !== grid || rec.cache !== this.unitSectors || rec.planKey !== this.unitSectorKey ||
+                rec.changes !== this.unitCellChanges ||
+                rec.epoch !== this.unitGroundEpoch || !out.length) {
+            SectorWorker.dropped(out)
+            return
+        }
+        this.storeUnitSector(rec.level, rec.u, rec.v, out[0][1], rec.ground, rec.kind, rec.tag, rec.epoch)
+        SectorWorker.built('worker')
+    }
+    unitSectorFailed(rec) {
+        if (this.unitWorkerSectors?.get(rec.key) === rec)
+            this.unitWorkerSectors.delete(rec.key)
     }
     // TASK-1561: the steps of a unit sector's build ({run(g), cost, cells?: the drawRange whose texts it set, unitCells}):
     // the ground; on the lit path the units pass (drawOther 'units') in column chunks of about UNIT_SECTOR_CHUNK_CALLS (the
@@ -6587,7 +6641,7 @@ class Grid extends SpritesGroup {
                     (missing ||= new Set()).add(u + ',' + v)
                     continue
                 }
-                const tile = this.litTile(view, u, v)
+                const tile = this.litTile(view, u, v, true)
                 this.useSector(view, u, v)
                 if (inBoard) {
                     // A tile the edge runs meet stays live (the frame lights the runs over it before the units).
@@ -7554,12 +7608,23 @@ class Grid extends SpritesGroup {
     }
     // Tile (u, v) of view, built now if missing; null when the board does not reach it.
     // TASK-1439: each build timed (litTileCost, a tile the board reaches).
-    litTile(view, u, v) {
+    // TASK-1564: sync, a frame drawing the tile now (drawLitView): built on the main thread; else made in the Worker
+    // (SectorWorker) when it is on: the tile is then stored when its quarters come back (litTileArrived), undefined till then.
+    litTile(view, u, v, sync = false) {
         const key = u + ',' + v
-        if (!this.litHas(view, u, v)) {
-            const start = performance.now(), tile = this.buildLitTile(view, u, v)
+        if (!this.litHas(view, u, v) && !(!sync && this.litPending(view, u, v))) {
+            const start = performance.now()
+            this.sectorSync = sync
+            let tile
+            try {
+                tile = this.buildLitTile(view, u, v)
+            } finally {
+                this.sectorSync = false
+            }
             if (tile)
                 litTileCost.add(performance.now() - start)
+            if (tile?.workerPending)
+                return undefined
             view.tiles.set(key, tile)
             this.releaseStaleTile(view, key)
             this.storeSector(view, u, v, tile)
@@ -7600,8 +7665,15 @@ class Grid extends SpritesGroup {
         // (levelWorkLeft, LEVEL_TILE_STEP_CALLS a step), the rest by the next frame's task.
         const levels = stepped && this.levelMode()
         for (const {u, v} of tiles) {
-            if (this.litHas(view, u, v))
+            if (this.litHas(view, u, v) || this.litPending(view, u, v))
                 continue
+            // TASK-1564: no new tile while the Worker's queue is full (the tile under way goes on; a first view's batch, drawn
+            // live till its tiles come, is sent whole). The next frame's task goes on.
+            if (!batch && Grid.sectorWorkerBusy() && !(this.litTileJob && this.litTileJob.view === view && this.litTileJob.u === u &&
+                    this.litTileJob.v === v)) {
+                ++this.litWorkerStops
+                return
+            }
             if (stepped) {
                 for (;;) {
                     if (levels) {
@@ -7677,6 +7749,9 @@ class Grid extends SpritesGroup {
         const tile = step.value
         if (tile)
             litTileCost.add(job.ms)
+        // TASK-1564: its quarters made in the Worker: stored when they come back (litTileArrived).
+        if (tile?.workerPending)
+            return true
         view.tiles.set(key, tile)
         this.releaseStaleTile(view, key)
         this.storeSector(view, u, v, tile)
@@ -8042,6 +8117,17 @@ class Grid extends SpritesGroup {
         tile.litOutline = mapDepth.outline
         // The board outline the tile's drawn square is opaque under (frameCover), if any.
         tile.litOpaque = this.litSquareOpaque(view, X, Y, X + LIT_TILE, Y + LIT_TILE) ? mapDepth.outline : null
+        // TASK-1564: the quarters made in the Worker (the recording drew nothing on them): the tile waits in view.workerTiles
+        // (litPending) for them, litTileArrived; else (main only, the fallback) they were drawn here.
+        if (sector) {
+            const key = u + ',' + v
+            const rec = {view, key, u, v, tile, edges: view.edges, outline: view.outline, rebuilds: atmosphericLighting.rebuilds,
+                mapScale: atmosphericLighting.mapScale, gen: this.sectorGen}
+            if (this.sectorSubmit(sector, out => this.litTileArrived(rec, out), () => this.litTileFailed(rec))) {
+                tile.workerPending = rec
+                ;(view.workerTiles ||= new Map()).set(key, rec)
+            }
+        }
         return tile
     }
     // TASK-1545: a lit tile is kept as its four LIT_TILE_PART squares, each a canvas of its own (litTilePool): a frame draws
@@ -8147,6 +8233,67 @@ class Grid extends SpritesGroup {
         this.litEdgeRuns = {view, edges: view.edges, ox, oy, cw, ch, squares, runs}
         atmosphericLighting.drawEdges(ctx, this, runs)
     }
+    // TASK-1564: whether view's tile (u, v) is being made in the Worker (litTileSteps).
+    litPending(view, u, v) {
+        return !!view.workerTiles?.has(u + ',' + v)
+    }
+    // TASK-1564: a tile's quarters back from the Worker (out: [[k, ImageBitmap], ...]): the tile stored as litTileStep stores
+    // one built here, its pooled canvases given back; dropped (a stale version) when the view, its edges, outline or light map,
+    // or the sector generation changed since, or the tile was built meanwhile.
+    litTileArrived(rec, out) {
+        const {view, key, u, v, tile} = rec
+        const mine = view.workerTiles?.get(key) === rec
+        if (mine)
+            view.workerTiles.delete(key)
+        if (!mine || this !== grid || view !== this.litView || view.tiles.has(key) || rec.edges !== view.edges ||
+                rec.outline !== view.outline || rec.rebuilds !== atmosphericLighting.rebuilds ||
+                rec.mapScale !== atmosphericLighting.mapScale || rec.gen !== this.sectorGen) {
+            SectorWorker.dropped(out)
+            delete tile.workerPending
+            this.freeLitTile(tile)
+            return
+        }
+        const parts = tile.parts.slice()
+        for (const [k, bitmap] of out)
+            tile.parts[k] = bitmap
+        delete tile.workerPending
+        this.freeLitTile({parts})
+        view.tiles.set(key, tile)
+        this.releaseStaleTile(view, key)
+        this.storeSector(view, u, v, tile)
+        SectorWorker.built('worker')
+    }
+    // TASK-1564: the Worker could not make the tile: given up (the frames' tasks build it again, on the main thread).
+    litTileFailed(rec) {
+        const {view, key, tile} = rec
+        if (view.workerTiles?.get(key) === rec)
+            view.workerTiles.delete(key)
+        delete tile.workerPending
+        this.freeLitTile(tile)
+    }
+    // TASK-1564: a sector build's recording ended (sector: sectorSnapshot's): its pictures sent to the Worker (onDone / onFail
+    // later; true), or, main only or without the worker, drawn here (its recorders' runs flushed; false), counted.
+    sectorSubmit(sector, onDone, onFail) {
+        const {sink, snapshot} = sector
+        if (sink.worker && !sink.mainOnly) {
+            for (const key of sink.sprites.keys())
+                if (SectorWorker.bad(key)) {
+                    sink.recorders[0]?.mainOnly()
+                    break
+                }
+        }
+        if (sink.worker && !sink.mainOnly && SectorWorker.on()) {
+            SectorWorker.submit(snapshot, sink.sprites, onDone, onFail)
+            return true
+        }
+        if (sink.worker && !sink.mainOnly)
+            sink.recorders[0]?.mainOnly()
+        // The fallback: the worker not used for a build that could have used it (not a frame's own: sectorSync); counted with
+        // whether the camera moved then (builtMainMoving).
+        if (typeof SectorWorker !== 'undefined')
+            SectorWorker.built('main', !sink.sync, !Grid.cameraAtRest())
+        return false
+    }
     // TASK-1559: a tile released: through the sector cache when it holds it (remove: close takes it out of the view and frees
     // it), else freed at once.
     releaseLitTile(tile) {
@@ -8163,6 +8310,10 @@ class Grid extends SpritesGroup {
     freeLitTile(tile) {
         for (const part of tile.parts) {
             if (!part)
+                continue
+            // TASK-1564: a quarter made in the Worker (an ImageBitmap) is let go of (not closed: a kept recording may still
+            // draw it), never pooled.
+            if (typeof ImageBitmap !== 'undefined' && part instanceof ImageBitmap)
                 continue
             if (this.litTilePool.length < (Grid.litAhead ? LIT_TILE_SPARE_PARTS : 4 * LIT_TILE_POOL))
                 this.litTilePool.push(part)
@@ -9961,6 +10112,8 @@ const SECTOR_QUERY_CALLS = new Set(['getTransform', 'measureText', 'getLineDash'
 // atmosphericLighting.gradient's owner for recorded gradients (gradientContext): SectorGradients, never a real context's.
 const SECTOR_GRADIENT_OWNER = {sectorGradients: true}
 const sectorScratchPool = []
+// TASK-1564: a new 2D context's state (SectorRecorder.recordStartState).
+let sectorDefaultState = null
 let sectorValueKeys = new WeakMap(), sectorValueSerial = 0
 // TASK-1563: sprites a recording draws that their owners redraw in place (the light map's multiply and gain canvases, a
 // lit tile's pooled quarters) carry sectorVersion(), called on the canvas: their content version, changed by every edit
@@ -10005,6 +10158,9 @@ class SectorRecorder {
         this.cell = -1
         this.labels = typeof canvasCallLabels !== 'undefined' ? canvasCallLabels : null
         this.within = this.labels ? (label, fn) => this.labels.within(label, fn) : null
+        // TASK-1564: a worker build's runs are not drawn here (flush does nothing) until the sink turns main only.
+        this.deferred = !!sink.worker && !sink.mainOnly
+        sink.recorders?.push(this)
         // fillStyle / strokeStyle set to a recorded gradient or pattern (the scratch context keeps its own then).
         this.fake = {}
         this.fakes = []
@@ -10018,6 +10174,10 @@ class SectorRecorder {
         for (const name of CANVAS_STATE)
             if (name in target) g[name] = target[name]
         if (typeof target.getLineDash === 'function') g.setLineDash(target.getLineDash())
+        // TASK-1564: a worker's canvas starts in the default state: the target's own state (its transform, the plain values of
+        // its state properties, its line dash) recorded first.
+        if (this.deferred)
+            this.recordStartState(target, t)
         const recorder = this, methods = new Map()
         const cell = (i, j) => recorder.setCell(i, j)
         this.context = new Proxy({}, {
@@ -10072,10 +10232,51 @@ class SectorRecorder {
         }
         s.o.push(o)
     }
+    // TASK-1564: the target's state as ops (only what differs from a new context's).
+    recordStartState(target, t) {
+        const d = sectorDefaultState ||= (() => {
+            const c = document.createElement('canvas').getContext('2d'), out = {}
+            for (const name of CANVAS_STATE)
+                if (name in c) out[name] = c[name]
+            return out
+        })()
+        if (t.a !== 1 || t.b !== 0 || t.c !== 0 || t.d !== 1 || t.e !== 0 || t.f !== 0)
+            this.op(['setTransform', t.a, t.b, t.c, t.d, t.e, t.f])
+        for (const name of CANVAS_STATE) {
+            const value = target[name]
+            if (name in target && value !== d[name] && (typeof value !== 'object' || value === null))
+                this.op(['=', name, value])
+        }
+        const dash = typeof target.getLineDash === 'function' ? target.getLineDash() : []
+        if (dash.length)
+            this.op(['setLineDash', dash])
+        this.seg = null
+    }
+    // TASK-1564: the sink's snapshot made on the main thread after all: its recorders draw what they recorded and draw on.
+    mainOnly() {
+        const sink = this.sink
+        if (!sink.worker || sink.mainOnly)
+            return
+        sink.mainOnly = true
+        for (const r of sink.recorders) {
+            r.deferred = false
+            r.flush()
+        }
+    }
     key(value) {
         let key = sectorValueKeys.get(value)
         if (key === undefined)
             sectorValueKeys.set(value, key = 'k' + (++sectorValueSerial))
+        // TASK-1564: for the worker, a canvas's key holds its content version (sectorCanvasVersion) and its bitmap is made
+        // now (SectorWorker.prepare: the pixels the recording draws).
+        if (this.sink.worker) {
+            const version = sectorCanvasVersion(value), base = key
+            if (version !== null)
+                key += '@' + version
+            this.sink.sprites.set(key, value)
+            SectorWorker.prepare(key, value, version !== null ? base : null)
+            return key
+        }
         if (typeof value.sectorVersion === 'function') {
             const version = value.sectorVersion()
             key += '@' + version
@@ -10096,6 +10297,7 @@ class SectorRecorder {
         if (typeof v.width === 'number' && typeof v.height === 'number' && !(typeof Path2D !== 'undefined' && v instanceof Path2D))
             return {s: this.key(v)}
         ++this.snapshot.opaque
+        this.mainOnly()
         return {o: this.key(v)}
     }
     call(name, args) {
@@ -10111,6 +10313,7 @@ class SectorRecorder {
         if (name === 'createPattern')
             return {sp: 1, s: this.key(args[0]), rep: args[1] ?? null}
         if (CANVAS_READ_CALLS.has(name)) {
+            this.mainOnly()
             this.flush()
             ++this.snapshot.reads
             return this.target[name](...args)
@@ -10146,7 +10349,7 @@ class SectorRecorder {
     }
     // The runs recorded since the last flush drawn on the target (SectorDraw).
     flush() {
-        if (this.flushed === this.segs.length)
+        if (this.deferred || this.flushed === this.segs.length)
             return
         const from = this.flushed
         this.flushed = this.segs.length
@@ -11005,6 +11208,28 @@ Grid.zoomLevels = true
 Grid.sectorModule = true
 // TASK-1563: called with (snapshot, sprites, canvases) when a sector build made through SectorDraw ends (audits).
 Grid.onSectorSnapshot = null
+// TASK-1564 (SECTORS 8/11): sector pictures made in a Worker (render/sectorWorker.js: SectorWorker) from the snapshots the
+// builds record; false (or the page's ?sectorWorker=0, or no Worker / OffscreenCanvas): drawn on the main thread as TASK-1563
+// did (the fallback, counted). Not with an audit hook (Grid.onSectorSnapshot: it compares the main thread's pictures).
+Grid.sectorWorker = true
+Grid.sectorWorkerBusy = () => Grid.sectorWorkerOn() && SectorWorker.busy()
+// TASK-1564: the camera at rest: no pan or zoom gesture (nor their hold, surfaceMoving), no pan key or zoom key held, no glide.
+Grid.cameraAtRest = () => {
+    const events = typeof gameEvent !== 'undefined' ? gameEvent : null, screen = events?.screen
+    return !!screen && !screen.surfaceMoving && !screen.zoomGesture && !screen.speedX && !screen.speedY && !screen.glide &&
+        !events.heldZoomKeys?.size && !(typeof zoomRasterTweens === 'function' && zoomRasterTweens())
+}
+// TASK-1564: a picture back from the Worker frees a place in its queue: the unit sector builds a full queue stopped go on.
+if (typeof SectorWorker !== 'undefined')
+    SectorWorker.onDrain = () => {
+        const g = typeof grid !== 'undefined' ? grid : null
+        if (!g || !g.unitSectorWanted || g.unitSectorQueued || SectorWorker.busy())
+            return
+        g.unitSectorQueued = true
+        setTimeout(gridTask(() => g.unitSectorTask()))
+    }
+Grid.sectorWorkerOn = () => !!(Grid.sectorModule && Grid.sectorWorker && !Grid.onSectorSnapshot && typeof SectorWorker !== 'undefined' &&
+    SectorWorker.on())
 // The levels a level frame stretches from (the best first: stretchSources).
 const LEVEL_SOURCES = 4
 // The sectors a level frame draws stretched at most (stretchCover).

@@ -113,7 +113,10 @@ class SectorCache {
         if (!entry) return false
         this.entries.delete(key)
         this.bytes -= entry.bytes
-        if (entry.image && typeof entry.image.close === 'function') entry.image.close()
+        // TASK-1564: an ImageBitmap (a picture made in the sector Worker) is let go of, not closed: a kept recording of a frame
+        // (held or zoom source) may still draw it.
+        if (entry.image && typeof entry.image.close === 'function' && !(typeof ImageBitmap !== 'undefined' && entry.image instanceof ImageBitmap))
+            entry.image.close()
         return true
     }
     // Least recently used first, skipping sectors drawn in the current frame.
