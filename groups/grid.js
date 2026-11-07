@@ -252,8 +252,12 @@ class Grid extends SpritesGroup {
         // TASK-1565 (Grid.sectorAhead): the sectors built ahead of the camera (visualsPerf work.sectorAhead): lit tiles and unit
         // sectors built (tiles, units), queued in a frame's ring (queued: the last frame's list; ring: its squares), builds
         // given up because their square left the ring (cancelled), and the camera's motion (sectorMotion).
+        // TASK-1565 rework: tileStepMs (main-thread ms the steps took), and why the builds between two frames stopped: stopSteps
+        // (AHEAD_TILE_STEPS), stopCalls (aheadCallsLeft), stopMp (aheadMpLeft), stopTime (AHEAD_WORKER_FRAME_MS), stopQueue (the
+        // Worker's queue full).
         this.aheadWork = {tiles: 0, tilesMoving: 0, units: 0, unitsMoving: 0, cancelled: 0, queued: 0, ring: 0, tileSteps: 0, tileStepCalls: 0,
-            composed: 0}
+            composed: 0, tileStepMs: 0, stopSteps: 0, stopCalls: 0, stopMp: 0, stopTime: 0, stopQueue: 0, litTasks: 0, litOtherView: 0,
+            litZooming: 0, litDefers: 0, litBehind: 0}
         // TASK-1565: the draw calls a lit tile's steps record (litTileSteps' recorders count them in calls.n while calls is set).
         this.litStepHolder = {calls: null}
         this.aheadUnitRatio = 1
@@ -6340,20 +6344,26 @@ class Grid extends SpritesGroup {
             if (this.unitSectorBuilding || !fits())
                 break
             // TASK-1564: no new build while the Worker's queue is full: the rest when a picture comes back (onDrain).
-            if (Grid.sectorWorkerBusy()) {
+            // TASK-1565 rework: but a burst's squares on the canvas all go (the frames draw them live, heavy, till they come;
+            // the Worker makes a unit sector in ~1 ms once its canvases are kept, artifacts/TASK-1565/preview).
+            if (!(burst && k < job.onCanvas) && Grid.sectorWorkerBusy()) {
                 ++this.unitWorkerStops
                 this.unitSectorWanted ||= {...job, list: job.list.slice(k), onCanvas: Math.max(0, (job.onCanvas || 0) - k)}
                 spend()
                 return
             }
-            // TASK-1565: a moving camera's builds within the frame's offscreen megapixels too (Grid.aheadMpLeft).
-            if (ahead && Grid.aheadMpLeft() < AHEAD_SECTOR_MP)
+            // TASK-1565: a moving camera's builds within the frame's offscreen megapixels too (Grid.aheadMpLeft); not when the
+            // Worker draws them (Grid.aheadInWorker: no offscreen pixels on the main thread).
+            const inWorker = ahead && Grid.aheadInWorker()
+            if (ahead && !inWorker && Grid.aheadMpLeft() < AHEAD_SECTOR_MP) {
+                ++this.aheadWork.stopMp
                 break
+            }
             const {u, v} = job.list[k]
             const t0 = performance.now()
             if (this.buildUnitSector(job, u, v, calls))
                 last = performance.now() - t0
-            if (ahead)
+            if (ahead && !inWorker)
                 Grid.aheadMpSpend(AHEAD_SECTOR_MP)
         }
         spend()
@@ -7833,7 +7843,7 @@ class Grid extends SpritesGroup {
         // its estimate before the first).
         const ahead = stepped && !levels && this.aheadOn(true)
         const stepCalls = {n: 0, max: Infinity}
-        for (const {u, v} of tiles) {
+        for (const {u, v, shown} of tiles) {
             if (this.litHas(view, u, v) || this.litPending(view, u, v))
                 continue
             // TASK-1564: no new tile while the Worker's queue is full (the tile under way goes on; a first view's batch, drawn
@@ -7841,6 +7851,8 @@ class Grid extends SpritesGroup {
             if (!batch && Grid.sectorWorkerBusy() && !(this.litTileJob && this.litTileJob.view === view && this.litTileJob.u === u &&
                     this.litTileJob.v === v)) {
                 ++this.litWorkerStops
+                if (ahead)
+                    ++this.aheadWork.stopQueue
                 return
             }
             if (stepped) {
@@ -7856,8 +7868,19 @@ class Grid extends SpritesGroup {
                     else if (ahead) {
                         // The next step's estimate: the most the last steps of its kind (its index in the tile's steps) made.
                         const job = this.litTileJob, next = job && job.view === view && job.u === u && job.v === v ? job.count : 0
-                        if (Grid.levelWorkLeft().tileSteps >= AHEAD_TILE_STEPS || Grid.aheadCallsLeft() < litStepCalls.at(next) ||
-                                Grid.aheadMpLeft() < AHEAD_STEP_MP) {
+                        // TASK-1565 rework: with the Worker drawing (Grid.aheadInWorker) a step only records on the main thread: no
+                        // offscreen pixels there and next to no real calls, so its cost is the recording's time
+                        // (AHEAD_WORKER_FRAME_MS between two frames, with the next step's estimate litTileStepCost.ms), not
+                        // AHEAD_TILE_STEPS or the megapixels.
+                        const inWorker = Grid.aheadInWorker()
+                        const stop = Grid.aheadCallsLeft() < litStepCalls.at(next) ? 'stopCalls' :
+                            // (the first step between two frames always runs: a step estimate over the budget would stop
+                            // them all, and with no step the estimate never comes down)
+                            inWorker ? (Grid.levelFrameWork.ms > 0 && Grid.levelFrameWork.ms + litTileStepCost.ms > (shown ?
+                                AHEAD_WORKER_CATCHUP_MS : AHEAD_WORKER_FRAME_MS) ? 'stopTime' : null) :
+                            Grid.levelWorkLeft().tileSteps >= AHEAD_TILE_STEPS ? 'stopSteps' : Grid.aheadMpLeft() < AHEAD_STEP_MP ? 'stopMp' : null
+                        if (stop) {
+                            ++this.aheadWork[stop]
                             ++this.levelWork.budgetStops
                             return
                         }
@@ -7885,9 +7908,12 @@ class Grid extends SpritesGroup {
                         const n = Grid.frameCallsNow() - n0
                         litStepCalls.add(n, index)
                         Grid.levelSpend(n, 1)
-                        Grid.aheadMpSpend(AHEAD_STEP_MP)
+                        Grid.levelFrameWork.ms += last
+                        if (!Grid.aheadInWorker())
+                            Grid.aheadMpSpend(AHEAD_STEP_MP)
                         ++this.aheadWork.tileSteps
                         this.aheadWork.tileStepCalls += n
+                        this.aheadWork.tileStepMs += last
                     }
                     if (done)
                         break
@@ -8035,8 +8061,15 @@ class Grid extends SpritesGroup {
             // Nothing is built inside a zoom gesture (its frames keep their live light), nor (TASK-1316) for a board the
             // view's cell layer is behind (the next frame brings it up, followCellLayer; a tile built now would also bring
             // the light map's owners up in the task drawing from it).
-            if (view !== this.litView || gameEvent.screen.surfaceZooming || this.litTaskDefers(snapshots) || this.litLayerBehind(view))
+            if (view !== this.litView || gameEvent.screen.surfaceZooming || this.litTaskDefers(snapshots) || this.litLayerBehind(view)) {
+                // TASK-1565 rework: a moving camera's tile task that built nothing for these (visualsPerf work.sectorAhead)
+                if (gameEvent.screen.surfaceMoving)
+                    ++this.aheadWork[view !== this.litView ? 'litOtherView' : gameEvent.screen.surfaceZooming ? 'litZooming' :
+                        this.litTaskDefers(snapshots) ? 'litDefers' : 'litBehind']
                 return
+            }
+            if (gameEvent.screen.surfaceMoving)
+                ++this.aheadWork.litTasks
             if (banding && !gameEvent.screen.surfaceMoving) {
                 // The tiles on the canvas the frames draw from the stand-in first (at most LIT_TILE_BUDGET a task, a view
                 // the frames draw live LIT_FIRST_TILE_BUDGET), then the bands.
@@ -11365,6 +11398,11 @@ Grid.sectorAhead = true
 // frame's LEVEL_FRAME_CALLS).
 const SECTOR_AHEAD_RING = 1
 const AHEAD_TILE_STEPS = 8
+// TASK-1565 rework: with the Worker drawing the pictures, the main-thread time (ms) the lit tile steps' recordings between two
+// frames of a moving camera take at most (half a 60 Hz frame).
+const AHEAD_WORKER_FRAME_MS = 8
+// TASK-1565 rework: and up to a whole 60 Hz frame while tiles on the canvas are missing (the frames draw the stand-in there).
+const AHEAD_WORKER_CATCHUP_MS = 16
 // TASK-1565: a moving camera's frame and the builds before it at most this many draw calls together (Grid.aheadCallsLeft).
 const AHEAD_FRAME_TOTAL = 370
 const AHEAD_FRAME_SAMPLES = 5
@@ -11444,6 +11482,9 @@ Grid.onSectorSnapshot = null
 // did (the fallback, counted). Not with an audit hook (Grid.onSectorSnapshot: it compares the main thread's pictures).
 Grid.sectorWorker = true
 Grid.sectorWorkerBusy = () => Grid.sectorWorkerOn() && SectorWorker.busy()
+// TASK-1565 rework: whether the sector pictures are drawn in the Worker now (not the main-thread fallback): a build ahead then
+// only records on the main thread (budgeted by its time, AHEAD_WORKER_FRAME_MS, not by offscreen megapixels or tile steps).
+Grid.aheadInWorker = () => Grid.sectorWorkerOn()
 // TASK-1564: the camera at rest: no pan or zoom gesture (nor their hold, surfaceMoving), no pan key or zoom key held, no glide.
 Grid.cameraAtRest = () => {
     const events = typeof gameEvent !== 'undefined' ? gameEvent : null, screen = events?.screen
@@ -11515,7 +11556,7 @@ Grid.oncePerFrame = tag => {
 }
 // The frame number (drawAll) and the level work the tasks did since that frame began.
 Grid.frameNo = 0
-Grid.levelFrameWork = {frame: -1, calls: 0, tileSteps: 0, mp: 0, prevMp: 0}
+Grid.levelFrameWork = {frame: -1, calls: 0, tileSteps: 0, mp: 0, prevMp: 0, ms: 0}
 Grid.levelWorkLeft = () => {
     const w = Grid.levelFrameWork
     if (w.frame !== Grid.frameNo) {
@@ -11525,6 +11566,7 @@ Grid.levelWorkLeft = () => {
         w.calls = 0
         w.tileSteps = 0
         w.mp = 0
+        w.ms = 0
     }
     return {calls: LEVEL_FRAME_CALLS - w.calls, tileSteps: w.tileSteps}
 }

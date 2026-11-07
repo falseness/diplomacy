@@ -23,31 +23,83 @@ const SECTOR_WORKER_MAX_FAILURES = 3
 // picture at a time, so builds recorded past it wait, go stale as the camera moves on, and their recording was main-thread
 // work for nothing. A build finished frees a place (onDrain: the board's builds go on).
 const SECTOR_WORKER_QUEUE = 3
+// TASK-1565 rework: the queue measured in the worker's time: busy when the builds in flight would take it this many ms (by
+// kind, the mean of its builds so far; SECTOR_WORKER_QUEUE_MS / SECTOR_WORKER_QUEUE each before any came back: the
+// SECTOR_WORKER_QUEUE builds as before), and at SECTOR_WORKER_QUEUE_MAX builds whatever their time. With its canvases kept
+// a lit tile is ~11 ms and a unit sector ~1 ms in the worker (artifacts/TASK-1565/preview), so a fixed 3 builds left it idle.
+const SECTOR_WORKER_QUEUE_MS = 48
+const SECTOR_WORKER_QUEUE_MAX = 12
 // TASK-1565: a worker whose median drawing time over its last SECTOR_WORKER_RATE_SAMPLES builds is over this many ms an op is
 // slow (SectorWorker.noteRate: the main-thread path from then on). Offline a lit tile is ~0.05 ms an op in a Worker; on a
 // software canvas next to a busy page 0.12-0.7 (the median of the first builds, artifacts/TASK-1564/change.md, TASK-1565 dev).
 const SECTOR_WORKER_SLOW_MS_PER_OP = 0.08
 const SECTOR_WORKER_RATE_SAMPLES = 8
+// TASK-1565: the worker's kept target canvases (reused, worker side) at most this many bytes.
+const SECTOR_WORKER_POOL_BYTES = 64 * 1024 * 1024
 
 if (typeof importScripts === 'function' && typeof document === 'undefined' && typeof window === 'undefined') {
     // ---- worker side ----
     importScripts('sectorDraw.js')
     const sprites = new Map()
     let fontsReady = Promise.resolve()
-    const build = m => {
+    // TASK-1565: the target canvases are kept and reused (pool by size), and the pictures copied out with
+    // createImageBitmap(canvas). On a software canvas (no GPU) the first draw on a new OffscreenCanvas - and on one whose
+    // backing transferToImageBitmap took away - waits on the page's main-thread canvas work (~400 ms while the page draws,
+    // artifacts/TASK-1565/probe/reuse-disable-gpu.json); a kept canvas draws at once. Each use starts from the default
+    // state: save() before the runs, restore() back to it after (as many as the runs' unbalanced saves), a new path, cleared.
+    const pool = new Map() // 'w x h' -> free canvases
+    let pooledBytes = 0
+    const take = (w, h) => {
+        const free = pool.get(w + 'x' + h)
+        if (free?.length) {
+            pooledBytes -= w * h * 4
+            return free.pop()
+        }
+        const canvas = new OffscreenCanvas(w, h)
+        canvas.getContext('2d')
+        return canvas
+    }
+    const give = canvas => {
+        const bytes = canvas.width * canvas.height * 4
+        if (pooledBytes + bytes > SECTOR_WORKER_POOL_BYTES)
+            return
+        const key = canvas.width + 'x' + canvas.height
+        if (!pool.has(key))
+            pool.set(key, [])
+        pool.get(key).push(canvas)
+        pooledBytes += bytes
+    }
+    const build = async m => {
         for (const [key, bitmap] of m.add)
             sprites.set(key, bitmap)
-        const out = [], t0 = performance.now()
+        const t0 = performance.now(), used = [], pending = []
         let ops = 0
-        for (const target of m.targets) {
-            const canvas = new OffscreenCanvas(target.w, target.h), ctx = canvas.getContext('2d')
-            SectorDraw.drawSegs(ctx, target.segs, sprites)
-            for (const seg of target.segs)
-                ops += seg.o.length
-            out.push([target.k, canvas.transferToImageBitmap()])
+        try {
+            for (const target of m.targets) {
+                const canvas = take(target.w, target.h), ctx = canvas.getContext('2d')
+                used.push(canvas)
+                ctx.clearRect(0, 0, target.w, target.h)
+                ctx.beginPath()
+                ctx.save()
+                let saves = 0
+                SectorDraw.drawSegs(ctx, target.segs, sprites)
+                for (const seg of target.segs) {
+                    ops += seg.o.length
+                    for (const op of seg.o)
+                        saves += op[0] === 'save' ? 1 : op[0] === 'restore' ? -1 : 0
+                }
+                for (let k = Math.max(0, saves); k >= 0; --k)
+                    ctx.restore()
+                pending.push(createImageBitmap(canvas).then(bitmap => [target.k, bitmap]))
+            }
+            const out = await Promise.all(pending)
+            postMessage({t: 'built', id: m.id, out, ms: performance.now() - t0, ops}, out.map(o => o[1]))
+        } finally {
+            for (const canvas of used)
+                give(canvas)
         }
-        postMessage({t: 'built', id: m.id, out, ms: performance.now() - t0, ops}, out.map(o => o[1]))
     }
+    let builds = Promise.resolve()
     onmessage = e => {
         const m = e.data
         if (m.t === 'init') {
@@ -66,13 +118,9 @@ if (typeof importScripts === 'function' && typeof document === 'undefined' && ty
             return
         }
         if (m.t === 'build')
-            fontsReady.then(() => {
-                try {
-                    build(m)
-                } catch (error) {
-                    postMessage({t: 'failed', id: m.id, error: String(error?.stack || error)})
-                }
-            })
+            // one build at a time (the pooled canvases are the build's until its pictures are copied out)
+            builds = builds.then(() => fontsReady).then(() => build(m)).catch(error =>
+                postMessage({t: 'failed', id: m.id, error: String(error?.stack || error)}))
     }
 }
 
@@ -231,7 +279,19 @@ const SectorWorker = {
     },
     // Whether the builds in flight fill the queue (SECTOR_WORKER_QUEUE): the board starts no new sector build then.
     busy() {
-        return this.state === 'on' && this.inflight.size >= SECTOR_WORKER_QUEUE
+        if (this.state !== 'on')
+            return false
+        if (this.inflight.size >= SECTOR_WORKER_QUEUE_MAX)
+            return true
+        let ms = 0
+        for (const job of this.inflight.values())
+            ms += this.kindMs(job.kind)
+        return ms >= SECTOR_WORKER_QUEUE_MS - 1e-9
+    },
+    // TASK-1565 rework: a build's expected time in the worker (ms): the mean of its kind's builds so far.
+    kindMs(kind) {
+        const k = this.counters.byKind?.[kind]
+        return k?.n ? k.ms / k.n : SECTOR_WORKER_QUEUE_MS / SECTOR_WORKER_QUEUE
     },
     // Whether a sprite key cannot go to the worker.
     bad(key) {
