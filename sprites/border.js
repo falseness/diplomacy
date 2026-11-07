@@ -220,7 +220,8 @@ class MapDepth {
                 break
         }
 
-        this.outline = new Path2D()
+        // TASK-1563: SectorPaths, so the sector snapshots of lit tiles (SectorRecorder) keep the outline and rim they draw.
+        this.outline = typeof SectorPath === 'function' ? new SectorPath() : new Path2D()
         this.outline.moveTo(orderedEdges[0].begin.x, orderedEdges[0].begin.y)
         for (let i = 0; i < orderedEdges.length; ++i)
             this.outline.lineTo(orderedEdges[i].end.x, orderedEdges[i].end.y)
@@ -228,7 +229,7 @@ class MapDepth {
         // The outline's points, as the path above (closed back to the first).
         this.outlineLoop = [orderedEdges[0].begin, ...orderedEdges.map(edge => edge.end)]
 
-        this.rim = new Path2D()
+        this.rim = typeof SectorPath === 'function' ? new SectorPath() : new Path2D()
         for (let i = 0; i < this.edges.length; ++i) {
             this.rim.moveTo(this.edges[i].begin.x, this.edges[i].begin.y)
             this.rim.lineTo(this.edges[i].end.x, this.edges[i].end.y)

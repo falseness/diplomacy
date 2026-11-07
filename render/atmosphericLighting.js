@@ -1470,7 +1470,8 @@ const atmosphericLighting = {
         if (!memo) return null
         const kept = memo.get(kind)
         if (kept && kept.cells.length === cells.length && kept.cells.every((cell, k) => same(cell, cells[k]))) return kept.path
-        const path = new Path2D()
+        // TASK-1563: a SectorPath, so a lit tile's sector snapshot (SectorRecorder) keeps it.
+        const path = new SectorPath()
         add(path)
         memo.set(kind, {cells, path})
         return path
@@ -3012,6 +3013,9 @@ const atmosphericLighting = {
 // (Grid.patchSurfaceCache, Grid.startLitPatch) draws with those of the canvas it patches (its gradientSource), so a patch
 // makes none. A gradient is defined in user space and draws the same on any context.
 function gradientContext(ctx) {
+    // TASK-1563: a sector build's recording context (SectorRecorder) makes recorded gradients: cached apart from real ones.
+    if (ctx.sectorGradients)
+        return ctx.sectorGradients
     return ctx.canvas && ctx.canvas.gradientSource || ctx
 }
 // The world rectangle of atmosphericLighting.clipWindow for a redraw clipped to the pixel rectangle rect of a W x H

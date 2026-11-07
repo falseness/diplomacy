@@ -522,6 +522,8 @@ class Grid extends SpritesGroup {
     // tiles (TASK-1316, LIT_LAYER_PARTS).
     drawHexagons(ctx, part) {
         const atmosphericTransform = otherSettings.atmosphericVisuals ? ctx.getTransform() : undefined
+        // TASK-1563: a sector recording (SectorRecorder) is told the cell each tile is drawn for.
+        const mark = ctx.sectorCell, cells = mark ? [] : null
         const hexagons = [], tiles = []
         const range = this.drawRange(ctx, true), drawn = this.drawRange(ctx)
         // A patch's clipped redraw draws the tiles of the cells reaching its clip (atmosphericLighting.clipWindow).
@@ -535,8 +537,10 @@ class Grid extends SpritesGroup {
                     continue
                 const hexagon = observed || this.arr[i][j].hexagon
                 hexagons.push(hexagon)
-                if (i >= drawn.i0 && i < drawn.i1 && (!clip || atmosphericLighting.inClipWindow([{pos: hexagon.calcPos()}]).length))
+                if (i >= drawn.i0 && i < drawn.i1 && (!clip || atmosphericLighting.inClipWindow([{pos: hexagon.calcPos()}]).length)) {
                     tiles.push(hexagon)
+                    cells?.push(i, j)
+                }
             }
         }
         // Grout under the drawn cells only: hidden cells keep their fog tile.
@@ -546,8 +550,11 @@ class Grid extends SpritesGroup {
             return
         const from = part ? Math.floor(part.k * tiles.length / part.n) : 0
         const to = part ? Math.floor((part.k + 1) * tiles.length / part.n) : tiles.length
-        for (let k = from; k < to; ++k)
+        for (let k = from; k < to; ++k) {
+            mark?.(cells[2 * k], cells[2 * k + 1])
             tiles[k].draw(ctx, atmosphericTransform)
+        }
+        mark?.(-1)
     }
     // Cell texts are set while their cells are drawn (production previews), within the same
     // drawn range, so the range also holds every text to draw and clear.
@@ -681,8 +688,10 @@ class Grid extends SpritesGroup {
     drawOther(ctx, layer, range = this.drawRange(ctx), bars = null) {
         const buildings = layer !== 'units', units = layer !== 'buildings'
         let tmpBuildings = []
+        const mark = ctx.sectorCell
         for (let i = range.i0; i < range.i1; ++i) {
             for (let j = range.j0; j < range.j1; ++j) {
+                mark?.(i, j)
                 if (isFogOfWar && !this.fogOfWar[i][j]) {
                     if (buildings && this.spriteInPatchCells(this.arr[i][j].building))
                         this.drawFogLandmark(ctx, this.arr[i][j].building)
@@ -703,6 +712,7 @@ class Grid extends SpritesGroup {
                 else if (unit) unit.draw(ctx)
             }
         }
+        mark?.(-1)
         if (bars) {
             bars.push(...tmpBuildings)
             return
@@ -832,6 +842,15 @@ class Grid extends SpritesGroup {
     // cells (board indices, ascending) when given, else all of them. Returns the range.
     forEachDrawnCell(ctx, cells, visit) {
         const range = this.drawRange(ctx)
+        // TASK-1563: a sector recording (SectorRecorder) is told the cell being drawn.
+        const mark = ctx.sectorCell
+        if (mark) {
+            const inner = visit
+            visit = (cell, i, j) => {
+                mark(i, j)
+                inner(cell, i, j)
+            }
+        }
         if (cells) {
             const h = this.arr[0].length
             for (let k = 0; k < cells.length; ++k) {
@@ -839,12 +858,40 @@ class Grid extends SpritesGroup {
                 if (i >= range.i0 && i < range.i1 && j >= range.j0 && j < range.j1)
                     visit(this.arr[i][j], i, j)
             }
+            mark?.(-1)
             return range
         }
         for (let i = range.i0; i < range.i1; ++i)
             for (let j = range.j0; j < range.j1; ++j)
                 visit(this.arr[i][j], i, j)
+        mark?.(-1)
         return range
+    }
+    // TASK-1563: a sector snapshot (render/sectorDraw.js) of kind 'lit' or 'unit' for sector (u, v) at level, range the
+    // cells whose drawing reaches it (the sector's and the pad's): their board snapshot rows (sectorCellRow) in board order;
+    // and its sink (SectorRecorder's: the sprites by key, the cells' indices).
+    sectorSnapshot(kind, level, u, v, range) {
+        const snapshot = {v: 1, kind, level, u, v, size: LIT_TILE, range: {i0: range.i0, i1: range.i1, j0: range.j0, j1: range.j1},
+            cells: [], targets: [], opaque: 0, reads: 0}
+        const h = this.arr[0].length, cellIndex = new Map()
+        for (let i = range.i0; i < range.i1; ++i)
+            for (let j = range.j0; j < range.j1; ++j) {
+                cellIndex.set(i * h + j, snapshot.cells.length)
+                snapshot.cells.push(this.sectorCellRow(i, j))
+            }
+        return {snapshot, sink: {sprites: new Map(), cellIndex, h, cellRow: (i, j) => this.sectorCellRow(i, j)}}
+    }
+    // TASK-1563: a cell's row in a sector snapshot: [i, j, flags (SECTOR_CELL_*), the unit's class or null, the building's
+    // class or null, the hexagon's owner colour (null: unknown)].
+    sectorCellRow(i, j) {
+        const cell = this.arr[i]?.[j]
+        if (!cell)
+            return [i, j, SECTOR_CELL_EDGE, null, null, null]
+        const building = cell.building, unit = cell.unit
+        const flags = (isFogOfWar && !this.fogOfWar[i][j] ? SECTOR_CELL_FOG : 0) | (building.isMapEdge ? SECTOR_CELL_EDGE : 0) |
+            (this.observedBuilding(cell) ? SECTOR_CELL_OBSERVED : 0) | (cell.infoText?.text ? SECTOR_CELL_TEXT : 0)
+        return [i, j, flags, unit.notEmpty() ? unit.constructor.name : null,
+            building.notEmpty() && !building.isMapEdge ? building.constructor.name : null, cell.hexagon.playerColor ?? null]
     }
     // Whether drawStillUnits or drawEntityOverlays can draw anything on the cell: a unit, a
     // production, a demon portal or a building that shows its bars (TASK-1513: showsBar; Building.hasBar was a method,
@@ -6258,13 +6305,22 @@ class Grid extends SpritesGroup {
             this.unitSectorCheck(range)
             const canvas = document.createElement('canvas')
             canvas.width = canvas.height = LIT_TILE
-            const g = canvas.getContext('2d'), holder = {calls: null}
-            countDrawCalls(g, holder)
+            const holder = {calls: null}
+            let g = canvas.getContext('2d'), sector = null, recorder = null
+            // TASK-1563: drawn through SectorDraw: the steps recorded into the sector's snapshot (g its recording context,
+            // counting the draw calls in holder as countDrawCalls does), each step's runs drawn on the canvas (flush).
+            if (Grid.sectorModule) {
+                sector = this.sectorSnapshot('unit', level, u, v, range)
+                recorder = new SectorRecorder(g, sector.snapshot, sector.sink, 0, holder)
+                g = recorder.context
+            }
+            else
+                countDrawCalls(g, holder)
             applyCanvasState(g, {...plan.state, transform})
             const span = LIT_TILE / level
             const box = {left: u * span, top: v * span, right: (u + 1) * span, bottom: (v + 1) * span}
             b = {job, plan, u, v, ground, canvas, g, holder, range, box, texts: [], next: 0, changes: this.unitCellChanges,
-                steps: this.unitSectorSteps(plan, range, draw), step: 0}
+                steps: this.unitSectorSteps(plan, range, draw), step: 0, sector, recorder}
         }
         this.unitSectorBuilding = b
         // The steps (ground, units pass, bars, each with the cell texts it set taken), each begun when its cost (about) fits
@@ -6277,6 +6333,7 @@ class Grid extends SpritesGroup {
                 break
             const n0 = calls ? calls.n : 0
             step.run(g)
+            b.recorder?.flush()
             if (step.cells !== undefined) {
                 // The cell texts the pass set on these cells (drawCellText's, taken now: the pass's info texts are cleared
                 // as drawn ones are), those reaching the square.
@@ -6288,8 +6345,10 @@ class Grid extends SpritesGroup {
             }
             ++b.step
         }
-        if (b.step === b.steps.length)
+        if (b.step === b.steps.length) {
             b.next = this.drawSectorTexts(g, b.texts, b.next, calls)
+            b.recorder?.flush()
+        }
         b.holder.calls = null
         if (b.step < b.steps.length || b.next < b.texts.length) {
             ++this.unitSectorWork.cut
@@ -6298,7 +6357,11 @@ class Grid extends SpritesGroup {
             return false
         }
         this.unitSectorBuilding = undefined
-        g.getImageData(0, 0, 1, 1)
+        if (b.recorder) {
+            b.recorder.end()
+            Grid.onSectorSnapshot?.(b.sector.snapshot, b.sector.sink.sprites, [b.canvas])
+        }
+        b.canvas.getContext('2d').getImageData(0, 0, 1, 1)
         const before = this.unitSectors.evictions
         const entry = this.unitSectors.put(level, u, v, b.canvas)
         entry.ground = ground
@@ -7877,6 +7940,26 @@ class Grid extends SpritesGroup {
                 underlay: {left: (px - view.e) / view.a, top: (py - view.f) / view.d, right: (px + Q - view.e) / view.a, bottom: (py + Q - view.f) / view.d}})
             part.litDrawn = true
         }
+        // TASK-1563: the quarters drawn through SectorDraw: each step recorded into the tile's sector snapshot (a quarter a
+        // target, q.g its recording context), then the step's runs drawn on the quarter (flush).
+        let sector = null
+        if (Grid.sectorModule) {
+            const level = view.a, transform = {a: level, b: 0, c: 0, d: level, e: view.e - X, f: view.f - Y}
+            const range = this.drawRange({getTransform: () => transform, canvas: {width: LIT_TILE, height: LIT_TILE}}, true)
+            sector = this.sectorSnapshot('lit', level, u, v, range)
+            for (const q of quarters) {
+                const k = tile.parts.indexOf(q.part)
+                q.recorder = new SectorRecorder(q.g, sector.snapshot, sector.sink, k)
+                q.recorder.entry.x = (k & 1) * Q
+                q.recorder.entry.y = (k >> 1) * Q
+                q.g = q.recorder.context
+            }
+        }
+        const flush = () => {
+            if (sector)
+                for (const q of quarters)
+                    q.recorder.flush()
+        }
         // A step drawn into each quarter, the union paths it traces shared by the quarters (atmosphericLighting.pathMemo), the
         // lamp overlays and cell tiles drawn from their crop boxes (cropOverlays).
         const each = draw => {
@@ -7912,15 +7995,19 @@ class Grid extends SpritesGroup {
                 const r = q.underlay
                 LIT_SCENE_PARTS[0](this, g, {left: r.left - grow, top: r.top - grow, right: r.right + grow, bottom: r.bottom + grow, inside: q.inside})
             })
+            flush()
             yield
             each(g => this.drawHexagons(g, {grout: true, n: 0}))
+            flush()
             yield
             for (let k = 0; k < LIT_TILE_HEX_STEPS; ++k) {
                 each(g => this.drawHexagons(g, {k, n: LIT_TILE_HEX_STEPS, grout: false}))
+                flush()
                 yield
             }
             for (const part of LIT_SCENE_PARTS.slice(2)) {
                 each(g => part(this, g))
+                flush()
                 yield
             }
             // The light everywhere on the quarter but in the edge runs (even-odd: they do not overlap).
@@ -7940,9 +8027,14 @@ class Grid extends SpritesGroup {
         } finally {
             for (const q of quarters)
                 q.g.restore()
+            if (sector)
+                for (const q of quarters)
+                    q.recorder.end()
             if (!done)
                 this.releaseLitTile(tile)
         }
+        if (sector && Grid.onSectorSnapshot)
+            Grid.onSectorSnapshot(sector.snapshot, sector.sink.sprites, tile.parts)
         tile.litOutline = mapDepth.outline
         // The board outline the tile's drawn square is opaque under (frameCover), if any.
         tile.litOpaque = this.litSquareOpaque(view, X, Y, X + LIT_TILE, Y + LIT_TILE) ? mapDepth.outline : null
@@ -9846,6 +9938,194 @@ class CanvasCallRecorder {
         replayCanvasCalls(ctx, this.calls, this.labels, this.overlayEnd, overlays, from, to)
     }
 }
+
+// TASK-1563 (SECTORS 7/11): a recording context for a sector build (SectorDraw, render/sectorDraw.js). The drawing code
+// draws a sector's target on context (an ES Proxy) as it drew on the target's 2D context; the calls and property sets are
+// put in the snapshot's runs (SectorDraw's ops, their values serializable: images by sprite key, gradients and patterns
+// made by the recording, SectorPath paths), each run with the cell being drawn (sectorCell, called by the board's cell
+// loops: Grid.drawOther, forEachDrawnCell, drawHexagons) and the visualsPerf layer (canvasCallLabels). State, transform
+// and query calls also go to a scratch 2D context in the same state, so the drawing code reads the transform, state and
+// text metrics it read on the target; drawing calls are only recorded (and counted in holder.calls, as countDrawCalls
+// counts them on a canvas). flush() draws the runs recorded since the last flush on the target through SectorDraw: the
+// main thread's sector builds draw only through it (one code path with a Worker's). A pixel read (getImageData) flushes and
+// reads the target. Values that cannot be serialized (a Path2D not a SectorPath, a gradient made on a real context) are
+// kept by key and counted in snapshot.opaque.
+const SECTOR_STATE_CALLS = new Set(['save', 'restore', 'setTransform', 'transform', 'translate', 'scale', 'rotate',
+    'resetTransform', 'setLineDash', 'reset'])
+const SECTOR_QUERY_CALLS = new Set(['getTransform', 'measureText', 'getLineDash', 'isContextLost', 'getContextAttributes',
+    'createImageData'])
+// atmosphericLighting.gradient's owner for recorded gradients (gradientContext): SectorGradients, never a real context's.
+const SECTOR_GRADIENT_OWNER = {sectorGradients: true}
+const sectorScratchPool = []
+let sectorValueKeys = new WeakMap(), sectorValueSerial = 0
+class SectorRecorder {
+    // target: the real 2D context the runs are drawn on; snapshot: Grid.sectorSnapshot's (its targets get {k, segs});
+    // sink: {sprites (key -> image), cellIndex (board index -> index in snapshot.cells)}.
+    constructor(target, snapshot, sink, k, holder = null) {
+        this.target = target
+        this.snapshot = snapshot
+        this.sink = sink
+        this.holder = holder
+        const canvas = target.canvas
+        this.entry = {k, x: 0, y: 0, w: canvas.width, h: canvas.height, segs: []}
+        snapshot.targets.push(this.entry)
+        this.segs = this.entry.segs
+        this.seg = null
+        this.flushed = 0
+        this.cell = -1
+        this.labels = typeof canvasCallLabels !== 'undefined' ? canvasCallLabels : null
+        this.within = this.labels ? (label, fn) => this.labels.within(label, fn) : null
+        // fillStyle / strokeStyle set to a recorded gradient or pattern (the scratch context keeps its own then).
+        this.fake = {}
+        this.fakes = []
+        const scratchCanvas = sectorScratchPool.pop() || document.createElement('canvas')
+        this.scratchCanvas = scratchCanvas
+        const g = this.scratch = scratchCanvas.getContext('2d')
+        if (typeof g.reset === 'function') g.reset()
+        else scratchCanvas.width = 1
+        const t = target.getTransform()
+        g.setTransform(t.a, t.b, t.c, t.d, t.e, t.f)
+        for (const name of CANVAS_STATE)
+            if (name in target) g[name] = target[name]
+        if (typeof target.getLineDash === 'function') g.setLineDash(target.getLineDash())
+        const recorder = this, methods = new Map()
+        const cell = (i, j) => recorder.setCell(i, j)
+        this.context = new Proxy({}, {
+            get(_, name) {
+                if (name === 'canvas') return canvas
+                if (name === 'sectorCell') return cell
+                if (name === 'sectorGradients') return SECTOR_GRADIENT_OWNER
+                const fake = recorder.fake[name]
+                if (fake !== undefined) return fake
+                const value = recorder.scratch[name]
+                if (typeof value !== 'function') return value
+                let method = methods.get(name)
+                if (!method) methods.set(name, method = (...args) => recorder.call(name, args))
+                return method
+            },
+            set(_, name, value) {
+                recorder.op(['=', name, recorder.encode(value)])
+                if (value instanceof SectorGradient || value?.sp)
+                    recorder.fake[name] = value
+                else {
+                    recorder.fake[name] = undefined
+                    recorder.scratch[name] = value
+                }
+                return true
+            },
+            has(_, name) {
+                return name === 'canvas' || name === 'sectorCell' || name === 'sectorGradients' || name in recorder.scratch
+            }
+        })
+    }
+    // The cell (board indices) the next calls draw; -1: the sector's own.
+    setCell(i, j) {
+        if (i < 0) {
+            this.cell = -1
+            return
+        }
+        const index = i * this.sink.h + j
+        let c = this.sink.cellIndex.get(index)
+        if (c === undefined) {
+            c = this.snapshot.cells.length
+            this.snapshot.cells.push(this.sink.cellRow(i, j))
+            this.sink.cellIndex.set(index, c)
+        }
+        this.cell = c
+    }
+    op(o) {
+        const l = this.labels ? this.labels.current() : null
+        let s = this.seg
+        if (!s || s.c !== this.cell || s.l !== l) {
+            s = this.seg = {c: this.cell, l, o: []}
+            this.segs.push(s)
+        }
+        s.o.push(o)
+    }
+    key(value) {
+        let key = sectorValueKeys.get(value)
+        if (key === undefined)
+            sectorValueKeys.set(value, key = 'k' + (++sectorValueSerial))
+        this.sink.sprites.set(key, value)
+        return key
+    }
+    // A value as SectorDraw takes it (render/sectorDraw.js's list).
+    encode(v) {
+        if (typeof v !== 'object' || v === null || Array.isArray(v) || v instanceof SectorGradient || v.sp)
+            return v
+        if (v instanceof SectorPath)
+            return v.sectorValue ||= {path: v.cmds}
+        if (typeof ImageData !== 'undefined' && v instanceof ImageData)
+            return {id: [v.width, v.height, v.data]}
+        if (typeof v.width === 'number' && typeof v.height === 'number' && !(typeof Path2D !== 'undefined' && v instanceof Path2D))
+            return {s: this.key(v)}
+        ++this.snapshot.opaque
+        return {o: this.key(v)}
+    }
+    call(name, args) {
+        const g = this.scratch
+        if (SECTOR_QUERY_CALLS.has(name))
+            return g[name](...args)
+        if (name === 'createLinearGradient')
+            return new SectorGradient('linear', args)
+        if (name === 'createRadialGradient')
+            return new SectorGradient('radial', args)
+        if (name === 'createConicGradient')
+            return new SectorGradient('conic', args)
+        if (name === 'createPattern')
+            return {sp: 1, s: this.key(args[0]), rep: args[1] ?? null}
+        if (CANVAS_READ_CALLS.has(name)) {
+            this.flush()
+            ++this.snapshot.reads
+            return this.target[name](...args)
+        }
+        if (name === 'setTransform' && args.length === 1 && args[0] && typeof args[0] === 'object') {
+            const m = args[0]
+            this.op([name, {m: [m.a ?? m.m11 ?? 1, m.b ?? m.m12 ?? 0, m.c ?? m.m21 ?? 0, m.d ?? m.m22 ?? 1, m.e ?? m.m41 ?? 0,
+                m.f ?? m.m42 ?? 0]}])
+        }
+        else {
+            const o = [name]
+            for (let k = 0; k < args.length; ++k)
+                o.push(this.encode(args[k]))
+            this.op(o)
+        }
+        if (CANVAS_DRAW_CALLS.has(name)) {
+            if (this.holder && this.holder.calls)
+                ++this.holder.calls.n
+            return undefined
+        }
+        if (SECTOR_STATE_CALLS.has(name)) {
+            if (name === 'save')
+                this.fakes.push({...this.fake})
+            else if (name === 'restore' && this.fakes.length)
+                this.fake = this.fakes.pop()
+            else if (name === 'reset') {
+                this.fake = {}
+                this.fakes.length = 0
+            }
+            return g[name](...args)
+        }
+        return undefined
+    }
+    // The runs recorded since the last flush drawn on the target (SectorDraw).
+    flush() {
+        if (this.flushed === this.segs.length)
+            return
+        const from = this.flushed
+        this.flushed = this.segs.length
+        this.seg = null
+        SectorDraw.drawSegs(this.target, this.segs, this.sink.sprites, this.within, from, this.flushed)
+    }
+    // Flushed, and the scratch canvas given back.
+    end() {
+        this.flush()
+        if (this.scratchCanvas) {
+            sectorScratchPool.push(this.scratchCanvas)
+            this.scratchCanvas = null
+        }
+    }
+}
 // ctx's state properties and line dash (not its transform), as applyCanvasState and Grid.drawHeldFrame set them.
 function canvasStateOf(ctx) {
     const state = {}
@@ -10683,6 +10963,12 @@ const UNIT_SECTOR_BURST_MS = 100
 Grid.unitSectorsAtRest = true
 // TASK-1562 (SECTORS 6/11): zoom levels (Grid.drawZoomSectors, levelSettle, sectorRest). False: the zoom raster as before.
 Grid.zoomLevels = true
+// TASK-1563: sector builds (lit tiles' quarters, unit sectors) recorded into a sector snapshot (SectorRecorder) and drawn
+// by SectorDraw (render/sectorDraw.js) from it; false: drawn directly by the board's drawing code (the pre-TASK-1563 path,
+// kept for the equivalence audit).
+Grid.sectorModule = true
+// TASK-1563: called with (snapshot, sprites, canvases) when a sector build made through SectorDraw ends (audits).
+Grid.onSectorSnapshot = null
 // The levels a level frame stretches from (the best first: stretchSources).
 const LEVEL_SOURCES = 4
 // The sectors a level frame draws stretched at most (stretchCover).
