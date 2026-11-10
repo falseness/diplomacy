@@ -261,7 +261,11 @@ class Grid extends SpritesGroup {
             litZooming: 0, litDefers: 0, litBehind: 0, whole: 0, levelSteps: 0, levelStepMs: 0,
             // TASK-1568: the lit tasks that deferred (litTaskDefers, moving or not) by the condition that held (each true one
             // counted: a deferral can count under more than one).
-            litDeferBy: {surfaceQueued: 0, overlayQueued: 0, overlaySnapshot: 0}}
+            litDeferBy: {surfaceQueued: 0, overlayQueued: 0, overlaySnapshot: 0},
+            // TASK-1569: the lit tasks that ran though a condition held (litTaskDefers: sharing the pause, Grid.litShareTurns),
+            // moving (the frame's time budget bounds them) or at rest after one deferral; and the queued surface cache tasks
+            // not waited for as they will draw nothing (a split task in a zoom's quiet, surfaceTaskIdle).
+            litShared: {moving: 0, rest: 0}, litIdleSurface: 0}
         // TASK-1565: the draw calls a lit tile's steps record (litTileSteps' recorders count them in calls.n while calls is set).
         this.litStepHolder = {calls: null}
         this.aheadUnitRatio = 1
@@ -348,6 +352,10 @@ class Grid extends SpritesGroup {
         // stages draw the raster on.
         this.surfaceCacheBuild = undefined
         this.surfaceCacheQueued = false
+        // TASK-1569: the kind of the queued surface task ('patch', 'split', 'build': surfaceTaskIdle) and whether a lit task gave up
+        // its turn since the last one ran (litTaskDefers)
+        this.surfaceQueuedKind = undefined
+        this.litDeferred = false
         this.surfaceCacheChecked = 0
         this.surfaceCacheDirty = false
         this.surfaceCacheStages = 0
@@ -3222,6 +3230,7 @@ class Grid extends SpritesGroup {
             if (performance.now() - this.surfaceCacheChecked < SURFACE_PATCH_CHECK_MS)
                 return
             this.surfaceCacheQueued = true
+            this.surfaceQueuedKind = 'patch'
             setTimeout(gridTask(() => {
                 this.surfaceCacheQueued = false
                 if (this === grid && otherSettings.atmosphericVisuals && this.surfaceCache && !this.surfaceCacheBuild &&
@@ -3258,6 +3267,7 @@ class Grid extends SpritesGroup {
         // TASK-1372: the cache's split, a step a task (surfaceSplitStep).
         if (this.surfaceSplitJob) {
             this.surfaceCacheQueued = true
+            this.surfaceQueuedKind = 'split'
             setTimeout(gridTask(() => {
                 this.surfaceCacheQueued = false
                 // TASK-1562: none after a zoom (Grid.zoomQuiet: its finish composes the whole cache, ~14 MP).
@@ -3270,6 +3280,7 @@ class Grid extends SpritesGroup {
                 performance.now() - this.surfaceCacheChecked < SURFACE_CACHE_CHECK_MS)
             return
         this.surfaceCacheQueued = true
+        this.surfaceQueuedKind = 'build'
         setTimeout(gridTask(() => {
             this.surfaceCacheQueued = false
             // A board replaced meanwhile (another game or tutorial started) builds nothing: its units read the new grid.
@@ -8120,11 +8131,13 @@ class Grid extends SpritesGroup {
             // Nothing is built inside a zoom gesture (its frames keep their live light), nor (TASK-1316) for a board the
             // view's cell layer is behind (the next frame brings it up, followCellLayer; a tile built now would also bring
             // the light map's owners up in the task drawing from it).
-            if (view !== this.litView || gameEvent.screen.surfaceZooming || this.litTaskDefers(snapshots, true) || this.litLayerBehind(view)) {
+            // (TASK-1569: litTaskDefers asked once: it keeps whether this lit task already deferred, litDeferred)
+            const otherView = view !== this.litView, zooming = gameEvent.screen.surfaceZooming
+            const defers = !otherView && !zooming && this.litTaskDefers(snapshots, true)
+            if (otherView || zooming || defers || this.litLayerBehind(view)) {
                 // TASK-1565 rework: a moving camera's tile task that built nothing for these (visualsPerf work.sectorAhead)
                 if (gameEvent.screen.surfaceMoving)
-                    ++this.aheadWork[view !== this.litView ? 'litOtherView' : gameEvent.screen.surfaceZooming ? 'litZooming' :
-                        this.litTaskDefers(snapshots) ? 'litDefers' : 'litBehind']
+                    ++this.aheadWork[otherView ? 'litOtherView' : zooming ? 'litZooming' : defers ? 'litDefers' : 'litBehind']
                 return
             }
             if (gameEvent.screen.surfaceMoving)
@@ -8262,18 +8275,44 @@ class Grid extends SpritesGroup {
     // so their drawing does not add up: a surface cache stage or check queued, or an overlay snapshot queued or made since
     // the frame that queued the lit task (snapshots: overlaySnapshots then).
     // TASK-1568: count = the caller gives up its task when true: the conditions that held are counted (aheadWork.litDeferBy).
+    // TASK-1569 (Grid.litShareTurns): never deferred forever (on the user's phone capture the surface cache's split task, queued
+    // by every frame after the lit task and stepping only outside a zoom's quiet, deferred 456 of 458 moving lit tasks: tiles on
+    // the canvas drawn from the stand-in for seconds, artifacts/TASK-1568/defer-causes.md). The two tasks' drawing in one pause
+    // stays bounded by time instead: while the camera moves the lit task shares the pause (its steps within the frame's time
+    // budget, AHEAD_WORKER_FRAME_MS / LIT_TASK_MS, buildLitTiles; the surface task a step of SURFACE_STEP_MS); at rest it defers
+    // once and the next lit task (the next pause, litDeferred) runs within its own budget (LIT_REST_TASK_MS). A queued surface
+    // task that will draw nothing (surfaceTaskIdle) is not waited for.
     litTaskDefers(snapshots, count = false) {
         if (!Grid.litStandIns)
             return false
-        const surfaceQueued = !!this.surfaceCacheQueued, overlayQueued = !!this.overlayComposite?.queued,
+        const queued = !!this.surfaceCacheQueued, idle = Grid.litShareTurns && queued && this.surfaceTaskIdle()
+        const surfaceQueued = queued && !idle, overlayQueued = !!this.overlayComposite?.queued,
             overlaySnapshot = this.overlaySnapshots !== snapshots
-        if (count && this.aheadWork) {
+        const held = surfaceQueued || overlayQueued || overlaySnapshot
+        if (Grid.litShareTurns && count) {
+            if (idle && this.aheadWork)
+                ++this.aheadWork.litIdleSurface
+            const moving = typeof gameEvent !== 'undefined' && !!gameEvent.screen?.surfaceMoving
+            if (!held || moving || this.litDeferred) {
+                if (held && this.aheadWork)
+                    ++this.aheadWork.litShared[moving ? 'moving' : 'rest']
+                this.litDeferred = false
+                return false
+            }
+            this.litDeferred = true
+        }
+        if (count && held && this.aheadWork) {
             const by = this.aheadWork.litDeferBy
             if (surfaceQueued) ++by.surfaceQueued
             if (overlayQueued) ++by.overlayQueued
             if (overlaySnapshot) ++by.overlaySnapshot
         }
-        return surfaceQueued || overlayQueued || overlaySnapshot
+        return held
+    }
+    // TASK-1569: whether the queued surface cache task (surfaceCacheQueued) will draw nothing when it runs: a split task in a zoom's
+    // quiet with the cache there (prepareSurfaceCache: it steps only outside Grid.zoomQuiet or when cacheUrgent).
+    surfaceTaskIdle() {
+        return this.surfaceQueuedKind === 'split' && Grid.zoomQuiet() && !this.cacheUrgent()
     }
     // Draws tile (u, v) of view as the direct draw draws the canvas there, without the sky: the
     // surface, the buildings and the light but in view's edge runs (drawLitEdges lights them in
@@ -11464,6 +11503,10 @@ const CELL_RENDER_MARGIN = 4
 // costs about three times a cached frame), and over a tile not built yet. False: a frame builds what it draws (the light
 // map and the visible tiles), as a whole rebuild does.
 Grid.litStandIns = true
+// TASK-1569: a lit task deferred by litTaskDefers shares the pause while the camera moves and runs at the latest in the next
+// pause at rest, and a queued surface task that will draw nothing (surfaceTaskIdle) is not waited for; false: as TASK-1568
+// (deferred while any condition holds).
+Grid.litShareTurns = true
 // TASK-1553: a lit frame's tile squares drawn from the stand-in inside the board outline get no sky (Grid.frameCover), and
 // the slab shadow is clipped to the part of the canvas the sky is drawn on (Grid.drawSlabShadow).
 Grid.standInCover = true
