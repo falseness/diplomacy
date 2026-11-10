@@ -75,7 +75,7 @@
             frame.work.sectorAhead = sectorAheadDelta(board)
             frame.work.standInPx = Math.round(work.standInPx)
             // TASK-1568: on-screen board pixels (device, the main canvas) drawn as the board's plain ground fill for a square
-            // without its tile (visualsPerf.groundFill; none in this client: 0).
+            // without its tile (visualsPerf.groundFill: TASK-1571 Grid.drawGroundFill).
             frame.work.groundFillPx = Math.round(work.groundFillPx)
             frame.work.standInPxBy = Object.fromEntries(Object.entries(work.standInPx ? work.standInPxBy : {}).map(([k, v]) => [k, Math.round(v)]))
             frame.work.layerFullRebuildCount = Object.values(work.layerFullRebuild).reduce((a, b) => a + b, 0)
@@ -537,7 +537,9 @@
         const surface = proto.drawMapSurface, layer = proto.drawOverlayLayer
         proto.drawMapSurface = function(...args) {
             const cached = surface.apply(this, args)
-            if (active) work.renderPath = cached === 'lit' ? 'lit-tiles' : cached === 'standin' ? 'stand-in' : cached ? 'surface-cache' : 'direct'
+            // TASK-1571: 'ground-fill', a lit frame whose view is not made yet (Grid.drawGroundFill over the board).
+            if (active) work.renderPath = cached === 'lit' ? 'lit-tiles' : cached === 'standin' ? 'stand-in' : cached === 'fill' ? 'ground-fill' :
+                cached ? 'surface-cache' : 'direct'
             return cached
         }
         proto.drawMapSurface.visualsPerf = true

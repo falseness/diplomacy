@@ -379,6 +379,12 @@ class Grid extends SpritesGroup {
         this.surfaceStandInPatches = 0
         // TASK-1519: stand-in caches whose cell layer was brought up for the lit view (litStandIn).
         this.standInFollows = 0
+        // TASK-1571: phone zoom gesture frames that drew the surface cache magnified (planLitView, Grid.litStandIns false).
+        this.gestureStandIns = 0
+        // TASK-1571: frames (or level frames) that drew the ground fill for squares without an exact picture (drawGroundFill).
+        this.groundFills = 0
+        // TASK-1571: drawLitView's squares without a tile (litFrameBuilds): found, built in the frame, filled.
+        this.litFrameWork = {missing: 0, built: 0, filled: 0, pending: 0, drawn: 0}
         // TASK-1553: frames whose stand-in squares got no sky (frameCover), and the sky drawn under them after all (coverSkyUnder).
         this.standInCovers = 0
         this.coverSkyUnders = 0
@@ -413,6 +419,8 @@ class Grid extends SpritesGroup {
         this.standInBuild = undefined
         this.standInQueued = false
         this.standInDrawnAt = -Infinity
+        // TASK-1571: when a frame at or below the cache's scale last drew the lit view for want of a cache (drawMapSurface).
+        this.cacheWaitedAt = -Infinity
         this.standInBuilds = 0
         this.standInKeeps = 0
         this.standInRelights = 0
@@ -3199,7 +3207,8 @@ class Grid extends SpritesGroup {
         if (!this.startRestFirst)
             return false
         // Only while the frames draw that view (a camera moved off it, to the cache's path, waits for nothing).
-        if (this.frameSurface !== 'lit') {
+        // TASK-1571: a camera on the cache's path drawing the lit view for want of the cache (drawMapSurface) waits for nothing.
+        if (this.frameSurface !== 'lit' || this.canUseSurfaceCache()) {
             this.startRestFirst = false
             return false
         }
@@ -3282,7 +3291,8 @@ class Grid extends SpritesGroup {
         const free = () => this === grid && otherSettings.atmosphericVisuals && (Grid.movingCacheBuilds || !gameEvent.screen.surfaceMoving)
         // TASK-1544: also while the frames draw its stand-in (drawStandIn, drawStandInRect within STANDIN_WAIT_MS: coarse until
         // the cache is built), moving or not.
-        const waiting = performance.now() - this.standInDrawnAt < STANDIN_WAIT_MS
+        // TASK-1571: so too while frames at the cache's scale draw the lit view for want of it (drawMapSurface, cacheWaitedAt).
+        const waiting = performance.now() - this.standInDrawnAt < STANDIN_WAIT_MS || performance.now() - this.cacheWaitedAt < STANDIN_WAIT_MS
         const budget = moving && this.frameSurface === false || waiting ? Grid.donorTaskMs : SURFACE_STEP_MS
         // TASK-1372: the cache's split, a step a task (surfaceSplitStep).
         if (this.surfaceSplitJob) {
@@ -3813,8 +3823,10 @@ class Grid extends SpritesGroup {
     // (as the cache does) and stands in only while that matches the board in view exactly (else it is built again); a
     // cache that does not match stands in only while the camera moves (at rest it is patched or rebuilt, and the frame
     // draws the board as before).
+    // TASK-1571 (Grid.standInsInGesture): only in an active zoom gesture (Grid.zoomGestureNow); outside one a frame without a
+    // cache at its scale draws the board directly and a lit frame its exact tiles or the ground fill (drawLitView).
     standInSource() {
-        if (!Grid.standIns || this !== grid || !otherSettings.atmosphericVisuals)
+        if (!Grid.standIns || this !== grid || !otherSettings.atmosphericVisuals || Grid.standInsInGesture && !Grid.zoomGestureNow())
             return null
         if (this.surfaceCache && this.surfaceCacheBounds)
             return typeof gameEvent !== 'undefined' && gameEvent.screen?.surfaceMoving ? 'cache' : null
@@ -6000,7 +6012,8 @@ class Grid extends SpritesGroup {
         const t = ctx.getTransform()
         let standIn, viewPending = false
         if (this.canUseSurfaceCache()) {
-            if (this.surfaceCache || !this.standInPreviewFits())
+            // TASK-1571 (Grid.standInsInGesture): the preview only in a zoom gesture.
+            if (this.surfaceCache || !this.standInPreviewFits() || Grid.standInsInGesture && !Grid.zoomGestureNow())
                 return false
             standIn = 'standin'
         }
@@ -6009,9 +6022,11 @@ class Grid extends SpritesGroup {
             let plan = this.litPlan
             if (plan === undefined || plan && (plan.t.a !== t.a || plan.t.d !== t.d || plan.t.e !== t.e || plan.t.f !== t.f))
                 plan = this.litPlan = this.planLitView(ctx)
-            if (!plan || !plan.cache)
+            if (!plan || !plan.cache && !plan.fill)
                 return false
-            standIn = this.litStandIn(ctx) || !!this.standInSource() && 'standin'
+            // TASK-1571 (Grid.litGroundFill): no stand-in: the ground fill under the squares (plan.fill), the sectors of the
+            // camera's level on an exact ground or stretched over it, else the units live over the fill.
+            standIn = plan.fill ? 'fill' : this.litStandIn(ctx) || !!this.standInSource() && 'standin'
         }
         if (!standIn)
             return false
@@ -6023,15 +6038,18 @@ class Grid extends SpritesGroup {
         if (!units)
             return false
         this.litPlan = undefined
-        units.standIn = standIn
-        units.token = this.unitStandInToken(standIn)
+        const fill = standIn === 'fill'
+        units.standIn = fill ? undefined : standIn
+        units.token = fill ? null : this.unitStandInToken(standIn)
         units.noView = true
         const cw = ctx.canvas.width, ch = ctx.canvas.height, ox = Math.round(t.e), oy = Math.round(t.f)
         this.unitSectorCheck(this.drawRange(ctx))
         const range = this.litTileRange(cw, ch, ox, oy, 0), board = this.unitBoardSquares(units.level)
         const lv = this.levelPlan(units, t, cw, ch, ox, oy)
         // The stand-in under every square (the sectors are opaque where the board is).
-        if (standIn === 'standin')
+        if (fill)
+            this.drawGroundFill(ctx, [{x: 0, y: 0, w: cw, h: ch}])
+        else if (standIn === 'standin')
             this.drawStandIn(ctx)
         else
             this.drawSurfaceCache(ctx)
@@ -6039,7 +6057,9 @@ class Grid extends SpritesGroup {
         ctx.save()
         ctx.setTransform(1, 0, 0, 1, 0, 0)
         for (const {u, v} of lv.squares) {
-            const entry = this.freshUnitSector(units, u, v, units.token) || this.levelAnySector(units, u, v)
+            // TASK-1571: over the fill only a sector on an exact ground (none built on a stand-in's).
+            const any = this.levelAnySector(units, u, v)
+            const entry = !fill && this.freshUnitSector(units, u, v, units.token) || (any && !(fill && any.ground?.standIn) ? any : null)
             if (entry) {
                 this.drawUnitSectorAt(ctx, entry, u * LIT_TILE + ox, v * LIT_TILE + oy)
                 if (entry.ground !== units.token)
@@ -6062,7 +6082,9 @@ class Grid extends SpritesGroup {
         this.drawLevelStretch(ctx, t, lv, cw, ch, ox, oy)
         this.litFrame = undefined
         this.unitFrame = {kind: 'standin', live, overlays, plan: units}
-        this.queueUnitSectors(units, wanted, range, board, cw, ch, ox, oy, upgrades)
+        // TASK-1571: none built on the fill (the lit view's frames build them on its tiles).
+        if (!fill)
+            this.queueUnitSectors(units, wanted, range, board, cw, ch, ox, oy, upgrades)
         if (levels)
             this.levelFrameEnd(lv, live.length, 'standin')
         return true
@@ -6767,6 +6789,13 @@ class Grid extends SpritesGroup {
         if (plan.cache)
             return this.drawSurfaceCache(ctx, true) ? 'cache' : false
         const cw = ctx.canvas.width, ch = ctx.canvas.height
+        // TASK-1571: the view at the camera's scale not made yet (its light map or edges by tasks): the ground fill over the
+        // board, the frame's units over it as over a stand-in (Grid.draw: 'fill').
+        if (plan.fill) {
+            this.litFrame = undefined
+            this.drawGroundFill(ctx, [{x: 0, y: 0, w: cw, h: ch}])
+            return 'fill'
+        }
         const {view, rest} = plan
         if (rest) {
             ctx.save()
@@ -6824,6 +6853,8 @@ class Grid extends SpritesGroup {
         const lv = units && levels ? this.levelPlan(units, t, cw, ch, Math.round(t.e), Math.round(t.f)) : null
         // TASK-1559: the sectors drawn this frame are the cache's most recent and are not evicted before the next frame.
         this.beginSectorFrame()
+        // TASK-1571 (Grid.litGroundFill): the squares without a tile the frame builds (litFrameBuilds), the others filled.
+        let builds = null, filled = null
         ctx.save()
         ctx.setTransform(1, 0, 0, 1, 0, 0)
         for (let v = range.v0; v <= range.v1; ++v) {
@@ -6881,6 +6912,41 @@ class Grid extends SpritesGroup {
                         }
                     }
                     (missing ||= new Set()).add(u + ',' + v)
+                    continue
+                }
+                // TASK-1571 (Grid.litGroundFill): a square without its tile not among the frame's builds: the ground fill there
+                // (a square the board does not reach: nothing, as its null tile), the units over it live (or an overlay
+                // sector's, or a clean sector of the camera's level on an exact ground, or stretched after a zoom).
+                if (Grid.litGroundFill && !this.litHas(view, u, v) &&
+                        !(builds ??= this.litFrameBuilds(view, range, cw, ch, ox, oy, (u, v) => units && u >= board.u0 && u <= board.u1 &&
+                            v >= board.v0 && v <= board.v1 && (!!lv?.cover.covered.has(u + ',' + v) ||
+                            !!this.levelAnySector(units, u, v) && !this.levelAnySector(units, u, v).ground?.standIn))).has(u + ',' + v)) {
+                    if (!this.litTileReaches(view, u, v))
+                        continue
+                    if (inBoard) {
+                        const any = this.levelAnySector(units, u, v)
+                        if (any && !any.ground?.standIn) {
+                            this.drawUnitSectorAt(ctx, any, u * LIT_TILE + ox, v * LIT_TILE + oy)
+                            ;(composed ||= new Set()).add(u + ',' + v)
+                            continue
+                        }
+                        // (After a zoom the stretched levels before the fill: a picture of the square, units and all.)
+                        const r = this.unitSquareRect(u, v, ox, oy, cw, ch)
+                        if (r && lv && lv.cover.covered.has(u + ',' + v)) {
+                            lv.stretch.push({u, v})
+                            ;(composed ||= new Set()).add(u + ',' + v)
+                            continue
+                        }
+                        const over = this.freshUnitSector(units, u, v, UNIT_OVERLAY)
+                        if (over)
+                            overlays.push({entry: over, x: u * LIT_TILE + ox, y: v * LIT_TILE + oy})
+                        else if (r) {
+                            live.push(r)
+                            lv?.first.add(u + ',' + v)
+                        }
+                    }
+                    (filled ||= []).push(u + ',' + v)
+                    ;(missing ||= new Set()).add(u + ',' + v)
                     continue
                 }
                 const tile = this.litTile(view, u, v, true)
@@ -6942,13 +7008,19 @@ class Grid extends SpritesGroup {
         this.aheadTilesShown = {serial: this.drawSerial, n: missing ? missing.size : 0}
         if (lv)
             this.drawLevelStretch(ctx, t, lv, cw, ch, ox, oy)
-        if (missing) {
+        const squareRect = key => {
+            const [u, v] = key.split(',').map(Number)
+            const x0 = Math.max(0, u * LIT_TILE + ox), y0 = Math.max(0, v * LIT_TILE + oy)
+            return {x: x0, y: y0, w: Math.min(cw, (u + 1) * LIT_TILE + ox) - x0, h: Math.min(ch, (v + 1) * LIT_TILE + oy) - y0}
+        }
+        // TASK-1571: the filled squares' ground (under the units drawn after; the squares stretched or drawn from a sector not).
+        if (filled)
+            this.drawGroundFill(ctx, filled.map(squareRect))
+        // (TASK-1571: the stand-in under its own squares only, in a zoom gesture; the filled ones are drawn.)
+        const standInSquares = missing && standIn ? [...missing].filter(key => !filled?.includes(key)) : []
+        if (standInSquares.length) {
             ctx.save()
-            clipToDeviceRects(ctx, [...missing].map(key => {
-                const [u, v] = key.split(',').map(Number)
-                const x0 = Math.max(0, u * LIT_TILE + ox), y0 = Math.max(0, v * LIT_TILE + oy)
-                return {x: x0, y: y0, w: Math.min(cw, (u + 1) * LIT_TILE + ox) - x0, h: Math.min(ch, (v + 1) * LIT_TILE + oy) - y0}
-            }))
+            clipToDeviceRects(ctx, standInSquares.map(squareRect))
             ctx.setTransform(t.a, t.b, t.c, t.d, t.e, t.f)
             const drawn = standIn === 'standin' ? this.drawStandIn(ctx) : this.drawSurfaceCache(ctx)
             ctx.restore()
@@ -6997,8 +7069,10 @@ class Grid extends SpritesGroup {
     // TASK-1519 (Grid.standInFollows): a cache that differs only in what its cell layer holds (an owner, suburb or fog change:
     // a turn playback's capture) has its layer brought up now (followCellLayer: the changed cells' sprites) and stands in,
     // instead of the frame drawing the whole board directly.
-    litStandIn(ctx) {
-        if (!Grid.litStandIns || !this.surfaceCache || !this.surfaceCacheLit || this.surfaceCacheBuild || this.surfacePatchJob)
+    // TASK-1571: gesture, a phone's zoom gesture frame (planLitView): the stand-in there whatever Grid.litStandIns (counted).
+    litStandIn(ctx, gesture = false) {
+        if (!(Grid.litStandIns || gesture && Grid.zoomGestureNow()) || !this.surfaceCache || !this.surfaceCacheLit ||
+                this.surfaceCacheBuild || this.surfacePatchJob)
             return false
         if (this.surfaceStateMatches(ctx, undefined, true))
             return true
@@ -7022,7 +7096,14 @@ class Grid extends SpritesGroup {
             if (this.litView && (this.litView.a !== t.a || this.litView.d !== t.d))
                 this.dropLitView()
             // On a phone a zoom gesture draws the surface cache magnified where it can (Grid.litStandIns), not the direct draw.
-            return zooming && typeof mobilePhone !== 'undefined' && mobilePhone && this.litStandIn(ctx) ? {t, cache: true} : false
+            // TASK-1571: a gesture's frame drawn from the stretched levels is drawZoomSectors' (Grid.draw); one it does not
+            // take (no levels, a zoom tween, the two frames surfaceZooming outlasts zoomGesture by) keeps the cache inside the
+            // gesture only (litStandIn's gesture, counted in gestureStandIns).
+            if (!(zooming && typeof mobilePhone !== 'undefined' && mobilePhone && this.litStandIn(ctx, true)))
+                return false
+            if (!Grid.litStandIns)
+                ++this.gestureStandIns
+            return {t, cache: true}
         }
         const cw = ctx.canvas.width, ch = ctx.canvas.height
         let view = this.litView
@@ -7033,17 +7114,19 @@ class Grid extends SpritesGroup {
             const newScale = !view || view.a !== t.a || view.d !== t.d
             this.dropLitView()
             // The light map at the camera's scale is built a step a task (queueLitTiles) while the surface cache stands in.
-            if (!atmosphericLighting.lightMapReady(this) && this.litStandIn(ctx)) {
+            // TASK-1571 (Grid.litGroundFill): without the stand-in the frames draw the ground fill meanwhile (drawLitView).
+            const standIn = this.litStandIn(ctx), fill = !standIn && Grid.litGroundFill
+            if (!atmosphericLighting.lightMapReady(this) && (standIn || fill)) {
                 this.queueLitTiles(null, t, cw, ch)
-                return {t, cache: true}
+                return standIn ? {t, cache: true} : {t, fill: true}
             }
             // TASK-1546 (Grid.litViewSteps): a view for a new scale with the surface cache to stand in is made a step at a time
             // by tasks between frames (stepLitView), the frames drawing the stand-in meanwhile; one for the same scale (the board
             // changed past a patch) at once as before, so the frames keep the lit tiles.
-            if (Grid.litViewSteps && (newScale || this.litViewJob) && this.litStandIn(ctx)) {
+            if (Grid.litViewSteps && (newScale || this.litViewJob) && (standIn || fill)) {
                 const made = this.stepLitView(ctx, t)
                 if (!made)
-                    return {t, cache: true}
+                    return standIn ? {t, cache: true} : {t, fill: true}
                 view = this.setLitView(made, cw, ch)
             }
             else
@@ -7083,7 +7166,10 @@ class Grid extends SpritesGroup {
             for (let u = range.u0; u <= range.u1; ++u)
                 if (!this.litHas(view, u, v) && !view.stale?.has(u + ',' + v))
                     ++missing
-        return view.unbuilt = missing > LIT_FRAME_TILES && !this.litStandIn(ctx) && !this.standInSource()
+        // TASK-1571 (Grid.litGroundFill): the view is drawn (LIT_FRAME_TILE_CAP built in the frame, the ground fill for the
+        // others), not the board live: its tiles are built as a view drawn with a stand-in had them (queueLitTiles' ring, the
+        // canvas's first), so not unbuilt (no batch, the surface cache's tasks not waited for as a stand-in).
+        return view.unbuilt = missing > LIT_FRAME_TILES && !Grid.litGroundFill && !this.litStandIn(ctx) && !this.standInSource()
     }
     // A board change while the camera rests on the lit view's finished rest snapshot (drawLitView): instead of the view
     // being dropped (a new light map, every visible tile built in the frame, then the snapshot's bands), the snapshot is
@@ -7367,7 +7453,8 @@ class Grid extends SpritesGroup {
         if (!otherSettings.atmosphericVisuals || !atmosphericBackground.opaqueOver(ctx) || this.canUseSurfaceCache())
             return null
         const plan = this.litPlan = this.planLitView(ctx)
-        if (!plan || plan.cache)
+        // TASK-1571: a fill plan's frame draws the sky whole, the ground fill over the board (drawLitView).
+        if (!plan || plan.cache || plan.fill)
             return null
         if (plan.rest)
             return {open: this.coverOpen = []}
@@ -7556,6 +7643,32 @@ class Grid extends SpritesGroup {
             }
         }
         mapDepth.drawAtmosphericShadow(ctx, this)
+    }
+    // TASK-1571 (Grid.litGroundFill): the board's plain ground fill on ctx (the camera's transform) in the device rectangles
+    // rects (whole device pixels): the opaque fill of the board outline in the underlay's colour (mapDepth.drawUnderlay's
+    // solid map backing, under every tile), for squares without an exact picture this frame. visualsPerf.groundFill counts the
+    // rectangles' device pixels within the board's bounds (the outline's box).
+    drawGroundFill(ctx, rects) {
+        if (!rects.length)
+            return
+        mapDepth.ensureGeometry(this)
+        if (!mapDepth.outline)
+            return
+        const t = ctx.getTransform(), b = mapDepth.bounds
+        ctx.save()
+        clipToDeviceRects(ctx, rects)
+        ctx.setTransform(t.a, t.b, t.c, t.d, t.e, t.f)
+        ctx.fillStyle = MapDepth.GROUND_FILL
+        ctx.fill(mapDepth.outline)
+        ctx.restore()
+        ++this.groundFills
+        if (b && typeof visualsPerf !== 'undefined' && visualsPerf.groundFill) {
+            const bx0 = b.left * t.a + t.e, bx1 = b.right * t.a + t.e, by0 = b.top * t.d + t.f, by1 = b.bottom * t.d + t.f
+            let px = 0
+            for (const r of rects)
+                px += Math.max(0, Math.min(r.x + r.w, bx1) - Math.max(r.x, bx0)) * Math.max(0, Math.min(r.y + r.h, by1) - Math.max(r.y, by0))
+            visualsPerf.groundFill(px)
+        }
     }
     // TASK-1553: the sky and the slab shadow on ctx (the camera's transform) in the device rectangles rects, which
     // frameCover left without them for a stand-in that is not drawn there after all.
@@ -7860,6 +7973,43 @@ class Grid extends SpritesGroup {
     litTileRange(cw, ch, ox, oy, ring) {
         return {u0: Math.floor(-ox / LIT_TILE) - ring, u1: Math.floor((cw - 1 - ox) / LIT_TILE) + ring,
             v0: Math.floor(-oy / LIT_TILE) - ring, v1: Math.floor((ch - 1 - oy) / LIT_TILE) + ring}
+    }
+    // TASK-1571: whether the board reaches tile square (u, v) of view (litTileSteps' test: else its tile is null).
+    litTileReaches(view, u, v) {
+        const P = LIT_TILE_PAD, b = mapDepth.bounds, X = u * LIT_TILE, Y = v * LIT_TILE
+        if (!b)
+            return true
+        const left = (X - P - view.e) / view.a, top = (Y - P - view.f) / view.d
+        const right = (X + LIT_TILE + P - view.e) / view.a, bottom = (Y + LIT_TILE + P - view.f) / view.d
+        return !(right < b.left || left > b.right || bottom < b.top || top > b.bottom)
+    }
+    // TASK-1571 (Grid.litGroundFill): the squares of range (the canvas's, the grid at ox, oy) without a tile that the frame
+    // builds itself (drawLitView): at most LIT_FRAME_TILE_CAP of those the board reaches, nearest the canvas's centre first
+    // (the tasks and the Worker build the others, queueLitTiles; a square the board does not reach is not built: nothing is
+    // drawn there). A set of 'u,v' keys.
+    // Not built in the frame either: a square on its way from the Worker (litPending: it comes in a later frame, the ground fill
+    // meanwhile) or one drawn without its tile otherwise (drawn(u, v): a clean sector of the camera's level, or after a zoom
+    // the stretched levels; the tasks build its tile).
+    litFrameBuilds(view, range, cw, ch, ox, oy, drawn) {
+        const cu = (cw / 2 - ox) / LIT_TILE - 0.5, cv = (ch / 2 - oy) / LIT_TILE - 0.5, list = []
+        const work = this.litFrameWork
+        for (let v = range.v0; v <= range.v1; ++v)
+            for (let u = range.u0; u <= range.u1; ++u) {
+                if (this.litHas(view, u, v) || view.stale?.has(u + ',' + v) || !this.litTileReaches(view, u, v))
+                    continue
+                ++work.missing
+                if (drawn(u, v))
+                    ++work.drawn
+                else if (this.litPending(view, u, v))
+                    ++work.pending
+                else
+                    list.push({key: u + ',' + v, far: Math.hypot(u - cu, v - cv)})
+            }
+        list.sort((a, b) => a.far - b.far)
+        const out = new Set(list.slice(0, LIT_FRAME_TILE_CAP).map(m => m.key))
+        work.built += out.size
+        work.filled += list.length - out.size
+        return out
     }
     // Tile (u, v) of view, built now if missing; null when the board does not reach it.
     // TASK-1439: each build timed (litTileCost, a tile the board reaches).
@@ -9214,9 +9364,19 @@ class Grid extends SpritesGroup {
         // TASK-1544: without a cache to draw at its scale, its stand-in (drawStandIn), not the board drawn directly.
         if (cached && this.drawStandIn(ctx))
             return 'standin'
-        const lit = !cached && this.drawLitView(ctx)
+        // TASK-1571 (Grid.litGroundFill): no stand-in outside a zoom gesture (Grid.standInsInGesture): a frame at or below the
+        // cache's scale without a cache to draw (none yet, a build under way, one not matching the board while the camera
+        // moves) draws the lit view at its scale (exact tiles, the ground fill for those not built yet), not the whole board
+        // directly (on the 2026-11-06 capture's first pan, no cache for 25 s: 4000-5400 calls, ~750 ms a frame).
+        const lit = (!cached || Grid.litGroundFill && this === grid && otherSettings.atmosphericVisuals) && this.drawLitView(ctx)
+        // (the cache's tasks then run as for frames drawing its stand-in: prepareSurfaceCache's waiting budget)
+        if (cached && lit)
+            this.cacheWaitedAt = performance.now()
         if (lit === 'cache')
             return true
+        // TASK-1571: the ground fill for a view not made yet (drawLitView), drawn over as a stand-in is (Grid.draw).
+        if (lit === 'fill')
+            return 'fill'
         if (lit)
             return 'lit'
 
@@ -9250,8 +9410,13 @@ class Grid extends SpritesGroup {
         const sectored = !pass && !scene && (this.drawCacheSectors(ctx) || this.drawLevelStandIn(ctx))
         const surface = scene || sectored || this.drawMapSurface(ctx)
         this.frameSurface = surface
+        // TASK-1571: a frame that does not draw the lit view leaves no lit frame behind (an earlier one read as this frame's:
+        // unitSectorTask's live squares; a frame at or below the cache's scale may now draw the lit view, drawMapSurface).
+        if (!pass && surface !== 'lit')
+            this.litFrame = undefined
         // Lit tiles (drawLitView) hold the buildings and the light but for the board's edge.
-        const lit = surface === 'lit', cachedScene = surface === true, standIn = surface === 'standin'
+        // TASK-1571: a frame on the ground fill (drawMapSurface 'fill') draws its units and overlays as over a stand-in.
+        const lit = surface === 'lit', cachedScene = surface === true, standIn = surface === 'standin' || surface === 'fill'
         if (!lit && !pass && (this.litLayer || this.litLayerScratch))
             this.releaseLitLayer()
         // The overlay layer holds the production texts too (drawInfoTexts); so does the scene layer.
@@ -11677,7 +11842,28 @@ const CELL_RENDER_MARGIN = 4
 // (Grid.litStandIn): drawn magnified until the light map is built (and on a phone in a zoom gesture, where the direct draw
 // costs about three times a cached frame), and over a tile not built yet. False: a frame builds what it draws (the light
 // map and the visible tiles), as a whole rebuild does.
-Grid.litStandIns = true
+// TASK-1571 (NOSTANDIN 4/6): false. The user, after the 2026-11-10 desktop and phone captures: 'this "low quality image"
+// optimization really hurts experience'; outside a zoom gesture no frame draws the cache magnified for the lit view (nor its
+// unit sectors on that ground). A phone's zoom gesture that no zoom-sectors frame draws (planLitView) keeps it inside the
+// gesture only (litStandIn(ctx, true), counted in gestureStandIns).
+Grid.litStandIns = false
+// TASK-1571: a lit frame draws only exact pictures or the board's plain ground fill (drawGroundFill: the underlay's opaque
+// fill of the board outline, mapDepth.drawUnderlay's colour) outside a zoom gesture: a tile on the canvas not built is built
+// in the frame, at most LIT_FRAME_TILE_CAP a frame nearest the canvas's centre first (litFrameBuilds), the others filled
+// until a later frame, a task or the Worker builds them; a frame whose view at the camera's scale is not made yet (its light
+// map or its edges made by tasks, planLitView) draws the fill over the board (and the levels' exact or stretched sectors
+// after a zoom, drawLevelStandIn); a view with many tiles not built is drawn so too, not live (litTilesUnbuilt). False: as
+// before (with Grid.litStandIns false, every missing tile built in the frame, the light map and view at once).
+Grid.litGroundFill = true
+// TASK-1571: the stand-in (standInSource: the stale surface cache or its preview, drawStandIn) and the preview under the
+// levels (drawLevelStandIn) only in an active zoom gesture (Grid.zoomGestureNow); false: as before (any frame).
+Grid.standInsInGesture = true
+// TASK-1571: whether a zoom gesture is under way (Screen.zoomGesture or surfaceZooming: the zoom input's window and the frames
+// drawn after it), where the stand-ins stay.
+Grid.zoomGestureNow = () => {
+    const screen = typeof gameEvent !== 'undefined' ? gameEvent.screen : undefined
+    return !!screen && !!(screen.zoomGesture || screen.surfaceZooming)
+}
 // TASK-1569: a lit task deferred by litTaskDefers shares the pause while the camera moves and runs at the latest in the next
 // pause at rest, and a queued surface task that will draw nothing (surfaceTaskIdle) is not waited for; false: as TASK-1568
 // (deferred while any condition holds).
@@ -12044,6 +12230,13 @@ const LIT_TILE_BUDGET = 5
 // TASK-1372: tiles a frame without a stand-in builds itself (drawLitView; more and it draws the board live, planLitView), and
 // tiles a task builds meanwhile (queueLitTiles).
 const LIT_FRAME_TILES = 8
+// TASK-1571 (Grid.litGroundFill): lit tiles a frame builds itself at most (drawLitView, litFrameBuilds), nearest the canvas's
+// centre first; the other squares without a tile get the ground fill. 2: the TASK-1568 baseline's most tiles built in one
+// frame was 2 (phone, 1 desktop, 0 the older capture: tilesBuiltInFrame max, artifacts/TASK-1568/baseline.json), so a
+// frame builds no more than before; a tile built on the main thread is a full lit tile drawing (11-14 ms on the Worker,
+// TASK-1564), so 2 keep a frame's own building near one 30 ms frame, while 3-4 would make the camera's stop (the squares
+// the ring did not reach) a frame of 40-55 ms, the stall TASK-1334 removed (40 tiles in one frame).
+const LIT_FRAME_TILE_CAP = 2
 const LIT_FIRST_TILE_BUDGET = 16
 const LIT_TILE_POOL = 16
 // TASK-1552 (Grid.litAhead): lit tiles built ahead of the camera (Grid.queueLitTiles, litAheadRange): the ring round the

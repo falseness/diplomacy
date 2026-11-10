@@ -142,6 +142,9 @@ class Border {
 }
 
 class MapDepth {
+    // The board's solid backing under the cells (drawUnderlay, renderUnderlay); TASK-1571: the plain ground fill of a lit
+    // square without its tile (Grid.drawGroundFill).
+    static GROUND_FILL = '#4d5150'
     // Atmospheric slab sides: grey stone faces [lit top edge, face, foot] by side (2 lower right,
     // away from the upper-left key light; 3 bottom; 4 lower left, towards it), the faces away from
     // the key cooled by the blue sky's fill (atmosphericLighting.RIM); a bottom face in a
@@ -337,7 +340,7 @@ class MapDepth {
     }
     renderUnderlay(ctx, cacheScale = 1) {
         ctx.save()
-        ctx.fillStyle = '#4d5150'
+        ctx.fillStyle = MapDepth.GROUND_FILL
         ctx.shadowColor = 'rgba(4, 12, 18, 0.72)'
         // Canvas shadow dimensions are device-space values and do not follow the
         // current transform, so account for a downscaled render cache explicitly.
@@ -482,7 +485,7 @@ class MapDepth {
         // The solid map backing is cheap to draw as a vector and prevents seams
         // between textured hexagons. Only the expensive shadow/faces use the cache.
         ctx.save()
-        ctx.fillStyle = '#4d5150'
+        ctx.fillStyle = MapDepth.GROUND_FILL
         // TASK-1552: a lit tile's quarter wholly within the outline (view.inside, Grid.litSquareOpaque) is the fill's all over.
         if (view && view.inside) {
             ctx.setTransform(1, 0, 0, 1, 0, 0)
