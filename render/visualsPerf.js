@@ -22,7 +22,9 @@
         drawnMegapixels: 0, drawCalls: 0, drawnMainMegapixels: 0, drawnByLayer: {}, unboundedDraws: 0,
         canvasSites: {}, bitmapSites: {}, offscreenByTarget: {}, tilesMissingOnScreen: 0, tilesBuiltInFrame: 0, tilesFromStandIn: 0, tilesUnbuilt: 0,
         // TASK-1557 (see sectorCounters below)
-        layerFullRebuild: {}, layerRebuildCauses: {}, liveBoardCalls: {text: 0, units: 0, ground: 0, lighting: 0, other: 0}, standInPx: 0, standInPxBy: {}})
+        layerFullRebuild: {}, layerRebuildCauses: {}, liveBoardCalls: {text: 0, units: 0, ground: 0, lighting: 0, other: 0}, standInPx: 0, standInPxBy: {},
+        // TASK-1568 (see groundFill below)
+        groundFillPx: 0})
     let work = freshWork()
     const originalLoop = gameLoop, originalDraw = drawAll
     gameLoop = function(timestamp) {
@@ -72,6 +74,9 @@
             frame.work.sectorBytes = board ? (board.sectors?.bytes || 0) + (board.unitSectors?.bytes || 0) + (board.unitSectorAlt?.cache.bytes || 0) : null
             frame.work.sectorAhead = sectorAheadDelta(board)
             frame.work.standInPx = Math.round(work.standInPx)
+            // TASK-1568: on-screen board pixels (device, the main canvas) drawn as the board's plain ground fill for a square
+            // without its tile (visualsPerf.groundFill; none in this client: 0).
+            frame.work.groundFillPx = Math.round(work.groundFillPx)
             frame.work.standInPxBy = Object.fromEntries(Object.entries(work.standInPx ? work.standInPxBy : {}).map(([k, v]) => [k, Math.round(v)]))
             frame.work.layerFullRebuildCount = Object.values(work.layerFullRebuild).reduce((a, b) => a + b, 0)
             // TASK-1562: the board squares of the frame drawn at the camera's level (exact) and not (stretched from another
@@ -94,8 +99,11 @@
         for (const k of Object.keys(c))
             if (typeof c[k] === 'number' && k !== 'ring')
                 out[k] = c[k] - (last[k] || 0)
+            // TASK-1568: litDeferBy {surfaceQueued, overlayQueued, overlaySnapshot} (Grid.litTaskDefers' conditions)
+            else if (c[k] && typeof c[k] === 'object')
+                out[k] = Object.fromEntries(Object.entries(c[k]).map(([n, v]) => [n, v - (last[k]?.[n] || 0)]))
         out.ring = c.ring
-        sectorAheadLast = {...c}
+        sectorAheadLast = Object.fromEntries(Object.entries(c).map(([k, v]) => [k, v && typeof v === 'object' ? {...v} : v]))
         return out
     }
     let sectorWorkerLast = null
@@ -956,7 +964,9 @@
         api.lastExport={schemaVersion:1,environment:metadata.environment||'user-browser',runs,pairs,valid:pairs.every(Boolean),cancelled}
         return api.lastExport
     }
-    const api=window.visualsPerf={start,stop,paired,compare,diagnostics,setSegment:value=>{segment=value},cancel:()=>{cancelled=true;stop()},export:()=>api.lastExport||stop()}
+    // TASK-1568: devicePx board pixels of the main canvas drawn as the plain ground fill for squares without a tile.
+    const groundFill=devicePx=>{if(active&&devicePx>0)work.groundFillPx+=devicePx}
+    const api=window.visualsPerf={start,stop,groundFill,paired,compare,diagnostics,setSegment:value=>{segment=value},cancel:()=>{cancelled=true;stop()},export:()=>api.lastExport||stop()}
     window.addEventListener('load',()=>{
         const panel=create('section');panel.id='visuals-perf-controls'
         panel.style.cssText='position:fixed;left:8px;bottom:8px;z-index:99999;background:#182333;color:white;padding:8px;font:12px sans-serif;max-width:calc(100vw - 32px)'

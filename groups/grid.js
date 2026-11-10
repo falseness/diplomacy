@@ -258,7 +258,10 @@ class Grid extends SpritesGroup {
         // (a settle's lit tile steps with the Worker drawing, bounded by their time).
         this.aheadWork = {tiles: 0, tilesMoving: 0, units: 0, unitsMoving: 0, cancelled: 0, queued: 0, ring: 0, tileSteps: 0, tileStepCalls: 0,
             composed: 0, tileStepMs: 0, stopSteps: 0, stopCalls: 0, stopMp: 0, stopTime: 0, stopQueue: 0, litTasks: 0, litOtherView: 0,
-            litZooming: 0, litDefers: 0, litBehind: 0, whole: 0, levelSteps: 0, levelStepMs: 0}
+            litZooming: 0, litDefers: 0, litBehind: 0, whole: 0, levelSteps: 0, levelStepMs: 0,
+            // TASK-1568: the lit tasks that deferred (litTaskDefers, moving or not) by the condition that held (each true one
+            // counted: a deferral can count under more than one).
+            litDeferBy: {surfaceQueued: 0, overlayQueued: 0, overlaySnapshot: 0}}
         // TASK-1565: the draw calls a lit tile's steps record (litTileSteps' recorders count them in calls.n while calls is set).
         this.litStepHolder = {calls: null}
         this.aheadUnitRatio = 1
@@ -7996,7 +7999,7 @@ class Grid extends SpritesGroup {
             this.litTileStepsQueued = false
             const job = this.litTileJob, screen = gameEvent.screen
             if (!job || this !== grid || screen.surfaceMoving || screen.surfaceZooming || job.view !== this.litView ||
-                    this.litTaskDefers(snapshots) || this.litLayerBehind(job.view))
+                    this.litTaskDefers(snapshots, true) || this.litLayerBehind(job.view))
                 return
             ++this.litTileStepTasks
             atmosphericLighting.checkedOnce(this, () => this.buildLitTiles(job.view, [{u: job.u, v: job.v}], 1, true))
@@ -8068,7 +8071,7 @@ class Grid extends SpritesGroup {
             setTimeout(gridTask(() => {
                 this.litTilesQueued = false
                 if (this === grid && otherSettings.atmosphericVisuals && !this.litView && !gameEvent.screen.surfaceZooming &&
-                        !this.litTaskDefers(snapshots))
+                        !this.litTaskDefers(snapshots, true))
                     atmosphericLighting.stepLightMap(this)
             }))
             return
@@ -8095,7 +8098,7 @@ class Grid extends SpritesGroup {
             this.litTilesQueued = true
             setTimeout(gridTask(() => {
                 this.litTilesQueued = false
-                if (view !== this.litView || !view.splitJob || view.patch || gameEvent.screen.surfaceZooming || this.litTaskDefers(snapshots) ||
+                if (view !== this.litView || !view.splitJob || view.patch || gameEvent.screen.surfaceZooming || this.litTaskDefers(snapshots, true) ||
                         !this.litSplitHolds(view))
                     return
                 if (this.cellSplitStep(view.splitJob, SURFACE_STEP_MS))
@@ -8117,7 +8120,7 @@ class Grid extends SpritesGroup {
             // Nothing is built inside a zoom gesture (its frames keep their live light), nor (TASK-1316) for a board the
             // view's cell layer is behind (the next frame brings it up, followCellLayer; a tile built now would also bring
             // the light map's owners up in the task drawing from it).
-            if (view !== this.litView || gameEvent.screen.surfaceZooming || this.litTaskDefers(snapshots) || this.litLayerBehind(view)) {
+            if (view !== this.litView || gameEvent.screen.surfaceZooming || this.litTaskDefers(snapshots, true) || this.litLayerBehind(view)) {
                 // TASK-1565 rework: a moving camera's tile task that built nothing for these (visualsPerf work.sectorAhead)
                 if (gameEvent.screen.surfaceMoving)
                     ++this.aheadWork[view !== this.litView ? 'litOtherView' : gameEvent.screen.surfaceZooming ? 'litZooming' :
@@ -8258,8 +8261,19 @@ class Grid extends SpritesGroup {
     // Whether a lit task leaves its turn to another task of the same pause between frames (the next frame queues it again),
     // so their drawing does not add up: a surface cache stage or check queued, or an overlay snapshot queued or made since
     // the frame that queued the lit task (snapshots: overlaySnapshots then).
-    litTaskDefers(snapshots) {
-        return Grid.litStandIns && (this.surfaceCacheQueued || !!this.overlayComposite?.queued || this.overlaySnapshots !== snapshots)
+    // TASK-1568: count = the caller gives up its task when true: the conditions that held are counted (aheadWork.litDeferBy).
+    litTaskDefers(snapshots, count = false) {
+        if (!Grid.litStandIns)
+            return false
+        const surfaceQueued = !!this.surfaceCacheQueued, overlayQueued = !!this.overlayComposite?.queued,
+            overlaySnapshot = this.overlaySnapshots !== snapshots
+        if (count && this.aheadWork) {
+            const by = this.aheadWork.litDeferBy
+            if (surfaceQueued) ++by.surfaceQueued
+            if (overlayQueued) ++by.overlayQueued
+            if (overlaySnapshot) ++by.overlaySnapshot
+        }
+        return surfaceQueued || overlayQueued || overlaySnapshot
     }
     // Draws tile (u, v) of view as the direct draw draws the canvas there, without the sky: the
     // surface, the buildings and the light but in view's edge runs (drawLitEdges lights them in
