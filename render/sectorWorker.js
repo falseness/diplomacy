@@ -29,6 +29,19 @@ const SECTOR_WORKER_QUEUE = 3
 // a lit tile is ~11 ms and a unit sector ~1 ms in the worker (artifacts/TASK-1565/preview), so a fixed 3 builds left it idle.
 const SECTOR_WORKER_QUEUE_MS = 48
 const SECTOR_WORKER_QUEUE_MAX = 12
+// TASK-1570: THE QUEUE IN PRIORITY ORDER. Every build is posted at once with its rank (submit's priority: a function, lower
+// first; null: cancel), and the worker, each time it is free, draws the queued build of the lowest rank (the oldest of equal
+// ranks), so it never waits for the main thread. Each frame the board asks the ranks again (pump, through Grid's lit
+// queue): the changed ones are sent ('rank'), and a build whose priority is null is cancelled ('rank' cancel: the worker drops
+// it if it has not started it and answers 'cancelled'; the page then gives it up, onFail('cancelled'), counted in
+// counters.cancelled). The board's lit tiles on the canvas go first, then the ring by when the camera reaches them; ring tiles
+// the camera left behind are cancelled before they are drawn; unit sectors (no priority) rank 0.
+// SECTOR_WORKER_SHOWN_MS / SECTOR_WORKER_SHOWN_MAX: busy(true), for a square on the canvas whose tile is missing (or that the
+// camera reaches soon), lets the queue grow to this many ms of builds (and builds): the worker was idle ~80 % of the mobile
+// capture's pan frames while the canvas's tiles waited, refilled once a frame at SECTOR_WORKER_QUEUE_MS
+// (artifacts/TASK-1570/change.md).
+const SECTOR_WORKER_SHOWN_MS = 160
+const SECTOR_WORKER_SHOWN_MAX = 24
 // TASK-1565: a worker whose median drawing time over its last SECTOR_WORKER_RATE_SAMPLES builds is over this many ms an op is
 // slow (SectorWorker.noteRate: the main-thread path from then on). Offline a lit tile is ~0.05 ms an op in a Worker; on a
 // software canvas next to a busy page 0.12-0.7 (the median of the first builds, artifacts/TASK-1564/change.md, TASK-1565 dev).
@@ -101,13 +114,39 @@ if (typeof importScripts === 'function' && typeof document === 'undefined' && ty
                     pending.push(createImageBitmap(canvas).then(bitmap => [target.k, bitmap]))
             }
             const out = await Promise.all(pending)
-            postMessage({t: 'built', id: m.id, out, ms: performance.now() - t0, ops}, out.map(o => o[1]))
+            postMessage({t: 'built', id: m.id, out, ms: performance.now() - t0, ops, jumped: m.jumped || 0}, out.map(o => o[1]))
         } finally {
             for (const canvas of used)
                 give(canvas)
         }
     }
-    let builds = Promise.resolve()
+    // TASK-1570: the builds waiting (queue), drawn one at a time, the lowest rank first (the oldest of equal ranks); jumped:
+    // the queued builds of older ids a build was drawn before (counters.reordered on the page).
+    const queue = []
+    let running = false
+    const runQueue = async () => {
+        if (running)
+            return
+        running = true
+        try {
+            while (queue.length) {
+                await fontsReady
+                let best = 0
+                for (let i = 1; i < queue.length; ++i)
+                    if (queue[i].rank < queue[best].rank || queue[i].rank === queue[best].rank && queue[i].id < queue[best].id)
+                        best = i
+                const m = queue.splice(best, 1)[0]
+                m.jumped = queue.reduce((n, o) => n + (o.id < m.id ? 1 : 0), 0)
+                try {
+                    await build(m)
+                } catch (error) {
+                    postMessage({t: 'failed', id: m.id, error: String(error?.stack || error)})
+                }
+            }
+        } finally {
+            running = false
+        }
+    }
     onmessage = e => {
         const m = e.data
         if (m.t === 'init') {
@@ -125,10 +164,32 @@ if (typeof importScripts === 'function' && typeof document === 'undefined' && ty
             }
             return
         }
-        if (m.t === 'build')
+        // TASK-1570: new ranks for queued builds, and builds cancelled: dropped if not started (their sprites kept: the page
+        // counts them sent), answered 'cancelled'.
+        if (m.t === 'rank') {
+            for (const [id, rank] of m.ranks || []) {
+                const q = queue.find(b => b.id === id)
+                if (q)
+                    q.rank = rank
+            }
+            for (const id of m.cancel || []) {
+                const k = queue.findIndex(b => b.id === id)
+                if (k < 0)
+                    continue
+                const [b] = queue.splice(k, 1)
+                for (const [key, bitmap] of b.add)
+                    sprites.set(key, bitmap)
+                postMessage({t: 'cancelled', id})
+            }
+            return
+        }
+        if (m.t === 'build') {
             // one build at a time (the pooled canvases are the build's until its pictures are copied out)
-            builds = builds.then(() => fontsReady).then(() => build(m)).catch(error =>
-                postMessage({t: 'failed', id: m.id, error: String(error?.stack || error)}))
+            if (!(typeof m.rank === 'number'))
+                m.rank = 0
+            queue.push(m)
+            runQueue()
+        }
     }
 }
 
@@ -188,7 +249,7 @@ const SectorWorker = {
     spriteBytes: 0,
     use: 0,
     counters: {builtWorker: 0, builtMain: 0, builtMainMoving: 0, fallback: 0, posted: 0, dropped: 0, failed: 0, depth: 0, depthMax: 0, spriteBytes: 0,
-        spritesSent: 0, spritesDropped: 0, workerMs: 0, slow: 0},
+        spritesSent: 0, spritesDropped: 0, workerMs: 0, slow: 0, cancelled: 0, reordered: 0},
     // TASK-1565: the worker's recent drawing times (ms an op, the last SECTOR_WORKER_RATE_SAMPLES builds).
     rates: [],
     // Whether the builds go to the worker now (started on the first call).
@@ -285,16 +346,54 @@ const SectorWorker = {
         if (old && old !== key)
             this.release(old)
     },
-    // Whether the builds in flight fill the queue (SECTOR_WORKER_QUEUE): the board starts no new sector build then.
-    busy() {
+    // Whether the builds in flight fill the queue (SECTOR_WORKER_QUEUE): the board starts no new sector
+    // build then. TASK-1570: shown, a build for a square on the canvas: up to SECTOR_WORKER_SHOWN_MS / SECTOR_WORKER_SHOWN_MAX.
+    busy(shown = false) {
         if (this.state !== 'on')
             return false
-        if (this.inflight.size >= SECTOR_WORKER_QUEUE_MAX)
+        if (this.inflight.size >= (shown ? SECTOR_WORKER_SHOWN_MAX : SECTOR_WORKER_QUEUE_MAX))
             return true
         let ms = 0
         for (const job of this.inflight.values())
             ms += this.kindMs(job.kind)
-        return ms >= SECTOR_WORKER_QUEUE_MS - 1e-9
+        return ms >= (shown ? SECTOR_WORKER_SHOWN_MS : SECTOR_WORKER_QUEUE_MS) - 1e-9
+    },
+    // TASK-1570: the ranks of the builds in flight asked again (their priority functions): the changed ones sent to the worker,
+    // and those whose priority is null cancelled (the worker answers 'cancelled' for those it has not started). Through the
+    // post chain, so a build's own message is in the worker first.
+    pump() {
+        if (!this.worker || this.state !== 'on' && this.state !== 'slow')
+            return
+        const ranks = [], cancel = []
+        for (const job of this.inflight.values()) {
+            if (!job.priority || job.cancelling)
+                continue
+            const p = job.priority()
+            if (p === null || p === undefined) {
+                job.cancelling = true
+                cancel.push(job.id)
+            }
+            else if (p !== job.rank) {
+                job.rank = p
+                ranks.push([job.id, p])
+            }
+        }
+        if (!ranks.length && !cancel.length)
+            return
+        this.chain = this.chain.then(() => this.worker?.postMessage({t: 'rank', ranks, cancel}))
+    },
+    // TASK-1570: a build the worker dropped before drawing it (pump's cancel): given up, not a failure of the worker.
+    cancelled(id) {
+        const job = this.inflight.get(id)
+        if (!job)
+            return
+        this.finish(job)
+        ++this.counters.cancelled
+        const run = () => {
+            job.onFail?.('cancelled')
+            this.onDrain?.()
+        }
+        typeof gridTask === 'function' ? gridTask(run)() : run()
     },
     // TASK-1565 rework: a build's expected time in the worker (ms): the mean of its kind's builds so far.
     kindMs(kind) {
@@ -321,7 +420,9 @@ const SectorWorker = {
     },
     // Snapshot (its targets: {k, w, h, segs}) drawn in the worker; sprites: its key -> image map (SectorRecorder's sink).
     // onDone(out: [[k, ImageBitmap], ...]) or onFail(reason) later, in a task of its own. Returns the job's id.
-    submit(snapshot, sprites, onDone, onFail) {
+    // TASK-1570: priority (optional): a function, lower first, null to cancel (pump); without one rank 0. The build is posted
+    // with its rank now (a null one: last, Infinity; cancelled by the next pump if still null).
+    submit(snapshot, sprites, onDone, onFail, priority = null) {
         const id = ++this.serial, keys = [...sprites.keys()]
         for (const key of keys) {
             const s = this.sprites.get(key)
@@ -330,7 +431,8 @@ const SectorWorker = {
                 s.last = ++this.use
             }
         }
-        const job = {id, onDone, onFail, keys, kind: snapshot.kind}
+        const p = priority ? priority() : 0
+        const job = {id, onDone, onFail, keys, kind: snapshot.kind, priority, rank: p ?? Infinity}
         this.inflight.set(id, job)
         this.counters.depth = this.inflight.size
         this.counters.depthMax = Math.max(this.counters.depthMax, this.counters.depth)
@@ -362,7 +464,7 @@ const SectorWorker = {
         this.pendingDrops = null
         if (drops?.length)
             this.worker.postMessage({t: 'drop', keys: drops})
-        this.worker.postMessage({t: 'build', id: job.id, targets, add}, add.map(a => a[1]))
+        this.worker.postMessage({t: 'build', id: job.id, rank: job.rank, targets, add}, add.map(a => a[1]))
     },
     jobFailed(id, reason) {
         const job = this.inflight.get(id)
@@ -408,6 +510,10 @@ const SectorWorker = {
         this.counters.spriteBytes = this.spriteBytes
     },
     receive(m) {
+        if (m.t === 'cancelled') {
+            this.cancelled(m.id)
+            return
+        }
         if (m.t === 'failed') {
             this.jobFailed(m.id, m.error)
             return
@@ -421,6 +527,7 @@ const SectorWorker = {
             return
         }
         this.finish(job)
+        this.counters.reordered += m.jumped || 0
         this.counters.workerMs += m.ms || 0
         const by = this.counters.byKind ||= {}, k = by[job.kind] ||= {n: 0, ms: 0, ops: 0, max: 0}
         ++k.n

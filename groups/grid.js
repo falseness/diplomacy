@@ -265,7 +265,12 @@ class Grid extends SpritesGroup {
             // TASK-1569: the lit tasks that ran though a condition held (litTaskDefers: sharing the pause, Grid.litShareTurns),
             // moving (the frame's time budget bounds them) or at rest after one deferral; and the queued surface cache tasks
             // not waited for as they will draw nothing (a split task in a zoom's quiet, surfaceTaskIdle).
-            litShared: {moving: 0, rest: 0}, litIdleSurface: 0}
+            litShared: {moving: 0, rest: 0}, litIdleSurface: 0,
+            // TASK-1570: lit tile tasks queued when a Worker picture came back (Grid.litDrainRefill), and the ring's reach (tiles
+            // past LIT_AHEAD_RING on the motion's sides, litAheadRange: x + y) the last lit frame asked for (not a delta).
+            litDrainTasks: 0, reach: 0,
+            // TASK-1570: lit tile pictures back from the Worker and dropped (litTileArrived), by the first reason that held.
+            litDropBy: {other: 0, view: 0, built: 0, edges: 0, outline: 0, rebuilds: 0, mapScale: 0, gen: 0}}
         // TASK-1565: the draw calls a lit tile's steps record (litTileSteps' recorders count them in calls.n while calls is set).
         this.litStepHolder = {calls: null}
         this.aheadUnitRatio = 1
@@ -323,6 +328,8 @@ class Grid extends SpritesGroup {
         // TASK-1316: the lit view's rest snapshot with its cell layer composed (prepareLitCellLayer), drawn in one drawImage.
         this.litCellShown = undefined
         this.cellLayerSplits = 0
+        // TASK-1570: surface split steps that waited for the camera at rest (Grid.splitCutAtRest)
+        this.splitCutWaits = 0
         this.cellLayerComposites = 0
         this.cellSpriteRenders = 0
         this.cellSpriteDraws = 0
@@ -1184,6 +1191,19 @@ class Grid extends SpritesGroup {
             return
         if (!this.surfaceSplitHolds(job))
             return
+        // TASK-1570 (Grid.splitCutAtRest): the split's last step (cellSplitStep's whole-canvas cut, ~18 MP on the old capture's
+        // 0.084 pan, and the end of the job: cacheSectorKey changes, so every cache unit sector on the canvas is drawn live
+        // until built again, 2-3 heavy frames) waits while the camera moves over the frames drawn from the cache
+        // (frameSurface true), as it waits for a zoom's quiet (TASK-1562), at most SPLIT_CUT_WAIT_MS: the cache draws the
+        // same pixels split or not.
+        if (Grid.splitCutAtRest && this.frameSurface === true && gameEvent.screen.surfaceMoving && !job.prep &&
+                job.next + (job.cap || CELL_SPLIT_CELLS) >= job.order.length) {
+            job.cutWait ??= performance.now()
+            if (performance.now() - job.cutWait < SPLIT_CUT_WAIT_MS) {
+                ++this.splitCutWaits
+                return
+            }
+        }
         if (this.cellSplitStep(job, SURFACE_STEP_MS))
             this.surfaceSplitJob = undefined
     }
@@ -6346,13 +6366,27 @@ class Grid extends SpritesGroup {
             const drawn = this.levelDraws?.serial === this.drawSerial ? this.levelDraws.n : 0
             left.calls = Math.min(left.calls, LEVEL_FRAME_TOTAL - LEVEL_FRAME_BASE - drawn - (frame?.liveCost || 0))
         }
-        if (left && left.calls < UNIT_SECTOR_GROUND_CALLS) {
+        // TASK-1570 (Grid.unitWorkerTime): with the Worker drawing the sectors (Grid.aheadInWorker) a settle's or a moving
+        // camera's builds only record on the main thread: their recorded calls are not the frame's (a handful of real ones,
+        // spent below), so they are bounded by their recording time (AHEAD_WORKER_FRAME_MS a task) and the Worker's queue, not
+        // by the calls the frame leaves: a settle's frames drawing ~60 squares stretched left no calls for them, the settle
+        // timed out with them live (2-5 heavy frames on the desktop capture's 0.611 pan, artifacts/TASK-1570/change.md), as
+        // TASK-1565 pass 7 found for the lit tile steps.
+        // (a frame's tasks AHEAD_WORKER_FRAME_MS together: levelFrameWork.unitMs)
+        const timed = !!left && Grid.unitWorkerTime && Grid.aheadInWorker()
+        if (timed && Grid.levelFrameWork.unitMs >= AHEAD_WORKER_FRAME_MS) {
             ++this.levelWork.budgetStops
             this.unitSectorWanted ||= job
             return
         }
-        const start = performance.now(), calls = {n: 0, max: burst ? UNIT_SECTOR_BURST_CALLS : left ? left.calls : UNIT_SECTOR_TASK_CALLS}
-        const ms = burst ? (levels ? LEVEL_BURST_MS : UNIT_SECTOR_BURST_MS) : left ? LEVEL_TASK_MS : UNIT_SECTOR_TASK_MS
+        if (left && !timed && left.calls < UNIT_SECTOR_GROUND_CALLS) {
+            ++this.levelWork.budgetStops
+            this.unitSectorWanted ||= job
+            return
+        }
+        const start = performance.now(), calls = {n: 0, max: burst ? UNIT_SECTOR_BURST_CALLS : timed ? Infinity : left ? left.calls : UNIT_SECTOR_TASK_CALLS}
+        const ms = burst ? (levels ? LEVEL_BURST_MS : UNIT_SECTOR_BURST_MS) : timed ? AHEAD_WORKER_FRAME_MS - Grid.levelFrameWork.unitMs :
+            left ? LEVEL_TASK_MS : UNIT_SECTOR_TASK_MS
         if (burst)
             ++this.unitSectorWork.bursts
         let last = 0
@@ -6361,6 +6395,8 @@ class Grid extends SpritesGroup {
         // calls it recorded (aheadUnitRatio, 1-4).
         const real0 = Grid.frameCallsNow()
         const spend = () => {
+            if (timed)
+                Grid.levelFrameWork.unitMs += performance.now() - start
             if (!left)
                 return
             if (!ahead) {
@@ -6394,7 +6430,9 @@ class Grid extends SpritesGroup {
             // TASK-1564: no new build while the Worker's queue is full: the rest when a picture comes back (onDrain).
             // TASK-1565 rework: but a burst's squares on the canvas all go (the frames draw them live, heavy, till they come;
             // the Worker makes a unit sector in ~1 ms once its canvases are kept, artifacts/TASK-1565/preview).
-            if (!(burst && k < job.onCanvas) && Grid.sectorWorkerBusy()) {
+            // TASK-1570 (Grid.litWorkerOrder): a square on the canvas may fill the queue as far as a lit tile there
+            // (SectorWorker.busy(true)): the lit tiles' allowance left the unit sectors on the canvas waiting (drawn live).
+            if (!(burst && k < job.onCanvas) && Grid.sectorWorkerBusy(Grid.litWorkerOrder && k < (job.onCanvas || 0))) {
                 ++this.unitWorkerStops
                 this.unitSectorWanted ||= {...job, list: job.list.slice(k), onCanvas: Math.max(0, (job.onCanvas || 0) - k)}
                 spend()
@@ -7891,12 +7929,15 @@ class Grid extends SpritesGroup {
         // its estimate before the first).
         const ahead = stepped && !levels && this.aheadOn(true)
         const stepCalls = {n: 0, max: Infinity}
-        for (const {u, v, shown} of tiles) {
+        for (const {u, v, shown: onCanvas, soon} of tiles) {
+            // TASK-1570: a ring tile the camera reaches soon is budgeted as one on the canvas
+            const shown = onCanvas || soon
             if (this.litHas(view, u, v) || this.litPending(view, u, v))
                 continue
             // TASK-1564: no new tile while the Worker's queue is full (the tile under way goes on; a first view's batch, drawn
             // live till its tiles come, is sent whole). The next frame's task goes on.
-            if (!batch && Grid.sectorWorkerBusy() && !(this.litTileJob && this.litTileJob.view === view && this.litTileJob.u === u &&
+            // TASK-1570: a square on the canvas (shown) may fill the queue further (SectorWorker.busy(true)).
+            if (!batch && Grid.sectorWorkerBusy(!!shown && Grid.litWorkerOrder) && !(this.litTileJob && this.litTileJob.view === view && this.litTileJob.u === u &&
                     this.litTileJob.v === v)) {
                 ++this.litWorkerStops
                 if (ahead)
@@ -8073,6 +8114,10 @@ class Grid extends SpritesGroup {
     // One task between frames: a band of the rest snapshot while the camera is at rest, else up
     // to LIT_TILE_BUDGET of the tiles within a tile of the canvas, nearest its centre first.
     queueLitTiles(view, t, cw, ch) {
+        // TASK-1570: the frame's ring (litQueueAt: litTilePriority's order and cancels, the drain refill), taken before a task
+        // already queued returns, and the worker's pending builds ordered by it (SectorWorker.pump).
+        if (view && Grid.litWorkerOrder)
+            this.noteLitQueue(view, t, cw, ch)
         if (this.litTilesQueued)
             return
         const snapshots = this.overlaySnapshots
@@ -8095,12 +8140,18 @@ class Grid extends SpritesGroup {
         const range = ahead ? ahead.range : this.litTileRange(cw, ch, ox, oy, 1), missing = []
         const shownRange = this.litTileRange(cw, ch, ox, oy, 0)
         const cu = (cw / 2 - ox) / LIT_TILE - 0.5, cv = (ch / 2 - oy) / LIT_TILE - 0.5
+        // TASK-1570 (Grid.litWorkerOrder): not the tiles on their way from the worker (litPending): they took the first places of
+        // the task's LIT_AHEAD_CAP / LIT_TILE_BUDGET (buildLitTiles skips them), so a task started 2-3 new tiles where it could 8.
+        const order = Grid.litWorkerOrder
         for (let v = range.v0; v <= range.v1; ++v)
             for (let u = range.u0; u <= range.u1; ++u)
-                if (!this.litHas(view, u, v)) {
+                if (!this.litHas(view, u, v) && !(order && this.litPending(view, u, v))) {
                     const shown = u >= shownRange.u0 && u <= shownRange.u1 && v >= shownRange.v0 && v <= shownRange.v1
-                    missing.push({u, v, shown, far: ahead && !shown ? LIT_AHEAD_LATER + this.litAheadWhen(ahead, u, v, !moving) :
-                        Math.hypot(u - cu, v - cv)})
+                    const when = ahead && !shown ? this.litAheadWhen(ahead, u, v, !moving) : 0
+                    // TASK-1570 (Grid.litWorkerOrder): soon, a ring tile the moving camera reaches within LIT_AHEAD_MS (litAheadWhen
+                    // <= 1): as urgent as one on the canvas (buildLitTiles: AHEAD_WORKER_CATCHUP_MS, SectorWorker.busy(true)).
+                    missing.push({u, v, shown, soon: order && moving && !shown && !!ahead && when <= 1,
+                        far: ahead && !shown ? LIT_AHEAD_LATER + when : Math.hypot(u - cu, v - cv)})
                 }
         const rest = view.rest
         const banding = rest && rest.done < LIT_REST_BANDS && rest.e === t.e && rest.f === t.f
@@ -8119,13 +8170,21 @@ class Grid extends SpritesGroup {
         }
         if (!banding && !missing.length) {
             view.patchedTiles = false
+            if (this.litQueueAt?.view === view)
+                this.litQueueAt.refill = false
             return
         }
         missing.sort((a, b) => a.far - b.far)
+        // TASK-1570: whether the worker's drain should queue this again (tiles missing that are not on their way).
+        if (this.litQueueAt?.view === view)
+            this.litQueueAt.refill = !banding
         this.litTilesQueued = true
         // TASK-1439: a task of tiles with the camera at rest when the browser is idle (LIT_IDLE_TIMEOUT at most); TASK-1453: a
         // view the frames draw live at once (setTimeout).
-        const idle = !banding && !view.unbuilt && !gameEvent.screen.surfaceMoving && typeof requestIdleCallback === 'function'
+        // TASK-1570 (Grid.litWorkerOrder): not while tiles on the canvas are missing (litQueueAt.shownMissing): an idle callback
+        // waited up to LIT_IDLE_TIMEOUT across frames in a pan's short pauses, and no lit task could be queued meanwhile.
+        const idle = !banding && !view.unbuilt && !gameEvent.screen.surfaceMoving && typeof requestIdleCallback === 'function' &&
+            !(Grid.litWorkerOrder && this.litQueueAt?.view === view && this.litQueueAt.shownMissing)
         ;(idle ? fn => requestIdleCallback(fn, {timeout: LIT_IDLE_TIMEOUT}) : setTimeout)(gridTask(() => {
             this.litTilesQueued = false
             // Nothing is built inside a zoom gesture (its frames keep their live light), nor (TASK-1316) for a board the
@@ -8177,16 +8236,104 @@ class Grid extends SpritesGroup {
     // TASK-1552: the lit view's tiles to keep built round the canvas at offset ox, oy: the canvas's tiles grown by LIT_AHEAD_RING,
     // and on each side the camera moves to (litMotion: its last frames' velocity) by the tiles it crosses in LIT_AHEAD_MS, at
     // most LIT_AHEAD_MAX. {range, ox, oy, cw, ch, mx, my}: mx, my the canvas's motion over the view (device pixels a ms).
+    // TASK-1570 (Grid.litAheadSized): the reach on each side sized from the camera's velocity and the measured time a lit tile
+    // takes to build (litBuildMs): litReach. The ring's tiles at most LIT_AHEAD_BYTES_SHARE of the lit sectors' budget (the
+    // larger reach cut first), so a ring never evicts the canvas's own tiles.
     litAheadRange(view, cw, ch, ox, oy) {
         const m = this.litMotion && this.litMotion.view === view ? this.litMotion : null
         const mx = m ? -m.vx : 0, my = m ? -m.vy : 0
         const r = this.litTileRange(cw, ch, ox, oy, LIT_AHEAD_RING)
-        const reach = speed => Math.min(LIT_AHEAD_MAX, Math.ceil(Math.abs(speed) * LIT_AHEAD_MS / LIT_TILE))
-        if (mx > 0) r.u1 += reach(mx)
-        else if (mx < 0) r.u0 -= reach(mx)
-        if (my > 0) r.v1 += reach(my)
-        else if (my < 0) r.v0 -= reach(my)
-        return {range: r, ox, oy, cw, ch, mx, my}
+        let rx, ry, sx = 0, sy = 0
+        if (Grid.litAheadSized) {
+            const ms = this.litBuildMs(), cols = r.u1 - r.u0 + 1, rows = r.v1 - r.v0 + 1
+            rx = this.litReach(mx, rows, ms)
+            ry = this.litReach(my, cols + rx, ms)
+            // TASK-1570: on every side, the reach of the recent peak speed (litPeakNow), at most LIT_AHEAD_REST_MAX: where a
+            // pan from rest gets to before its motion is known.
+            const p = this.litPeakNow()
+            sx = Math.min(LIT_AHEAD_REST_MAX, this.litReach(p.x, rows, ms))
+            sy = Math.min(LIT_AHEAD_REST_MAX, this.litReach(p.y, cols, ms))
+            const most = this.sectors ? Math.floor(this.sectors.budget * LIT_AHEAD_BYTES_SHARE / (LIT_TILE * LIT_TILE * 4)) : Infinity
+            // (the rest reach cut first, then the larger of the motion's)
+            while ((rx || ry || sx || sy) && (cols + rx + 2 * sx) * (rows + ry + 2 * sy) > most) {
+                if (sx || sy) {
+                    if (sx >= sy) --sx
+                    else --sy
+                }
+                else if (rx >= ry) --rx
+                else --ry
+            }
+            r.u0 -= sx
+            r.u1 += sx
+            r.v0 -= sy
+            r.v1 += sy
+        }
+        else {
+            const reach = speed => Math.min(LIT_AHEAD_MAX, Math.ceil(Math.abs(speed) * LIT_AHEAD_MS / LIT_TILE))
+            rx = mx ? reach(mx) : 0
+            ry = my ? reach(my) : 0
+        }
+        if (mx > 0) r.u1 += rx
+        else if (mx < 0) r.u0 -= rx
+        if (my > 0) r.v1 += ry
+        else if (my < 0) r.v0 -= ry
+        return {range: r, ox, oy, cw, ch, mx, my, rx, ry, sx, sy}
+    }
+    // TASK-1570: the tiles the ring reaches past LIT_AHEAD_RING on a side the camera moves to at speed (device pixels a ms),
+    // across tiles to build for each tile it crosses (the ring's extent along the other axis), ms a tile's build: the camera
+    // crosses d tiles in d * LIT_TILE / speed ms, and the queue builds them in LIT_AHEAD_MS (the lead: a few frames and the
+    // queue's wait) + d * across * ms, so d = speed * LIT_AHEAD_MS / (LIT_TILE - speed * across * ms) (the builds keep up), at
+    // most LIT_AHEAD_REACH_MAX (also when they cannot: the denominator <= 0).
+    litReach(speed, across, ms) {
+        const s = Math.abs(speed)
+        if (!(s > 0))
+            return 0
+        const spare = LIT_TILE - s * across * ms
+        return Math.min(LIT_AHEAD_REACH_MAX, spare > 0 ? Math.ceil(s * LIT_AHEAD_MS / spare) : Infinity)
+    }
+    // TASK-1570: the measured time (ms) a lit tile takes to build: with the Worker drawing the slower of its mean for a lit
+    // tile (SectorWorker.kindMs) and the main thread's recording (litTileCost), else the main-thread build (litTileCost).
+    litBuildMs() {
+        const main = litTileCost.ms || 0
+        return Grid.aheadInWorker() ? Math.max(SectorWorker.kindMs('lit'), main) : main
+    }
+    // TASK-1570 (Grid.litWorkerOrder): the frame's lit ring at queueLitTiles (litQueueAt: view, its ahead range, the canvas's
+    // tiles and centre, whether the camera moves; the drain refill's arguments; refill kept while the view is the same), and
+    // the worker's pending builds ordered by it.
+    noteLitQueue(view, t, cw, ch) {
+        const ox = Math.round(t.e - view.e), oy = Math.round(t.f - view.f)
+        const ahead = Grid.litAhead ? this.litAheadRange(view, cw, ch, ox, oy) : null
+        const old = this.litQueueAt
+        this.litQueueAt = {view, t, cw, ch, ahead, range: ahead ? ahead.range : this.litTileRange(cw, ch, ox, oy, 1),
+            shown: this.litTileRange(cw, ch, ox, oy, 0), cu: (cw / 2 - ox) / LIT_TILE - 0.5, cv: (ch / 2 - oy) / LIT_TILE - 0.5,
+            moving: !!gameEvent.screen.surfaceMoving, refill: old?.view === view ? old.refill : false, shownMissing: false}
+        const q = this.litQueueAt, r = q.shown
+        for (let v = r.v0; v <= r.v1 && !q.shownMissing; ++v)
+            for (let u = r.u0; u <= r.u1; ++u)
+                if (!this.litHas(view, u, v)) {
+                    q.shownMissing = true
+                    break
+                }
+        if (ahead)
+            this.aheadWork.reach = (ahead.rx || 0) + (ahead.ry || 0) + (ahead.sx || 0) + (ahead.sy || 0)
+        if (Grid.sectorWorkerOn())
+            SectorWorker.pump()
+    }
+    // TASK-1570: the worker's order for lit tile build rec (lower first; SectorWorker.pump): a tile on the canvas by its
+    // distance from the canvas's centre (tiles), else LIT_AHEAD_LATER + litAheadWhen (by when the camera reaches it); null
+    // (cancelled) for another view than the board's, or a tile outside the frame's ring (the camera left it behind).
+    litTilePriority(rec) {
+        const q = this.litQueueAt
+        if (this !== grid || rec.view !== this.litView)
+            return null
+        if (!q || q.view !== rec.view)
+            return LIT_AHEAD_LATER
+        const {u, v} = rec, s = q.shown, r = q.range
+        if (u >= s.u0 && u <= s.u1 && v >= s.v0 && v <= s.v1)
+            return Math.hypot(u - q.cu, v - q.cv)
+        if (u < r.u0 || u > r.u1 || v < r.v0 || v > r.v1)
+            return null
+        return LIT_AHEAD_LATER + (q.ahead ? this.litAheadWhen(q.ahead, u, v, !q.moving) : 0)
     }
     // TASK-1552: the order of tile (u, v) of litAheadRange's ahead, not on the canvas, among the ring's tiles to build (lower
     // first): while the camera moves (rest false) the time the canvas takes to reach it at this motion (LIT_AHEAD_MS units),
@@ -8217,10 +8364,29 @@ class Grid extends SpritesGroup {
             const k = Math.min(1, dt / LIT_MOTION_SMOOTH_MS)
             m.vx += ((t.e - m.e) / dt - m.vx) * k
             m.vy += ((t.f - m.f) / dt - m.vy) * k
+            // TASK-1570: the recent peak speed on each axis (litPeakNow), for the ring at rest.
+            if (Grid.litAheadSized) {
+                const p = this.litPeakNow(now)
+                p.x = Math.max(p.x, Math.abs(m.vx))
+                p.y = Math.max(p.y, Math.abs(m.vy))
+            }
         }
         m.e = t.e
         m.f = t.f
         m.time = now
+    }
+    // TASK-1570: the camera's recent peak speed on each axis (device pixels a ms; litPeak, any view: the screen's motion), decayed
+    // by LIT_AHEAD_PEAK_MS to now: a pan starting from rest (a fling) moved 1-2 tiles in its first frame on the phone capture
+    // (artifacts/TASK-1570/change.md), before the motion's own reach exists.
+    litPeakNow(now = performance.now()) {
+        const p = this.litPeak ||= {x: 0, y: 0, time: now}
+        if (now > p.time) {
+            const k = Math.exp(-(now - p.time) / LIT_AHEAD_PEAK_MS)
+            p.x *= k
+            p.y *= k
+            p.time = now
+        }
+        return p
     }
     // TASK-1518: before the rest snapshot's last band (whose finish starts its split, prepareLitCellLayer -> startCellSplit ->
     // cellLayerCells), a step of the cell mask that split takes (the same key, builder and cache: cellMaskSteps), as the
@@ -8493,7 +8659,9 @@ class Grid extends SpritesGroup {
             const key = u + ',' + v
             const rec = {view, key, u, v, tile, edges: view.edges, outline: view.outline, rebuilds: atmosphericLighting.rebuilds,
                 mapScale: atmosphericLighting.mapScale, gen: this.sectorGen}
-            if (this.sectorSubmit(sector, out => this.litTileArrived(rec, out), () => this.litTileFailed(rec))) {
+            // TASK-1570: posted to the worker in litTilePriority's order (cancelled when the camera left its square).
+            if (this.sectorSubmit(sector, out => this.litTileArrived(rec, out), () => this.litTileFailed(rec),
+                    Grid.litWorkerOrder ? () => this.litTilePriority(rec) : null)) {
                 tile.workerPending = rec
                 ;(view.workerTiles ||= new Map()).set(key, rec)
             }
@@ -8657,6 +8825,12 @@ class Grid extends SpritesGroup {
         if (!mine || this !== grid || view !== this.litView || view.tiles.has(key) || rec.edges !== view.edges ||
                 rec.outline !== view.outline || rec.rebuilds !== atmosphericLighting.rebuilds ||
                 rec.mapScale !== atmosphericLighting.mapScale || rec.gen !== this.sectorGen) {
+            // TASK-1570: why (the first that held), visualsPerf work.sectorAhead.litDropBy
+            const why = !mine ? 'other' : this !== grid || view !== this.litView ? 'view' : view.tiles.has(key) ? 'built' :
+                rec.edges !== view.edges ? 'edges' : rec.outline !== view.outline ? 'outline' : rec.rebuilds !== atmosphericLighting.rebuilds ?
+                'rebuilds' : rec.mapScale !== atmosphericLighting.mapScale ? 'mapScale' : 'gen'
+            if (this.aheadWork.litDropBy)
+                ++this.aheadWork.litDropBy[why]
             SectorWorker.dropped(out)
             delete tile.workerPending
             this.freeLitTile(tile)
@@ -8682,7 +8856,8 @@ class Grid extends SpritesGroup {
     }
     // TASK-1564: a sector build's recording ended (sector: sectorSnapshot's): its pictures sent to the Worker (onDone / onFail
     // later; true), or, main only or without the worker, drawn here (its recorders' runs flushed; false), counted.
-    sectorSubmit(sector, onDone, onFail) {
+    // TASK-1570: priority: SectorWorker.submit's (lower first, null cancels a build still pending).
+    sectorSubmit(sector, onDone, onFail, priority = null) {
         const {sink, snapshot} = sector
         if (sink.worker && !sink.mainOnly) {
             for (const key of sink.sprites.keys())
@@ -8692,7 +8867,7 @@ class Grid extends SpritesGroup {
                 }
         }
         if (sink.worker && !sink.mainOnly && SectorWorker.on()) {
-            SectorWorker.submit(snapshot, sink.sprites, onDone, onFail)
+            SectorWorker.submit(snapshot, sink.sprites, onDone, onFail, priority)
             return true
         }
         if (sink.worker && !sink.mainOnly)
@@ -11578,6 +11753,21 @@ Grid.litAheadMoving = false
 // TASK-1565 (SECTORS 9/11): the sectors of the camera's level built ahead of it, in a ring, while it moves and at rest, within
 // a frame's budget (Grid.aheadRange, queueLitTiles, queueUnitSectors); false: as TASK-1564.
 Grid.sectorAhead = true
+// TASK-1570 (NOSTANDIN 3/6): lit tiles ready ahead of the screen. litAheadSized: the lit ring's reach from the camera's
+// velocity and the measured build time a tile (litAheadRange, litReach); litWorkerOrder: the worker's pending lit builds
+// posted in order (on the canvas first, then by when the camera reaches them; cancelled when it left them: litTilePriority,
+// SectorWorker.pump) and a square on the canvas may fill its queue further (SectorWorker.busy(true)); litDrainRefill: a
+// picture back queues the lit tiles still missing (SectorWorker.onDrain). false: as TASK-1569.
+Grid.litAheadSized = true
+Grid.litWorkerOrder = true
+Grid.litDrainRefill = true
+// TASK-1570: with the Worker drawing them, a settle's or a moving camera's unit sector builds bounded by their recording time
+// (unitSectorTask: AHEAD_WORKER_FRAME_MS a task) instead of the frame's draw calls left; false: as TASK-1565.
+Grid.unitWorkerTime = true
+// TASK-1570: the surface cache split's last step (its whole-canvas cut) waits for the camera at rest while the frames draw the
+// cache (surfaceSplitStep), at most SPLIT_CUT_WAIT_MS; false: as before.
+Grid.splitCutAtRest = true
+const SPLIT_CUT_WAIT_MS = 4000
 // TASK-1565: the ring of squares round the canvas (besides the squares the camera's motion reaches: aheadRange), and the lit
 // tile steps the builds between two frames of a moving camera make at most (each counted LEVEL_TILE_STEP_CALLS in the
 // frame's LEVEL_FRAME_CALLS).
@@ -11668,7 +11858,7 @@ Grid.onSectorSnapshot = null
 // builds record; false (or the page's ?sectorWorker=0, or no Worker / OffscreenCanvas): drawn on the main thread as TASK-1563
 // did (the fallback, counted). Not with an audit hook (Grid.onSectorSnapshot: it compares the main thread's pictures).
 Grid.sectorWorker = true
-Grid.sectorWorkerBusy = () => Grid.sectorWorkerOn() && SectorWorker.busy()
+Grid.sectorWorkerBusy = (shown = false) => Grid.sectorWorkerOn() && SectorWorker.busy(shown)
 // TASK-1565 rework: whether the sector pictures are drawn in the Worker now (not the main-thread fallback): a build ahead then
 // only records on the main thread (budgeted by its time, AHEAD_WORKER_FRAME_MS, not by offscreen megapixels or tile steps).
 Grid.aheadInWorker = () => Grid.sectorWorkerOn()
@@ -11682,7 +11872,15 @@ Grid.cameraAtRest = () => {
 if (typeof SectorWorker !== 'undefined')
     SectorWorker.onDrain = () => {
         const g = typeof grid !== 'undefined' ? grid : null
-        if (!g || !g.unitSectorWanted || g.unitSectorQueued || SectorWorker.busy())
+        // TASK-1570 (Grid.litDrainRefill): the lit tiles the last lit frame's task left missing (litQueueAt.refill) queued
+        // again at once, so the worker is fed as it drains instead of once a frame (the builds stay within the frame's
+        // recording budget: AHEAD_WORKER_FRAME_MS / CATCHUP, levelFrameWork).
+        const q = g && g.litQueueAt
+        if (Grid.litDrainRefill && q && q.refill && q.view === g.litView && !g.litTilesQueued && !SectorWorker.busy(q.shownMissing)) {
+            ++g.aheadWork.litDrainTasks
+            g.queueLitTiles(q.view, q.t, q.cw, q.ch)
+        }
+        if (!g || !g.unitSectorWanted || g.unitSectorQueued || SectorWorker.busy(Grid.litWorkerOrder && g.unitSectorWanted.onCanvas > 0))
             return
         g.unitSectorQueued = true
         setTimeout(gridTask(() => g.unitSectorTask()))
@@ -11743,7 +11941,7 @@ Grid.oncePerFrame = tag => {
 }
 // The frame number (drawAll) and the level work the tasks did since that frame began.
 Grid.frameNo = 0
-Grid.levelFrameWork = {frame: -1, calls: 0, tileSteps: 0, mp: 0, prevMp: 0, ms: 0}
+Grid.levelFrameWork = {frame: -1, calls: 0, tileSteps: 0, mp: 0, prevMp: 0, ms: 0, unitMs: 0}
 Grid.levelWorkLeft = () => {
     const w = Grid.levelFrameWork
     if (w.frame !== Grid.frameNo) {
@@ -11754,6 +11952,8 @@ Grid.levelWorkLeft = () => {
         w.tileSteps = 0
         w.mp = 0
         w.ms = 0
+        // TASK-1570: the unit sector tasks' recording time (unitSectorTask, Grid.unitWorkerTime)
+        w.unitMs = 0
     }
     return {calls: LEVEL_FRAME_CALLS - w.calls, tileSteps: w.tileSteps}
 }
@@ -11857,6 +12057,13 @@ const LIT_AHEAD_MAX = 3
 const LIT_AHEAD_KEEP = 2
 const LIT_AHEAD_CAP = 8
 const LIT_AHEAD_TASKS = 10
+// TASK-1570 (Grid.litAheadSized): the most tiles the lit ring reaches past LIT_AHEAD_RING on a side the camera moves to
+// (litReach; LIT_AHEAD_MAX before), and the share of the lit sectors' budget the whole ring may take (litAheadRange).
+const LIT_AHEAD_REACH_MAX = 6
+const LIT_AHEAD_BYTES_SHARE = 0.5
+// TASK-1570: the ring's reach on every side from the recent peak speed (litPeakNow: decayed over LIT_AHEAD_PEAK_MS) at most.
+const LIT_AHEAD_REST_MAX = 2
+const LIT_AHEAD_PEAK_MS = 4000
 // TASK-1552: lit tile quarters kept spare (Grid.releaseLitTile; topped up at rest, Grid.reserveLitTileParts).
 const LIT_TILE_SPARE_PARTS = 192
 const LIT_AHEAD_LATER = 1000

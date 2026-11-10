@@ -97,12 +97,14 @@
             return null
         const last = sectorAheadLast || {}, out = {}
         for (const k of Object.keys(c))
-            if (typeof c[k] === 'number' && k !== 'ring')
+            if (typeof c[k] === 'number' && k !== 'ring' && k !== 'reach')
                 out[k] = c[k] - (last[k] || 0)
             // TASK-1568: litDeferBy {surfaceQueued, overlayQueued, overlaySnapshot} (Grid.litTaskDefers' conditions)
             else if (c[k] && typeof c[k] === 'object')
                 out[k] = Object.fromEntries(Object.entries(c[k]).map(([n, v]) => [n, v - (last[k]?.[n] || 0)]))
         out.ring = c.ring
+        // TASK-1570: the lit ring's reach the last lit frame asked for (not a delta)
+        out.reach = c.reach
         sectorAheadLast = Object.fromEntries(Object.entries(c).map(([k, v]) => [k, v && typeof v === 'object' ? {...v} : v]))
         return out
     }
@@ -112,8 +114,11 @@
             return null
         const c = SectorWorker.counters, last = sectorWorkerLast || {}
         const out = {state: SectorWorker.state}
-        for (const k of ['builtWorker', 'builtMain', 'builtMainMoving', 'fallback', 'posted', 'dropped', 'failed', 'spritesSent', 'spritesDropped'])
-            out[k] = c[k] - (last[k] || 0)
+        // TASK-1570: cancelled (builds the worker dropped before drawing them: the camera left their square), reordered (queued
+        // builds of older ids a build was drawn before, in the worker).
+        for (const k of ['builtWorker', 'builtMain', 'builtMainMoving', 'fallback', 'posted', 'dropped', 'failed', 'spritesSent', 'spritesDropped',
+                'cancelled', 'reordered'])
+            out[k] = (c[k] || 0) - (last[k] || 0)
         out.workerMs = Math.round((c.workerMs - (last.workerMs || 0)) * 10) / 10
         out.depth = c.depth
         out.depthMax = c.depthMax
