@@ -83,8 +83,9 @@
             // level), Grid.levelCoverage; a frame not drawn on the levels (mode 'standard') draws every square at the
             // camera's level; a held frame (no board drawn) shows the last frame's.
             frame.work.exactCoverage = levelCoverage()
-            // TASK-1574 (ZOOMFADE 1/5): swapPops, fades, settleMs, zoomExactCoverage and the frame's squares (squareFrame).
-            Object.assign(frame.work, swapCounters(frame))
+            // TASK-1574 (ZOOMFADE 1/5): swapPops, fades, settleMs, zoomExactCoverage and the frame's squares (squareFrame), from
+            // swapRaw when the capture stops (swapFinish).
+            frame.work.swapRaw = swapRaw()
             work = freshWork()
             if (frame.gapMs > 50) report.longGaps.push({timestamp, gapMs: frame.gapMs})
             report.samples.push(frame)
@@ -138,25 +139,24 @@
     // squares fading in drawn in the frame. work.settleMs: on the first drawn frame after a zoom gesture with no square
     // stretched, held or fading, the ms since the end of the gesture's last zoom frame (else null). work.zoomExactCoverage:
     // a zoom gesture frame's share of squares drawn exact (Grid.levelCoverage), else null.
-    let swapPrev = null, swapSerial = null, zoomLastEnd = null
-    const squareKey = ({u, v}) => u + ',' + v
-    const squareFrame = () => {
+    // TASK-1574 attempt 2 (probe effect): a sampled frame keeps only references to what the draw made anyway (swapRaw: the draw
+    // serial, Grid.squareStates, Grid.frameView, the board's and the surface cache's bounds); the counters above are worked out
+    // from them when the capture stops (swapFinish), off the frames: no strings, sets or board geometry inside the measured run.
+    const swapRaw = () => {
         const g = typeof grid !== 'undefined' ? grid : null
-        if (!g)
-            return null
-        if (g.drawSerial === swapSerial)
-            return undefined
-        swapSerial = g.drawSerial
-        const st = g.squareStates, fv = g.frameView
-        if (st && st.serial === g.drawSerial) {
+        return g ? [g.drawSerial, g.squareStates, g.frameView, typeof mapDepth !== 'undefined' ? mapDepth.bounds : undefined, g.surfaceCacheBounds] : null
+    }
+    const squareKey = ({u, v}) => u + ',' + v
+    const squareFrameOf = (g, [serial, st, fv, bounds, cacheBounds]) => {
+        if (st && st.serial === serial) {
             const r = [Infinity, -Infinity, Infinity, -Infinity]
             for (const {u, v} of st.squares) {
                 r[0] = Math.min(r[0], u); r[1] = Math.max(r[1], u); r[2] = Math.min(r[2], v); r[3] = Math.max(r[3], v)
             }
             return {mode: st.mode, level: st.level, r, ne: st.stretch.concat(st.held).map(squareKey), fd: (st.fading || []).map(squareKey)}
         }
-        if (fv && fv.serial === g.drawSerial) {
-            const range = g.litTileRange(fv.cw, fv.ch, fv.ox, fv.oy, 0), b = g.unitBoardSquares(fv.level)
+        if (fv && fv.serial === serial) {
+            const range = g.litTileRange(fv.cw, fv.ch, fv.ox, fv.oy, 0), b = g.unitBoardSquaresIn(fv.level, bounds, cacheBounds)
             return {mode: 'board', level: fv.level, r: [Math.max(range.u0, b.u0), Math.min(range.u1, b.u1), Math.max(range.v0, b.v0), Math.min(range.v1, b.v1)], ne: [], fd: []}
         }
         return null
@@ -175,21 +175,35 @@
         }
         return n
     }
-    const swapCounters = frame => {
-        const cur = squareFrame(), cov = frame.work.exactCoverage
-        let swapPops = 0, settleMs = null
-        if (cur !== undefined) {
-            swapPops = swapPopsOf(swapPrev, cur)
-            swapPrev = cur
-            if (cur?.mode === 'zoom')
-                zoomLastEnd = frame.end
-            else if (cur && zoomLastEnd !== null && !cur.ne.length && !cur.fd.length) {
-                settleMs = Math.round((frame.end - zoomLastEnd) * 10) / 10
-                zoomLastEnd = null
+    // The samples' swap counters in order (each sample once: a later stop finds none left to do).
+    const swapFinish = samples => {
+        const g = typeof grid !== 'undefined' ? grid : null
+        let prev = null, serial = null, zoomLastEnd = null
+        for (const frame of samples) {
+            const raw = frame.work.swapRaw
+            if (raw === undefined)
+                continue
+            delete frame.work.swapRaw
+            let cur = null
+            if (raw && g) {
+                cur = raw[0] === serial ? undefined : squareFrameOf(g, raw)
+                serial = raw[0]
             }
+            let swapPops = 0, settleMs = null
+            if (cur !== undefined) {
+                swapPops = swapPopsOf(prev, cur)
+                prev = cur
+                if (cur?.mode === 'zoom')
+                    zoomLastEnd = frame.end
+                else if (cur && zoomLastEnd !== null && !cur.ne.length && !cur.fd.length) {
+                    settleMs = Math.round((frame.end - zoomLastEnd) * 10) / 10
+                    zoomLastEnd = null
+                }
+            }
+            const cov = frame.work.exactCoverage
+            const zoomExactCoverage = cov && cov.mode === 'zoom' && !cov.held ? (cov.total ? Math.round(cov.exact / cov.total * 1e4) / 1e4 : 1) : null
+            Object.assign(frame.work, {swapPops, fades: cur ? cur.fd.length : 0, settleMs, zoomExactCoverage, squareFrame: cur === undefined ? {held: 1} : cur})
         }
-        const zoomExactCoverage = cov && cov.mode === 'zoom' && !cov.held ? (cov.total ? Math.round(cov.exact / cov.total * 1e4) / 1e4 : 1) : null
-        return {swapPops, fades: cur ? cur.fd.length : 0, settleMs, zoomExactCoverage, squareFrame: cur === undefined ? {held: 1} : cur}
     }
     let coverageSerial = null, coverageLast = null
     const levelCoverage = () => {
@@ -973,12 +987,16 @@
         lastInput=null;lastInputType=null;pointerState=null
         const target=report
         sourceIdentity.then(sources=>{target.sourceHashes=sources})
+        // TASK-1574: Grid.frameView for the swap counters while sampling.
+        if (typeof Grid !== 'undefined') Grid.noteFrameViews = true
         active = true
         return report
     }
     function stop() {
         active = false
+        if (typeof Grid !== 'undefined') Grid.noteFrameViews = false
         if (!report) return null
+        swapFinish(report.samples)
         const gaps = report.samples.filter(s=>s.visible && s.gapMs>0).map(s=>s.gapMs).sort((a,b)=>a-b)
         report.refreshInterval.observedMedianMs = gaps[Math.floor(gaps.length/2)] ?? null
         report.valid = report.samples.length>1 && report.invalidReasons.length===0

@@ -5632,7 +5632,12 @@ class Grid extends SpritesGroup {
     // drawRange's margin.
     unitBoardSquares(level) {
         mapDepth.ensureGeometry(this)
-        const b = mapDepth.bounds, c = this.surfaceCacheBounds, m = 4 * basis.r + assets.size
+        return this.unitBoardSquaresIn(level, mapDepth.bounds, this.surfaceCacheBounds)
+    }
+    // TASK-1574: unitBoardSquares for the board's bounds b and the surface cache's c (render/visualsPerf.js swapFinish: those a
+    // sampled frame had).
+    unitBoardSquaresIn(level, b, c) {
+        const m = 4 * basis.r + assets.size
         let left = b.left, top = b.top, right = b.right, bottom = b.bottom
         if (c) {
             left = Math.min(left, c.left); top = Math.min(top, c.top)
@@ -5825,9 +5830,10 @@ class Grid extends SpritesGroup {
         }
         return !!(this.levelSettle || this.sectorRest) && !screen.zoomGesture
     }
-    // TASK-1574: the main canvas frame's camera (frameView), for the swap counters of render/visualsPerf.js.
+    // TASK-1574: the main canvas frame's camera (frameView), for the swap counters of render/visualsPerf.js: only while it
+    // samples (Grid.noteFrameViews), nothing in ordinary play.
     noteFrameView(ctx) {
-        if (this !== grid || typeof mainCanvas === 'undefined' || ctx.canvas !== mainCanvas)
+        if (!Grid.noteFrameViews || this !== grid || typeof mainCanvas === 'undefined' || ctx.canvas !== mainCanvas)
             return
         const t = ctx.getTransform()
         this.frameView = {serial: this.drawSerial, level: t.a, ox: Math.round(t.e), oy: Math.round(t.f), cw: ctx.canvas.width, ch: ctx.canvas.height}
@@ -12209,6 +12215,8 @@ const LEVEL_SETTLE_MS = 6000
 const ZOOM_QUIET_MS = 2500
 // A zoom's quiet cache step: the pieces that fit this (up to a piece heavy to rasterize), one task a frame.
 const ZOOM_QUIET_STEP_MS = 4
+// TASK-1574: Grid.frameView kept (noteFrameView) while render/visualsPerf.js samples.
+Grid.noteFrameViews = false
 Grid.zoomQuiet = () => {
     const g = typeof grid !== 'undefined' ? grid : null
     if (!g || !Grid.zoomLevels || typeof g.levelsOn !== 'function' || !g.levelsOn())
