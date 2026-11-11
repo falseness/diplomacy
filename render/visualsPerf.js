@@ -83,6 +83,8 @@
             // level), Grid.levelCoverage; a frame not drawn on the levels (mode 'standard') draws every square at the
             // camera's level; a held frame (no board drawn) shows the last frame's.
             frame.work.exactCoverage = levelCoverage()
+            // TASK-1574 (ZOOMFADE 1/5): swapPops, fades, settleMs, zoomExactCoverage and the frame's squares (squareFrame).
+            Object.assign(frame.work, swapCounters(frame))
             work = freshWork()
             if (frame.gapMs > 50) report.longGaps.push({timestamp, gapMs: frame.gapMs})
             report.samples.push(frame)
@@ -126,6 +128,68 @@
         c.depthMax = c.depth
         sectorWorkerLast = {...c}
         return out
+    }
+    // TASK-1574 (ZOOMFADE 1/5): the squares (u, v at the camera's level: the unit sectors' grid) of each frame drawn on the main
+    // canvas (squareFrame: mode zoom / settle / rest from Grid.squareStates, 'board' for any other frame, whose squares are all
+    // drawn at the camera's level; level; r: the on-screen square range [u0, u1, v0, v1]; ne: the squares not drawn exact
+    // (stretched or held); fd: the squares drawn fading in). A held frame (no board drawn: the same picture) is {held: 1}.
+    // SWAP POP (work.swapPops): a square of the previous drawn frame's ne, at the same level, on screen in this frame and in
+    // neither its ne nor its fd: replaced by its exact picture at full opacity from one frame to the next. work.fades: the
+    // squares fading in drawn in the frame. work.settleMs: on the first drawn frame after a zoom gesture with no square
+    // stretched, held or fading, the ms since the end of the gesture's last zoom frame (else null). work.zoomExactCoverage:
+    // a zoom gesture frame's share of squares drawn exact (Grid.levelCoverage), else null.
+    let swapPrev = null, swapSerial = null, zoomLastEnd = null
+    const squareKey = ({u, v}) => u + ',' + v
+    const squareFrame = () => {
+        const g = typeof grid !== 'undefined' ? grid : null
+        if (!g)
+            return null
+        if (g.drawSerial === swapSerial)
+            return undefined
+        swapSerial = g.drawSerial
+        const st = g.squareStates, fv = g.frameView
+        if (st && st.serial === g.drawSerial) {
+            const r = [Infinity, -Infinity, Infinity, -Infinity]
+            for (const {u, v} of st.squares) {
+                r[0] = Math.min(r[0], u); r[1] = Math.max(r[1], u); r[2] = Math.min(r[2], v); r[3] = Math.max(r[3], v)
+            }
+            return {mode: st.mode, level: st.level, r, ne: st.stretch.concat(st.held).map(squareKey), fd: (st.fading || []).map(squareKey)}
+        }
+        if (fv && fv.serial === g.drawSerial) {
+            const range = g.litTileRange(fv.cw, fv.ch, fv.ox, fv.oy, 0), b = g.unitBoardSquares(fv.level)
+            return {mode: 'board', level: fv.level, r: [Math.max(range.u0, b.u0), Math.min(range.u1, b.u1), Math.max(range.v0, b.v0), Math.min(range.v1, b.v1)], ne: [], fd: []}
+        }
+        return null
+    }
+    const swapPopsOf = (prev, cur) => {
+        if (!prev || !cur || prev.level !== cur.level || !prev.ne.length)
+            return 0
+        const ne = new Set(cur.ne), fd = new Set(cur.fd), r = cur.r
+        let n = 0
+        for (const k of prev.ne) {
+            if (ne.has(k) || fd.has(k))
+                continue
+            const [u, v] = k.split(',').map(Number)
+            if (u >= r[0] && u <= r[1] && v >= r[2] && v <= r[3])
+                ++n
+        }
+        return n
+    }
+    const swapCounters = frame => {
+        const cur = squareFrame(), cov = frame.work.exactCoverage
+        let swapPops = 0, settleMs = null
+        if (cur !== undefined) {
+            swapPops = swapPopsOf(swapPrev, cur)
+            swapPrev = cur
+            if (cur?.mode === 'zoom')
+                zoomLastEnd = frame.end
+            else if (cur && zoomLastEnd !== null && !cur.ne.length && !cur.fd.length) {
+                settleMs = Math.round((frame.end - zoomLastEnd) * 10) / 10
+                zoomLastEnd = null
+            }
+        }
+        const zoomExactCoverage = cov && cov.mode === 'zoom' && !cov.held ? (cov.total ? Math.round(cov.exact / cov.total * 1e4) / 1e4 : 1) : null
+        return {swapPops, fades: cur ? cur.fd.length : 0, settleMs, zoomExactCoverage, squareFrame: cur === undefined ? {held: 1} : cur}
     }
     let coverageSerial = null, coverageLast = null
     const levelCoverage = () => {

@@ -235,6 +235,13 @@ class Grid extends SpritesGroup {
         this.levelSettle = undefined
         this.sectorRest = undefined
         this.levelCoverage = undefined
+        // TASK-1574 (ZOOMFADE 1/5, diagnostic counters: render/visualsPerf.js work.swapPops / fades / settleMs /
+        // zoomExactCoverage): the main canvas frame's camera (frameView: its level t.a and the sectors' grid at ox, oy) and,
+        // for a frame drawn on the levels (a zoom gesture's or a settle's / rest's), its squares and those not drawn exact
+        // (squareStates: zoom frames all of them; level frames the stretched and held ones; fading: squares fading in, none
+        // yet). No allocation beyond the object: the lists are the frame's own.
+        this.frameView = undefined
+        this.squareStates = undefined
         // What a unit sector's ground (a lit tile, a stand-in) was drawn from stays the board's while this is the same: one
         // more on a board change the lit sectors were cleared for (clearSectors); a change they were dirtied for dirties the
         // unit sectors there too (staleSectorsIn).
@@ -5818,6 +5825,13 @@ class Grid extends SpritesGroup {
         }
         return !!(this.levelSettle || this.sectorRest) && !screen.zoomGesture
     }
+    // TASK-1574: the main canvas frame's camera (frameView), for the swap counters of render/visualsPerf.js.
+    noteFrameView(ctx) {
+        if (this !== grid || typeof mainCanvas === 'undefined' || ctx.canvas !== mainCanvas)
+            return
+        const t = ctx.getTransform()
+        this.frameView = {serial: this.drawSerial, level: t.a, ox: Math.round(t.e), oy: Math.round(t.f), cw: ctx.canvas.width, ch: ctx.canvas.height}
+    }
     endLevels(why) {
         if (this.levelSettle || this.sectorRest) {
             this.levelWork.ends[why] = (this.levelWork.ends[why] || 0) + 1
@@ -5993,6 +6007,9 @@ class Grid extends SpritesGroup {
         // standIn: squares drawn on the stand-in's ground (no tile yet); old: from a sector of the level on an older ground.
         this.levelCoverage = {serial: this.drawSerial, mode: this.levelSettle ? 'settle' : 'rest', kind, level: lv.plan.level, total,
             exact: total - stretched, stretched, bare: live, live, standIn: kind === 'standin' ? total - stretched : lv.standIn, old: lv.old}
+        // TASK-1574: the frame's stretched and held squares (the others drawn at the camera's level: sectors or live).
+        this.squareStates = {serial: this.drawSerial, mode: this.levelCoverage.mode, level: lv.plan.level, squares: lv.squares,
+            stretch: lv.stretch, held: lv.held, fading: null}
         if (this.levelSettle) {
             ++this.levelWork.settleFrames
             if (!stretched && !live) {
@@ -6139,6 +6156,7 @@ class Grid extends SpritesGroup {
         if (t.b !== 0 || t.c !== 0 || !(t.a > 0) || t.a !== t.d || !this.arr.length)
             return false
         ++this.drawSerial
+        this.noteFrameView(ctx)
         this.zoomRaster = undefined
         if (!atmosphericBackground.opaqueOver(ctx))
             ctx.clearRect(canvas.offset.x, canvas.offset.y, width, height)
@@ -6161,6 +6179,8 @@ class Grid extends SpritesGroup {
         this.drawStretchedSectors(ctx, t, squares, src, cover, cw, ch, ox, oy, true)
         this.levelCoverage = {serial: this.drawSerial, mode: 'zoom', level, total: squares.length, exact: 0,
             stretched: cover.covered.size, bare: squares.length - cover.covered.size, live: 0}
+        // TASK-1574: every square of a zoom frame is a scaled picture (stretched levels or the underlay), none exact.
+        this.squareStates = {serial: this.drawSerial, mode: 'zoom', level, squares, stretch: squares, held: [], fading: null}
         ++this.levelWork.zoomFrames
         // The frames after the gesture: drawn on the levels until the camera's level is built (levelSettle).
         this.levelSettle = {since: performance.now(), level: null}
@@ -9476,6 +9496,8 @@ class Grid extends SpritesGroup {
     draw(ctx) {
         const pass = this.zoomBoardPass
         ++this.drawSerial
+        if (!pass)
+            this.noteFrameView(ctx)
         this.lod = pass ? pass.lod : this.lodTransform(ctx)
         // TASK-1474: a moving frame far out draws the slab shadow, surface and overlays from the scene layer.
         const scene = !pass && this.drawSceneLayer(ctx)
