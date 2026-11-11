@@ -21,15 +21,15 @@ const atmosphericLighting = {
     // and on the far side (the cool light there is the blue territory's spill, TERRITORY.cool),
     // turning a light grey-blue only along the far edge.
     KEY: [
-        [0, [216, 200, 191], [112, 80, 26]],
-        [0.15, [216, 200, 191], [104, 74, 24]],
-        [0.26, [216, 200, 191], [92, 64, 34]],
-        [0.38, [207, 199, 195], [86, 59, 38]],
-        [0.5, [200, 197, 194], [72, 53, 42]],
-        [0.62, [205, 199, 199], [46, 35, 32]],
-        [0.75, [201, 197, 199], [36, 35, 38]],
-        [0.85, [206, 200, 196], [32, 33, 38]],
-        [1, [196, 196, 204], [28, 34, 44]]
+        [0, [211, 219, 228], [60, 44, 20]],
+        [0.15, [215, 224, 230], [56, 40, 18]],
+        [0.26, [221, 226, 226], [50, 38, 24]],
+        [0.38, [228, 230, 225], [46, 36, 28]],
+        [0.5, [239, 236, 225], [40, 34, 30]],
+        [0.62, [243, 238, 227], [34, 30, 28]],
+        [0.75, [238, 232, 223], [30, 30, 32]],
+        [0.85, [229, 223, 219], [28, 30, 34]],
+        [1, [218, 214, 215], [26, 30, 38]]
     ],
     // Key light axis (x, y); y per unit of x.
     DIRECTION: [1, 0.3],
@@ -121,24 +121,45 @@ const atmosphericLighting = {
     rimBuilds: 0,
     // Upper-left key light direction (degrees, screen space, y down) for shadows.
     KEY_ANGLE: -120,
-    // Tile look: pale cream marble tiles set in crisp dark grout. Each visible cell is
-    // inset by half the grout width over a grout fill of the visible cells, so there
-    // are no outlines or seams. Neutral tiles draw one of a few procedurally generated,
-    // cached marble variants; owned tiles their colour with the same marble pattern, under a faint sheen.
+    // Tile look (TASK-1580): weathered carved warm-tan sandstone slabs set in crisp dark grout. Each visible cell is
+    // inset by half the grout width over a grout fill of the visible cells, so there are no outlines or seams. Neutral
+    // tiles draw one of a few procedurally generated, cached sandstone variants (tileVariant); owned tiles their colour
+    // with the same stone detail, under a faint sheen.
     TILE: {
         variants: 8,
         rasterScale: 1.5,
-        // Near neutral before the light map, which warms it on the key side (about 1.5 red)
-        // and leaves it a pale neutral grey on the far side (about 0.94 red, 1 blue). A dark warm grey grout
-        // that reads as crisp lines between the polished tiles.
+        // Warm tan before the light map, which keeps it near this tan across the board (KEY). A dark warm grey grout
+        // that reads as crisp lines between the slabs.
         grout: '#57535b',
         groutWidth: 0.055,
-        stone: [153, 147, 155],
+        stone: [252, 184, 104],
+        // Owned tiles' faint sheen.
         sheen: 0.1,
-        // Owned tiles carry the marble too: the variant's luminance about its mean, times owned, added to the colour.
+        // Owned tiles carry the stone detail too: the variant's luminance about its mean, times owned, added to the colour.
         owned: 1.4,
-        // Polished slab sheen: a soft highlight towards the upper left of each neutral tile.
-        polish: 0.3
+        // tileVariant's sandstone: each slab's shade +- shade; mottle layers [count, min radius, max radius (hex radii),
+        // alpha] of light and dark patches; pits, cracks and chips per slab [min, max]; lip (lit edges) and hollow (shadowed
+        // pits, cracks, edges) colours; the bevel band's width (hex radii), its lit and shadowed alphas, and the key light's
+        // angle (degrees, screen space, y down: the upper left).
+        sandstone: {
+            shade: 0.04,
+            light: [255, 232, 186],
+            dark: [176, 116, 66],
+            mottle: [[14, 0.25, 0.6, 0.22]],
+            // drawFacets: lump spacing (hex radii), crease width (of the spacing), slope gain, lit and shadowed strengths,
+            // crease darkening, each lump's tone +- tone, the lit slopes' and shadowed slopes' colours.
+            facet: {spacing: 0.5, edge: 0.8, slope: 9, light: 1, shadow: 0.55, crease: 0.08, tone: 0.05,
+                glow: [255, 230, 160], shade: [150, 92, 74]},
+            pits: [10, 18],
+            cracks: [1, 2],
+            chips: [1, 3],
+            lip: [255, 244, 214],
+            hollow: [96, 58, 32],
+            bevel: 0.13,
+            lit: 0.75,
+            shadow: 0.6,
+            lightAngle: -135
+        }
     },
     tileVariants: null,
     tileVariantBuilds: 0,
@@ -146,12 +167,14 @@ const atmosphericLighting = {
     tileDetailBuilds: 0,
     ownedTiles: null,
     ownedTileBuilds: 0,
-    // Fogged cells: the same marble variants (TILE) in their grout, darkened and cooled to a
+    // Fogged cells: the same stone variants (TILE) in their grout, darkened and cooled to a
     // blue-grey by a multiply (tint, times a per-variant shade) and veiled by a soft mist (drifting wisps of colour mist at
     // up to mistAlpha, times a per-variant density). The light map leaves fogged cells unlit, so the variant is the cell.
     // Its index comes from the cell's coordinates only, never from what the fog hides.
     FOG: {
         tint: [86, 96, 116],
+        // TASK-1580: the greyed sandstone's level before the tint (the old marble's luminance over the sandstone's).
+        level: 0.85,
         grout: '#2c2c36',
         mist: '150,162,184',
         mistAlpha: 0.2,
@@ -1301,94 +1324,193 @@ const atmosphericLighting = {
             return ((t ^ (t >>> 14)) >>> 0) / 4294967296
         }
     },
-    // Marble variants, built once per hex radius: cream stone with soft light and warm
-    // grey clouds, a few thin grey veins with faint halos, and a soft sheen from the
-    // upper left. Clipped to the inset tile, centred in the raster.
+    // TASK-1580: the sandstone's carved surface on a tile raster (size x size, the tile's centre in its middle, already clipped
+    // to the tile): rounded lumps, one per seed of a jittered grid (TILE.sandstone.facet: spacing in hex radii), each rising
+    // from the creases between it and its neighbours (the gap between the nearest and second nearest seed) to a flat top.
+    // The height's slope is lit by the upper-left key light: slopes facing it towards the glow colour, slopes facing away
+    // towards the shade colour (times light, shadow; facet glow, shade), the creases a little darker (crease), each lump's stone a shade
+    // (tone) of its own. Drawn as one image, so a variant costs one pass over its pixels.
+    drawFacets(g, size, rand) {
+        const T = this.TILE.sandstone, F = T.facet, s = this.TILE.rasterScale, r = basis.r
+        const step = F.spacing * r * s, cells = Math.ceil(size / step) + 2
+        const seeds = new Float32Array(cells * cells * 3)
+        for (let j = 0; j < cells; j++)
+            for (let i = 0; i < cells; i++) {
+                const k = 3 * (j * cells + i)
+                seeds[k] = (i - 1 + 0.15 + 0.7 * rand()) * step
+                seeds[k + 1] = (j - 1 + 0.15 + 0.7 * rand()) * step
+                seeds[k + 2] = (rand() * 2 - 1) * F.tone
+            }
+        const height = new Float32Array(size * size), tone = new Float32Array(size * size), edge = F.edge * step
+        for (let y = 0; y < size; y++)
+            for (let x = 0; x < size; x++) {
+                const ci = Math.floor(x / step) + 1, cj = Math.floor(y / step) + 1
+                let d1 = Infinity, d2 = Infinity, t = 0
+                for (let j = cj - 1; j <= cj + 1; j++)
+                    for (let i = ci - 1; i <= ci + 1; i++) {
+                        if (i < 0 || j < 0 || i >= cells || j >= cells) continue
+                        const k = 3 * (j * cells + i), d = Math.hypot(seeds[k] - x, seeds[k + 1] - y)
+                        if (d < d1) {
+                            d2 = d1
+                            d1 = d
+                            t = seeds[k + 2]
+                        } else if (d < d2) d2 = d
+                    }
+                const h = Math.min(1, (d2 - d1) / edge)
+                height[y * size + x] = h * (2 - h)
+                tone[y * size + x] = t
+            }
+        const image = g.getImageData(0, 0, size, size), d = image.data
+        const lx = Math.cos(T.lightAngle * Math.PI / 180), ly = Math.sin(T.lightAngle * Math.PI / 180)
+        for (let y = 1; y < size - 1; y++)
+            for (let x = 1; x < size - 1; x++) {
+                const i = y * size + x, p = 4 * i
+                if (!d[p + 3]) continue
+                // Slope towards the light: positive where the surface rises away from it (faces it).
+                const gx = (height[i + 1] - height[i - 1]) / 2, gy = (height[i + size] - height[i - size]) / 2
+                const lit = -(gx * lx + gy * ly) * F.slope, h = height[i]
+                const base = (1 + tone[i]) * (1 - F.crease * (1 - h) ** 2)
+                for (let c = 0; c < 3; c++) {
+                    let v = d[p + c] * base
+                    v += lit > 0 ? (F.glow[c] - v) * Math.min(1, lit * F.light) : (F.shade[c] - v) * Math.min(1, -lit * F.shadow)
+                    d[p + c] = v
+                }
+            }
+        g.putImageData(image, 0, 0)
+    },
+    // TASK-1580: sandstone variants, built once per hex radius: weathered carved warm-tan stone (TILE.stone, each slab a
+    // little lighter or darker), broad low-contrast mottling and a finer grain, small pits (a dark hollow with its
+    // lower-right wall lit by the upper-left key light), a few fine cracks and chips at the rim, and a bevel: a lit lip
+    // along the upper-left edges and a darker band along the lower-right ones, so each cell reads as a carved slab. No
+    // veins, no polished highlight. Clipped to the inset tile, centred in the raster.
     tileVariant(index) {
         if (!this.tileVariants || this.tileVariants.radius !== basis.r) {
             this.tileVariants = Object.assign(new Array(this.TILE.variants), {radius: basis.r})
             ++this.tileVariantBuilds
         }
         if (this.tileVariants[index]) return this.tileVariants[index]
-        const r = basis.r, s = this.TILE.rasterScale, size = Math.ceil(2 * r * s) + 4
+        const r = basis.r, s = this.TILE.rasterScale, size = Math.ceil(2 * r * s) + 4, T = this.TILE.sandstone
         const surface = document.createElement('canvas')
         surface.width = surface.height = size
         const g = surface.getContext('2d')
         g.setTransform(s, 0, 0, s, size / 2, size / 2)
+        const R = this.tileRadius()
         g.beginPath()
-        this.hexagonPath(g, 0, 0, this.tileRadius())
+        this.hexagonPath(g, 0, 0, R)
         g.clip()
         const rand = this.random(0x9e3779b9 * (index + 1))
-        // Each slab is a little lighter or darker than its neighbours.
-        const shade = 0.94 + 0.12 * rand()
-        const [sr, sg, sb] = this.TILE.stone.map(v => Math.round(v * shade))
-        g.fillStyle = `rgb(${sr},${sg},${sb})`
+        const shade = 1 - T.shade + 2 * T.shade * rand()
+        const stone = this.TILE.stone.map(v => Math.min(255, Math.round(v * shade)))
+        const rgba = (c, a) => `rgba(${c.join(',')},${a.toFixed(3)})`
+        g.fillStyle = `rgb(${stone.join(',')})`
         g.fillRect(-r, -r, 2 * r, 2 * r)
-        // Clouds: broad, low contrast mottling.
-        for (let i = 0; i < 26; i++) {
-            const x = (rand() * 2 - 1) * r, y = (rand() * 2 - 1) * r, radius = (0.25 + 0.5 * rand()) * r
-            const tone = rand() < 0.6 ? 1.07 : 0.95
-            const color = `${[sr, sg, sb].map(v => Math.min(255, Math.round(v * tone))).join(',')},` +
-                (0.15 + 0.2 * rand()).toFixed(3)
-            const cloud = g.createRadialGradient(x, y, 0, x, y, radius)
-            cloud.addColorStop(0, `rgba(${color})`)
-            cloud.addColorStop(1, `rgba(${color.replace(/[^,]+$/, '0')})`)
-            g.fillStyle = cloud
-            g.fillRect(x - radius, y - radius, 2 * radius, 2 * radius)
-        }
-        // Veins: wandering curves across the tile, a faint wide halo under a fine line.
-        g.lineCap = 'round'
-        const veins = 1 + Math.floor(rand() * 2)
-        for (let v = 0; v < veins; v++) {
-            const a = rand() * 2 * Math.PI, b = a + Math.PI * (0.6 + 0.6 * rand())
-            const points = [{x: Math.cos(a) * r, y: Math.sin(a) * r}]
-            for (let k = 1; k < 4; k++) {
-                const t = k / 4
-                points.push({
-                    x: (1 - t) * Math.cos(a) * r + t * Math.cos(b) * r + (rand() - 0.5) * 0.45 * r,
-                    y: (1 - t) * Math.sin(a) * r + t * Math.sin(b) * r + (rand() - 0.5) * 0.45 * r
-                })
+        // Mottling: broad soft patches of lighter and darker stone.
+        for (const [count, low, high, alpha] of T.mottle) {
+            for (let i = 0; i < count; i++) {
+                const x = (rand() * 2 - 1) * r, y = (rand() * 2 - 1) * r, radius = (low + (high - low) * rand()) * r
+                const color = rand() < 0.5 ? T.light : T.dark, a = alpha * (0.5 + 0.5 * rand())
+                const patch = g.createRadialGradient(x, y, 0, x, y, radius)
+                patch.addColorStop(0, rgba(color, a))
+                patch.addColorStop(0.6, rgba(color, a * 0.45))
+                patch.addColorStop(1, rgba(color, 0))
+                g.fillStyle = patch
+                g.fillRect(x - radius, y - radius, 2 * radius, 2 * radius)
             }
-            points.push({x: Math.cos(b) * r, y: Math.sin(b) * r})
-            const strength = v === 0 ? 1 : 0.6
-            // Soft, feathery warm grey: wide faint bands under a fine light-grey core, no crack line.
-            for (const [width, alpha] of [[0.3, 0.05], [0.14, 0.055], [0.06, 0.06], [0.025, 0.065]]) {
-                g.strokeStyle = `rgba(${Math.round(sr * 0.8)},${Math.round(sg * 0.79)},${Math.round(sb * 0.8)},${(alpha * strength).toFixed(3)})`
+        }
+        this.drawFacets(g, size, rand)
+        // Pits: a lit crescent offset to the lower right under a dark hollow.
+        const pits = T.pits[0] + Math.floor(rand() * (T.pits[1] - T.pits[0] + 1))
+        for (let i = 0; i < pits; i++) {
+            const x = (rand() * 2 - 1) * 0.85 * r, y = (rand() * 2 - 1) * 0.75 * r, radius = (0.012 + 0.03 * rand()) * r
+            const a = 0.25 + 0.35 * rand()
+            g.fillStyle = rgba(T.lip, a * 0.6)
+            g.beginPath()
+            g.ellipse(x + 0.35 * radius, y + 0.35 * radius, radius, radius * 0.8, 0, 0, 2 * Math.PI)
+            g.fill()
+            g.fillStyle = rgba(T.hollow, a)
+            g.beginPath()
+            g.ellipse(x, y, radius, radius * 0.8, rand() * Math.PI, 0, 2 * Math.PI)
+            g.fill()
+        }
+        g.lineCap = g.lineJoin = 'round'
+        // Cracks: fine jagged lines in from the rim, a lit edge below a dark line, sometimes a short branch.
+        const crack = points => {
+            for (const [dx, color, alpha, width] of [[0.012, T.lip, 0.35, 0.014], [0, T.hollow, 0.5, 0.016]]) {
+                g.strokeStyle = rgba(color, alpha)
                 g.lineWidth = width * r
                 g.beginPath()
-                g.moveTo(points[0].x, points[0].y)
-                for (let k = 1; k < points.length - 1; k++) {
-                    const m = {x: (points[k].x + points[k + 1].x) / 2, y: (points[k].y + points[k + 1].y) / 2}
-                    g.quadraticCurveTo(points[k].x, points[k].y, m.x, m.y)
-                }
-                g.lineTo(points[points.length - 1].x, points[points.length - 1].y)
+                points.forEach((p, k) => k ? g.lineTo(p.x + dx * r, p.y + dx * r) : g.moveTo(p.x + dx * r, p.y + dx * r))
                 g.stroke()
             }
         }
-        // A fine lit lip inside the upper edges, under the grout's shadow line.
-        const lip = this.tileRadius() - 0.02 * r
-        const h = lip * Math.sqrt(3) / 2
-        g.strokeStyle = 'rgba(255,250,240,0.22)'
-        g.lineWidth = 0.03 * r
-        g.lineJoin = 'round'
-        g.beginPath()
-        g.moveTo(-lip, 0)
-        g.lineTo(-lip / 2, -h)
-        g.lineTo(lip / 2, -h)
-        g.lineTo(lip, 0)
-        g.stroke()
-        // Polish: a soft highlight towards the upper left, so the slab reads as polished marble.
-        const polish = g.createRadialGradient(-0.35 * r, -0.4 * r, 0, -0.35 * r, -0.4 * r, 1.2 * r)
-        polish.addColorStop(0, `rgba(255,252,246,${this.TILE.polish})`)
-        polish.addColorStop(0.5, `rgba(255,252,246,${(this.TILE.polish * 0.35).toFixed(3)})`)
-        polish.addColorStop(1, 'rgba(255,252,246,0)')
-        g.fillStyle = polish
-        g.fillRect(-r, -r, 2 * r, 2 * r)
-        this.drawSheen(g, 0, 0, this.TILE.sheen)
+        const cracks = T.cracks[0] + Math.floor(rand() * (T.cracks[1] - T.cracks[0] + 1))
+        for (let c = 0; c < cracks; c++) {
+            let angle = rand() * 2 * Math.PI
+            const from = 0.95 * R, length = (0.3 + 0.35 * rand()) * r, segments = 5
+            let heading = angle + Math.PI + (rand() - 0.5) * 0.9
+            const points = [{x: Math.cos(angle) * from, y: Math.sin(angle) * from}]
+            for (let k = 0; k < segments; k++) {
+                heading += (rand() - 0.5) * 1.1
+                const last = points[points.length - 1]
+                points.push({x: last.x + Math.cos(heading) * length / segments, y: last.y + Math.sin(heading) * length / segments})
+            }
+            crack(points)
+            if (rand() < 0.5) {
+                const at = points[2 + Math.floor(rand() * 2)], turn = heading + (rand() < 0.5 ? 1 : -1) * (0.7 + 0.5 * rand())
+                crack([at, {x: at.x + Math.cos(turn) * 0.1 * r, y: at.y + Math.sin(turn) * 0.1 * r},
+                    {x: at.x + Math.cos(turn + 0.3) * 0.18 * r, y: at.y + Math.sin(turn + 0.3) * 0.18 * r}])
+            }
+        }
+        // Chips: small notches knocked out of the rim, a shadowed hollow with a lit lower-right wall.
+        const chips = T.chips[0] + Math.floor(rand() * (T.chips[1] - T.chips[0] + 1))
+        for (let c = 0; c < chips; c++) {
+            const side = Math.floor(rand() * 6), t = 0.2 + 0.6 * rand(), w = (0.08 + 0.08 * rand()) * r
+            const a0 = side * Math.PI / 3, a1 = a0 + Math.PI / 3
+            const ex = Math.cos(a0) * R * (1 - t) + Math.cos(a1) * R * t, ey = Math.sin(a0) * R * (1 - t) + Math.sin(a1) * R * t
+            const tx = Math.cos(a1) * R - Math.cos(a0) * R, ty = Math.sin(a1) * R - Math.sin(a0) * R, tl = Math.hypot(tx, ty)
+            const ux = tx / tl, uy = ty / tl, nx = -ex / Math.hypot(ex, ey), ny = -ey / Math.hypot(ex, ey)
+            const depth = w * (0.5 + 0.3 * rand())
+            const notch = [{x: ex - ux * w, y: ey - uy * w}, {x: ex + nx * depth * 0.6 - ux * w * 0.2, y: ey + ny * depth * 0.6 - uy * w * 0.2},
+                {x: ex + nx * depth + ux * w * 0.3, y: ey + ny * depth + uy * w * 0.3}, {x: ex + ux * w, y: ey + uy * w}]
+            g.fillStyle = rgba(T.hollow, 0.45)
+            g.beginPath()
+            notch.forEach((p, k) => k ? g.lineTo(p.x, p.y) : g.moveTo(p.x, p.y))
+            g.closePath()
+            g.fill()
+            g.strokeStyle = rgba(T.lip, 0.4)
+            g.lineWidth = 0.012 * r
+            g.beginPath()
+            g.moveTo(notch[1].x + 0.01 * r, notch[1].y + 0.01 * r)
+            g.lineTo(notch[2].x + 0.01 * r, notch[2].y + 0.01 * r)
+            g.stroke()
+        }
+        // Bevel: each edge's band (bevel of the hex radius wide) lit by how much it faces the upper-left key light, the lit
+        // lip brightest at the rim, the shadowed band darkest there, both fading inwards.
+        const apothem = R * Math.sqrt(3) / 2, inner = (apothem - T.bevel * r) / apothem
+        const corner = (k, f) => ({x: Math.cos(k * Math.PI / 3) * R * f, y: Math.sin(k * Math.PI / 3) * R * f})
+        for (let k = 0; k < 6; k++) {
+            const normal = (k + 0.5) * Math.PI / 3, facing = Math.cos(normal - T.lightAngle * Math.PI / 180)
+            const color = facing > 0 ? T.lip : T.hollow, alpha = (facing > 0 ? T.lit : T.shadow) * Math.abs(facing)
+            if (alpha < 0.01) continue
+            const nx = Math.cos(normal), ny = Math.sin(normal)
+            const band = g.createLinearGradient(nx * apothem, ny * apothem, nx * apothem * inner, ny * apothem * inner)
+            band.addColorStop(0, rgba(color, alpha))
+            band.addColorStop(0.35, rgba(color, alpha * 0.55))
+            band.addColorStop(1, rgba(color, 0))
+            g.fillStyle = band
+            const [a, b, c, d] = [corner(k, 1.02), corner(k + 1, 1.02), corner(k + 1, inner), corner(k, inner)]
+            g.beginPath()
+            g.moveTo(a.x, a.y)
+            g.lineTo(b.x, b.y)
+            g.lineTo(c.x, c.y)
+            g.lineTo(d.x, d.y)
+            g.closePath()
+            g.fill()
+        }
         return this.tileVariants[index] = surface
     },
-    // Fog variants, built once per hex radius from the marble variant of the same index: the
-    // cell in dark grout, the inset marble over it, both multiplied by FOG.tint, then the mist
+    // Fog variants, built once per hex radius from the sandstone variant of the same index: the
+    // cell in dark grout, the inset stone over it greyed, both multiplied by FOG.tint, then the mist
     // wisps on top.
     fogVariant(index) {
         if (!this.fogVariants || this.fogVariants.radius !== basis.r)
@@ -1411,6 +1533,20 @@ const atmosphericLighting = {
         // thicker over some cells than others (density), so the fog drifts in patches.
         const rand = this.random(0x85ebca6b * (index + 1))
         const shade = this.FOG.shade[0] + (this.FOG.shade[1] - this.FOG.shade[0]) * rand()
+        // TASK-1580: the warm sandstone turned grey first (its texture kept), scaled to the old marble's level, so the tint
+        // gives fogged cells the same cool blue-grey as before.
+        g.save()
+        g.beginPath()
+        this.hexagonPath(g, 0, 0, this.tileRadius())
+        g.clip()
+        g.globalCompositeOperation = 'saturation'
+        g.fillStyle = 'rgb(128,128,128)'
+        g.fillRect(-r, -r, 2 * r, 2 * r)
+        g.globalCompositeOperation = 'multiply'
+        const level = Math.round(255 * this.FOG.level)
+        g.fillStyle = `rgb(${level},${level},${level})`
+        g.fillRect(-r, -r, 2 * r, 2 * r)
+        g.restore()
         g.globalCompositeOperation = 'multiply'
         g.fillStyle = `rgb(${this.FOG.tint.map(v => Math.round(v * shade)).join(',')})`
         g.fillRect(-r, -r, 2 * r, 2 * r)
