@@ -255,7 +255,13 @@ class Grid extends SpritesGroup {
             budgetStops: 0, quietStops: 0, skippedRasters: 0, restFrames: 0, ends: {},
             // TASK-1575: fades started, ended at full opacity, dropped (stretched again, off screen, a zoom, the level changed,
             // over the draw cap), the frames drawing fades and the squares they drew fading.
-            fadesStarted: 0, fadesDone: 0, fadesDropped: 0, fadeFrames: 0, fadeSquares: 0, fadeDraws: 0}
+            fadesStarted: 0, fadesDone: 0, fadesDropped: 0, fadeFrames: 0, fadeSquares: 0, fadeDraws: 0,
+            // TASK-1576 (Grid.zoomBuilds): zoom frames that queued builds at their held level, the builds given up for a level
+            // change, zoom frame squares drawn exact (a sector of the camera's level), why a held frame queued none.
+            zoomBuildFrames: 0, zoomBuildCancels: 0, zoomExactSquares: 0, zoomBuildWhy: {}}
+        // TASK-1576 (Grid.zoomBuilds): the zoom gesture's held level ({level, scale, frames}: the camera's scale in the last zoom
+        // frames; open once two frames in a row had it, Grid.zoomBuildOpen).
+        this.zoomBuild = undefined
         // TASK-1561: a unit sector build the task's draw call budget cut (buildUnitSector), and the count of the cells the
         // unit sector checks found changed (a cut build begins again when it moved).
         this.unitSectorBuilding = undefined
@@ -5444,11 +5450,12 @@ class Grid extends SpritesGroup {
         else if (my < 0) r.v0 -= reach(my)
         return {range: r, ox, oy, cw, ch, mx, my}
     }
-    unitSectorPlan(ctx, kind, rest = false) {
+    // TASK-1576: zoomBuild: a zoom gesture's build at its held level (zoomBuildQueue) passes the zoom gate (Grid.zoomBuildOpen).
+    unitSectorPlan(ctx, kind, rest = false, zoomBuild = false) {
         const screen = typeof gameEvent !== 'undefined' ? gameEvent.screen : undefined
         const t = ctx.getTransform()
         const refused = !Grid.unitSectors || !this.unitSectors || !otherSettings.atmosphericVisuals || !screen ? 'off' :
-            !screen.surfaceMoving && !rest ? 'rest' : screen.zoomGesture || screen.surfaceZooming ? 'zoom' :
+            !screen.surfaceMoving && !rest ? 'rest' : (screen.zoomGesture || screen.surfaceZooming) && !(zoomBuild && Grid.zoomBuildOpen()) ? 'zoom' :
             typeof mainCanvas === 'undefined' || ctx.canvas !== mainCanvas || this !== grid || !this.arr.length ? 'canvas' :
             t.b !== 0 || t.c !== 0 || !(t.a > 0) || t.a !== t.d ? 'transform' : this.lod ? 'lod' :
             this.drawLogicText ? 'texts' : this.stillUnitsHidden() ? 'hidden' : this.isObserving() ? 'observing' : null
@@ -5866,7 +5873,8 @@ class Grid extends SpritesGroup {
     // The levels of the kept sectors that can stand in at level (not level itself), best first: the finer ones (the next finer
     // first: downscaled), then the coarser (the next coarser first, magnified at most LEVEL_MAX_MAGNIFY); at most LEVEL_SOURCES.
     // {levels, by: level -> entries}.
-    stretchSources(level, t, cw, ch, withLevel = false) {
+    // TASK-1576: near: the levels within ZOOM_NEAR_SHARE of level first (a zoom frame's order; withLevel or not).
+    stretchSources(level, t, cw, ch, withLevel = false, near = withLevel) {
         const by = new Map()
         for (const entry of this.unitSectors.entries.values()) {
             // A level magnified more than LEVEL_MAX_MAGNIFY is left to the underlay (a sector magnified 9x covered ~5 MP of
@@ -5882,8 +5890,13 @@ class Grid extends SpritesGroup {
             list.set(entry.u + ',' + entry.v, entry)
         }
         const keys = [...by.keys()]
-        const levels = keys.filter(l => l === level).concat(keys.filter(l => l > level).sort((a, b) => a - b),
-            keys.filter(l => l < level).sort((a, b) => b - a))
+        // TASK-1576 (Grid.zoomBuilds): a zoom frame's (near) levels within ZOOM_NEAR_SHARE of the camera's first after
+        // its own, nearest first (a sector built at a level the gesture held, magnified or shrunk a few percent).
+        const close = near && Grid.zoomBuilds ? keys.filter(l => l !== level && Math.abs(l / level - 1) <= ZOOM_NEAR_SHARE)
+            .sort((a, b) => Math.abs(a / level - 1) - Math.abs(b / level - 1)) : []
+        const rest = close.length ? keys.filter(l => !close.includes(l)) : keys
+        const levels = rest.filter(l => l === level).concat(close, rest.filter(l => l > level).sort((a, b) => a - b),
+            rest.filter(l => l < level).sort((a, b) => b - a))
         return {levels: levels.slice(0, LEVEL_SOURCES), by}
     }
     // Which of squares (u, v at level) the levels of src (stretchSources) cover whole: {covered: Set of 'u,v', need: Map of the
@@ -6049,11 +6062,14 @@ class Grid extends SpritesGroup {
         this.fadePrev = st && (st.stretch.length || st.held.length) ? {level, stretch: st.stretch, held: st.held, zoom: st.mode === 'zoom'} : null
         if (this.fades && this.fades.level !== level)
             this.dropFades()
-        const starts = !!prev && prev.level === level && !(st && st.mode === 'zoom')
+        // TASK-1576 (Grid.zoomBuilds): a zoom gesture's frame at the level of the last one fades in its squares drawn exact now
+        // (a sector built at the held level) as a settle does; another level drops the fades (above).
+        const zoomFades = !!Grid.zoomBuilds
+        const starts = !!prev && prev.level === level && !(st && st.mode === 'zoom' && !zoomFades)
         if (!starts && !this.fades)
             return
         // A zoom gesture's frame (every square a scaled picture) or a frame not drawn on the squares' grid: no fades.
-        if (st?.mode === 'zoom' || t.b !== 0 || t.c !== 0 || !(t.a > 0) || t.a !== t.d || !this.unitSectors) {
+        if (st?.mode === 'zoom' && !zoomFades || t.b !== 0 || t.c !== 0 || !(t.a > 0) || t.a !== t.d || !this.unitSectors) {
             this.dropFades()
             return
         }
@@ -6119,8 +6135,10 @@ class Grid extends SpritesGroup {
         let draws = 0
         ctx.save()
         for (const group of groups.values()) {
-            const withLevel = group.kind === 'zoom'
-            const src = srcs[withLevel] ||= this.stretchSources(level, t, cw, ch, withLevel)
+            // TASK-1576: a zoom frame's square (not exact there) from the levels as drawZoomSectors ordered them but the camera's
+            // own (a sector of it is the square's exact picture now).
+            const withLevel = group.kind === 'zoom' && !Grid.zoomBuilds, near = group.kind === 'zoom' && !!Grid.zoomBuilds
+            const src = srcs[withLevel + ':' + near] ||= this.stretchSources(level, t, cw, ch, withLevel, near)
             const parts = new Map()
             // A square's picture from cover (stretchCover of it alone): its part (whole or not, by level) and the draws it adds
             // (sectors not in that part yet, the part's underlay); null past LEVEL_MAX_DRAWS.
@@ -6353,10 +6371,23 @@ class Grid extends SpritesGroup {
         const src = this.stretchSources(level, t, cw, ch, true)
         const cover = this.stretchCover(level, squares, src, true)
         this.drawStretchedSectors(ctx, t, squares, src, cover, cw, ch, ox, oy, true)
-        this.levelCoverage = {serial: this.drawSerial, mode: 'zoom', level, total: squares.length, exact: 0,
-            stretched: cover.covered.size, bare: squares.length - cover.covered.size, live: 0}
+        // TASK-1576 (Grid.zoomBuilds): a square drawn from a sector of the camera's own level (built at the held level in this
+        // gesture, or kept) is exact (stretchCover takes the camera's level first); not an overlay (its ground is the
+        // underlay's scaled picture). The others are scaled pictures (stretched levels or the underlay).
+        const own = Grid.zoomBuilds ? src.by.get(level) : null, exact = new Set()
+        if (own)
+            for (const {u, v} of squares) {
+                const e = own.get(u + ',' + v)
+                if (e && e.ground !== UNIT_OVERLAY && cover.covered.has(u + ',' + v))
+                    exact.add(u + ',' + v)
+            }
+        const stretch = exact.size ? squares.filter(({u, v}) => !exact.has(u + ',' + v)) : squares
+        this.levelWork.zoomExactSquares += exact.size
+        this.levelCoverage = {serial: this.drawSerial, mode: 'zoom', level, total: squares.length, exact: exact.size,
+            stretched: cover.covered.size - exact.size, bare: squares.length - cover.covered.size, live: 0}
         // TASK-1574: every square of a zoom frame is a scaled picture (stretched levels or the underlay), none exact.
-        this.squareStates = {serial: this.drawSerial, mode: 'zoom', level, squares, stretch: squares, held: [], fading: null}
+        // TASK-1576: but those drawn from the camera's level.
+        this.squareStates = {serial: this.drawSerial, mode: 'zoom', level, squares, stretch, held: [], fading: null}
         // TASK-1575: no fades in a zoom gesture; its squares fade in after it.
         this.fadeFrame(ctx)
         ++this.levelWork.zoomFrames
@@ -6368,7 +6399,95 @@ class Grid extends SpritesGroup {
         this.dropHeldFrame()
         this.prepareSurfaceCache()
         this.countGestureFrame()
+        this.zoomBuildFrame(ctx, t, cw, ch, squares.length - exact.size)
         return true
+    }
+    // TASK-1576 (ZOOMFADE 3/5, Grid.zoomBuilds): EXACT SECTORS BUILT IN A ZOOM GESTURE. Each zoom frame notes the camera's level
+    // (zoomBuild: {level, scale, frames}); from the second frame in a row at the same level (the wheel or fingers paused, the
+    // gesture's last frames) the builds the settle would start are started now (zoomBuildQueue, as the settle's first frame
+    // plans them): on the lit path the camera's light map, lit view and lit tiles (the lit tasks' zoom gates pass for the held
+    // level: Grid.zoomBuildOpen), the unit sectors of the squares on the canvas (nearest the centre first, then the ring) by
+    // the unit sector task within the moving camera's budgets (AHEAD_WORKER_FRAME_MS of recording a frame, the Worker's
+    // queue); only while the Worker draws them (Grid.aheadInWorker: no build on the main thread in a gesture). A level change
+    // gives them up (cancelZoomBuild: the queued list, the build under way; the lit view and light map jobs drop themselves
+    // for another scale). The zoom frames draw a built sector of the camera's level exact (drawZoomSectors), a level within
+    // ZOOM_NEAR_SHARE of it before the others (stretchSources), the rest stretched; the settle then finds the sectors built.
+    zoomBuildFrame(ctx, t, cw, ch, notExact) {
+        const zb = this.zoomBuild, level = t.a
+        if (!Grid.zoomBuilds || !Grid.aheadInWorker()) {
+            this.zoomBuild = undefined
+            return
+        }
+        // (Held: the last frame drawn was a zoom frame at this level.)
+        if (!zb || zb.level !== level || zb.scale !== canvas.scale || zb.serial !== this.drawSerial - 1) {
+            if (zb && zb.frames >= 2)
+                this.cancelZoomBuild()
+            this.zoomBuild = {level, scale: canvas.scale, frames: 1, serial: this.drawSerial}
+            return
+        }
+        ++zb.frames
+        zb.serial = this.drawSerial
+        if (!notExact && this.litView?.a === level)
+            return
+        ++this.levelWork.zoomBuildFrames
+        // (In the lit builds' scope only for those: the surface cache path's builds draw no light map.)
+        const why = Grid.zoomBuildRun(() => this.zoomBuildQueue(ctx, t, cw, ch), true)
+        if (why)
+            this.levelWork.zoomBuildWhy[why] = (this.levelWork.zoomBuildWhy[why] || 0) + 1
+    }
+    cancelZoomBuild() {
+        if (this.unitSectorWanted?.plan.zoomBuild)
+            this.unitSectorWanted = undefined
+        if (this.unitSectorBuilding?.plan.zoomBuild)
+            this.unitSectorBuilding = undefined
+        ++this.levelWork.zoomBuildCancels
+    }
+    // The settle's first frame's builds at the held level (drawLevelStandIn / drawLitView / drawCacheSectors' plans), nothing
+    // drawn: the reason none could be queued, else null.
+    zoomBuildQueue(ctx, t, cw, ch) {
+        const ox = Math.round(t.e), oy = Math.round(t.f)
+        const litFill = Grid.litFillOverlays && Grid.litGroundFill && !this.surfaceCache
+        let units, view = null
+        if (this.canUseSurfaceCache() && !litFill) {
+            if (!this.surfaceCache || this.cacheSectorUnsteady() || !this.surfaceStateMatches(ctx) || !this.surfaceCellLayerHolds())
+                return 'cache'
+            units = this.unitSectorPlan(ctx, 'cache', true, true)
+        }
+        else {
+            if (!Grid.zoomBuildsLit)
+                return 'litOff'
+            const plan = this.planLitView(ctx, true)
+            if (!plan || plan.cache)
+                return 'lit'
+            units = this.unitSectorPlan(ctx, 'lit', true, true)
+            if (units && plan.view) {
+                view = plan.view
+                if (view.e !== 0 || view.f !== 0 || view.stale?.size)
+                    return 'view'
+                units.view = view
+                this.queueLitTiles(view, t, cw, ch)
+            }
+            else if (units) {
+                const standIn = !plan.fill && this.standInSource() ? 'standin' : null
+                units.standIn = standIn || undefined
+                units.token = standIn ? this.unitStandInToken(standIn) : null
+                units.noView = true
+            }
+        }
+        if (!units)
+            return 'plan'
+        units.zoomBuild = true
+        this.unitSectorCheck(this.drawRange(ctx))
+        const range = this.litTileRange(cw, ch, ox, oy, 0), board = this.unitBoardSquares(units.level), wanted = []
+        for (const {u, v} of this.levelSquares(units.level, cw, ch, ox, oy)) {
+            const e = this.unitSectors.get(SectorCache.key(units.level, u, v))
+            if (e && this.unitEntryFits(e, units) && e.ground !== UNIT_OVERLAY &&
+                    (!view || !this.litHas(view, u, v) || e.ground === (view.tiles.get(u + ',' + v) || null)))
+                continue
+            wanted.push({u, v})
+        }
+        this.queueUnitSectors(units, wanted, range, board, cw, ch, ox, oy)
+        return null
     }
     // The units pass and info texts of the frame's live squares (frame: unitFrame, or a lit frame's units), clipped to them;
     // then what the skipped units pass does besides drawing (a selected demon portal's panel kept current).
@@ -6589,7 +6708,9 @@ class Grid extends SpritesGroup {
         const job = this.unitSectorWanted
         this.unitSectorWanted = undefined
         const screen = gameEvent.screen
-        const why = !job ? 'job' : !screen.surfaceMoving && !job.plan.rest ? 'rest' : screen.zoomGesture || screen.surfaceZooming ? 'zoom' :
+        // TASK-1576: a zoom gesture's build at its held level passes the zoom gate while the camera holds it (Grid.zoomBuildOpen).
+        const why = !job ? 'job' : !screen.surfaceMoving && !job.plan.rest ? 'rest' :
+            (screen.zoomGesture || screen.surfaceZooming) && !(job.plan.zoomBuild && Grid.zoomBuildOpen()) ? 'zoom' :
             this !== grid ? 'grid' : !!debug !== job.plan.key.key[UNIT_SECTOR_DEBUG_KEY] ? 'debug' : this.drawLogicText ? 'texts' :
             this.stillUnitsHidden() ? 'hidden' : this.isObserving() ? 'observing' : job.plan.key !== this.unitSectorKey ? 'key' :
             typeof mainCtx === 'undefined' || mainCtx.getTransform().a !== job.plan.level ? 'level' : null
@@ -6610,7 +6731,8 @@ class Grid extends SpritesGroup {
         // TASK-1565 (Grid.sectorAhead): a moving camera's builds too (with the lit tiles' steps: buildLitTiles).
         const levels = this.levelMode() || this.aheadOn(true)
         // TASK-1565: while the camera moves (not a zoom's levels) only when its frames are heavy anyway (Grid.lastFrameCalls).
-        const burst = (!job.plan.rest || levels) && !!frame && frame.plan?.key === job.plan.key && frame.liveCost > UNIT_SECTOR_BURST_COST &&
+        // (TASK-1576: not a zoom gesture's build: its frames draw no square live.)
+        const burst = !job.plan.zoomBuild && (!job.plan.rest || levels) && !!frame && frame.plan?.key === job.plan.key && frame.liveCost > UNIT_SECTOR_BURST_COST &&
             (this.levelMode() || !this.aheadOn(true) || Grid.lastFrameCalls > AHEAD_BURST_FRAME_CALLS)
         const left = levels && !burst ? Grid.levelWorkLeft() : null
         // With no square stretched or live (the sectors left are upgrades onto built tiles) the lit tiles' steps keep their
@@ -6640,7 +6762,9 @@ class Grid extends SpritesGroup {
         const timed = !!left && Grid.unitWorkerTime && Grid.aheadInWorker()
         // TASK-1572 (Grid.settleHoldsLevels): while a settle holds its squares (no live ones: its frames ~40-120 calls) the
         // recording gets SETTLE_HOLD_TASK_MS a frame, so the held squares' sectors come within the hold.
-        const timedMs = timed && this.levelMode() && this.settleHoldOn() ? Grid.SETTLE_HOLD_TASK_MS : AHEAD_WORKER_FRAME_MS
+        // TASK-1576: so does a zoom gesture's build at its held level (its frames ~40-120 calls, none live: as a held settle's).
+        const timedMs = timed && (this.levelMode() && this.settleHoldOn() || job.plan.zoomBuild && Grid.zoomGestureNow()) ?
+            Grid.SETTLE_HOLD_TASK_MS : AHEAD_WORKER_FRAME_MS
         if (timed && Grid.levelFrameWork.unitMs >= timedMs) {
             ++this.levelWork.budgetStops
             this.unitSectorWanted ||= job
@@ -7362,12 +7486,13 @@ class Grid extends SpritesGroup {
     // Whether ctx's frame draws lit images, and which: false (the live light), else {t, view, rest}
     // with view the lit view at ctx's transform t (made now if it does not hold) and rest its
     // finished rest snapshot (null: the frame draws the tiles).
-    planLitView(ctx) {
+    // TASK-1576: build: a zoom gesture's builds at its held level (zoomBuildQueue): its zoom gate passes (Grid.zoomBuildOpen).
+    planLitView(ctx, build = false) {
         const t = ctx.getTransform()
         // TASK-1377: the light map is vouched for by a view that holds exactly in this frame only (below).
         atmosphericLighting.trust = null
         const screen = typeof gameEvent !== 'undefined' ? gameEvent.screen : undefined
-        const zooming = screen && screen.surfaceZooming
+        const zooming = screen && screen.surfaceZooming && !(build && Grid.zoomBuildOpen(true))
         if (!otherSettings.atmosphericVisuals || !screen || zooming ||
                 t.b !== 0 || t.c !== 0 || t.a <= 0 || t.d <= 0 || this.constructionInView(ctx)) {
             if (this.litView && (this.litView.a !== t.a || this.litView.d !== t.d))
@@ -8018,12 +8143,19 @@ class Grid extends SpritesGroup {
         }
         if (job)
             return null
+        // TASK-1576: zoomBuild: started for a zoom gesture's held level (Grid.zoomBuildScope): its steps run in the builds' scope
+        // while the gesture holds that level, the job is given up once it does not.
         job = this.litViewJob = {a: t.a, d: t.d, cw: main.width, ch: main.height, rebuilds: atmosphericLighting.rebuilds,
-            mapScale: atmosphericLighting.mapScale, steps: this.newLitViewSteps(t, main), view: null, tasks: 0}
+            mapScale: atmosphericLighting.mapScale, steps: this.newLitViewSteps(t, main), view: null, tasks: 0, zoomBuild: Grid.zoomBuildScope > 0}
         ++this.litViewJobs
-        const run = gridTask(() => {
+        const run = gridTask(() => Grid.zoomBuildRun(() => {
             if (this.litViewJob !== job || this !== grid)
                 return
+            if (job.zoomBuild && Grid.zoomGestureNow() && !(Grid.zoomBuildOpen(true) && this.zoomBuild.level === job.a)) {
+                this.litViewJob = undefined
+                ++this.litViewJobsDropped
+                return
+            }
             const start = performance.now()
             let last = 0, step
             ++job.tasks
@@ -8036,7 +8168,7 @@ class Grid extends SpritesGroup {
                 job.view = step.value
             else
                 setTimeout(run)
-        })
+        }, true))
         setTimeout(run)
         return null
     }
@@ -8558,9 +8690,10 @@ class Grid extends SpritesGroup {
             this.litTilesQueued = true
             setTimeout(gridTask(() => {
                 this.litTilesQueued = false
-                if (this === grid && otherSettings.atmosphericVisuals && !this.litView && !gameEvent.screen.surfaceZooming &&
-                        !this.litTaskDefers(snapshots, true))
-                    atmosphericLighting.stepLightMap(this)
+                // TASK-1576: in a zoom gesture only for its held level's builds (Grid.zoomBuildOpen), in their scope.
+                if (this === grid && otherSettings.atmosphericVisuals && !this.litView &&
+                        !(gameEvent.screen.surfaceZooming && !Grid.zoomBuildOpen(true)) && !this.litTaskDefers(snapshots, true))
+                    Grid.zoomBuildRun(() => atmosphericLighting.stepLightMap(this), true)
             }))
             return
         }
@@ -8617,13 +8750,15 @@ class Grid extends SpritesGroup {
         // waited up to LIT_IDLE_TIMEOUT across frames in a pan's short pauses, and no lit task could be queued meanwhile.
         const idle = !banding && !view.unbuilt && !gameEvent.screen.surfaceMoving && typeof requestIdleCallback === 'function' &&
             !(Grid.litWorkerOrder && this.litQueueAt?.view === view && this.litQueueAt.shownMissing)
-        ;(idle ? fn => requestIdleCallback(fn, {timeout: LIT_IDLE_TIMEOUT}) : setTimeout)(gridTask(() => {
+        // TASK-1576: in a zoom gesture the held level's view's tiles (Grid.zoomBuildOpen) are built, in its scope.
+        ;(idle ? fn => requestIdleCallback(fn, {timeout: LIT_IDLE_TIMEOUT}) : setTimeout)(gridTask(() => Grid.zoomBuildRun(() => {
             this.litTilesQueued = false
             // Nothing is built inside a zoom gesture (its frames keep their live light), nor (TASK-1316) for a board the
             // view's cell layer is behind (the next frame brings it up, followCellLayer; a tile built now would also bring
             // the light map's owners up in the task drawing from it).
             // (TASK-1569: litTaskDefers asked once: it keeps whether this lit task already deferred, litDeferred)
-            const otherView = view !== this.litView, zooming = gameEvent.screen.surfaceZooming
+            const otherView = view !== this.litView
+            const zooming = gameEvent.screen.surfaceZooming && !(Grid.zoomBuildOpen(true) && view.a === this.zoomBuild.level)
             const defers = !otherView && !zooming && this.litTaskDefers(snapshots, true)
             if (otherView || zooming || defers || this.litLayerBehind(view)) {
                 // TASK-1565 rework: a moving camera's tile task that built nothing for these (visualsPerf work.sectorAhead)
@@ -8663,7 +8798,7 @@ class Grid extends SpritesGroup {
                 !moving || view.unbuilt || ahead))
             if (ahead && moving && ++this.litAheadTasks < LIT_AHEAD_TASKS && missing.some(m => !this.litHas(view, m.u, m.v)))
                 this.queueLitTiles(view, t, cw, ch)
-        }))
+        }, true)))
     }
     // TASK-1552: the lit view's tiles to keep built round the canvas at offset ox, oy: the canvas's tiles grown by LIT_AHEAD_RING,
     // and on each side the camera moves to (litMotion: its last frames' velocity) by the tiles it crosses in LIT_AHEAD_MS, at
@@ -12597,6 +12732,37 @@ Grid.settleFades = true
 Grid.SETTLE_FADE_MS = SETTLE_FADE_MS
 Grid.SETTLE_HOLD_MS = 1000
 Grid.SETTLE_HOLD_TASK_MS = 24
+// TASK-1576 (ZOOMFADE 3/5): exact sectors built in a zoom gesture at the camera's held level (Grid.zoomBuildFrame); false: as
+// 62e4d355 (nothing built in a gesture).
+Grid.zoomBuilds = true
+// TASK-1576 EXIT (artifacts/TASK-1576/residuals.md): the lit path's builds in a gesture (zoomBuildQueue's planLitView: the
+// camera's light map, lit view, tiles and the unit sectors on them) FLAGGED OFF: on the phone capture they staged a light map the
+// frames after a low zoom (surface cache path) then finished at once (a 0.9-1 s frame) and slowed the quick settles; the surface
+// cache path's builds stay (its settles ~30 % shorter). True: as edf8cd29.
+Grid.zoomBuildsLit = false
+// TASK-1576: a zoom frame draws a kept level within this share of the camera's scale before the other levels (stretchSources).
+const ZOOM_NEAR_SHARE = 0.03
+// TASK-1576: the zoom-gesture gates the builds at the held level pass (the camera's scale held two zoom frames in a row, the
+// Worker drawing the sectors): Grid.zoomBuildOpen. Grid.zoomBuildScope: inside such a build's task (lightMap draws at the
+// camera's scale, not the gesture's scaled reuse), Grid.zoomBuildRun.
+// lit: the lit path's builds (the camera's light map, lit view and tiles, and unit sectors on them), only with Grid.zoomBuildsLit.
+Grid.zoomBuildScope = 0
+Grid.zoomBuildOpen = (lit = false) => {
+    const g = typeof grid !== 'undefined' ? grid : null, zb = g?.zoomBuild
+    return !!(Grid.zoomBuilds && (!lit || Grid.zoomBuildsLit) && zb && zb.frames >= 2 && typeof canvas !== 'undefined' && canvas.scale === zb.scale &&
+        Grid.aheadInWorker())
+}
+// fn run as a zoom build (in the scope) when a zoom gesture is under way and the held level's builds are open, else as is.
+Grid.zoomBuildRun = (fn, lit = false) => {
+    if (!Grid.zoomGestureNow() || !Grid.zoomBuildOpen(lit))
+        return fn()
+    ++Grid.zoomBuildScope
+    try {
+        return fn()
+    } finally {
+        --Grid.zoomBuildScope
+    }
+}
 const LIT_FIRST_TILE_BUDGET = 16
 const LIT_TILE_POOL = 16
 // TASK-1552 (Grid.litAhead): lit tiles built ahead of the camera (Grid.queueLitTiles, litAheadRange): the ring round the

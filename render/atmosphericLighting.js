@@ -210,9 +210,14 @@ const atmosphericLighting = {
     // draws can differ from it); not exact (the rest snapshot's cell layer compare, owners left out) still brings the map's
     // owners up (syncOwners).
     trust: null,
+    // A zoom gesture reusing the map scaled (gameEvent.screen.surfaceZooming); TASK-1576: not inside its held level's builds
+    // (Grid.zoomBuildScope: the camera's map at its scale).
+    zooming() {
+        return !!gameEvent.screen.surfaceZooming && !(typeof Grid !== 'undefined' && Grid.zoomBuildScope > 0)
+    },
     trusts(board, key, scale) {
         const t = this.trust, s = this.scoped
-        if (!this.map || this.mapKey !== key || this.mapScale !== scale || gameEvent.screen.surfaceZooming)
+        if (!this.map || this.mapKey !== key || this.mapScale !== scale || this.zooming())
             return false
         // 1: the map is the board's; 2: but for its owners (a hold not exact). A check made in this run (scoped) first.
         if (s && s.board === board && s.rebuilds === this.rebuilds && s.key === key && s.scale === scale)
@@ -528,7 +533,7 @@ const atmosphericLighting = {
         if (!bounds || bounds.right <= bounds.left || bounds.bottom <= bounds.top) return null
         const key = JSON.stringify(bounds)
         const scale = this.resolution(bounds, cap)
-        const zooming = gameEvent.screen.surfaceZooming
+        const zooming = this.zooming()
         // Only the camera's map (no cap: what the frame and its lit view draw), never a cache's bake of the whole board.
         const trusted = cap === undefined && this.trusts(board, key, scale)
         if (trusted && (trusted !== 2 || this.syncOwners(board, cap, true))) {
