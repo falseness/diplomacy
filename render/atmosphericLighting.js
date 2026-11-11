@@ -255,6 +255,9 @@ const atmosphericLighting = {
         this.mapState = null
         this.mapOwners = null
         this.staged = null
+        // TASK-1572: the map kept aside (MAP_STASH) released too.
+        if (this.mapStash) this.mapStash.map.width = this.mapStash.map.height = this.mapStash.gain.width = this.mapStash.gain.height = 0
+        this.mapStash = null
     },
     // range (board.drawRange) limits the walk to those cells.
     collect(board, includeKey = true, includeCells = true, range = null) {
@@ -539,6 +542,11 @@ const atmosphericLighting = {
             return this.vouch(board, cap, key, scale)
         // A staged build of this very map is finished at once, another is dropped (canvasFor resets its canvases).
         const staged = this.staged && this.stagedFor(board, key, scale) ? this.staged : null
+        // TASK-1572 (MAP_STASH): the map kept aside for this resolution taken back, else the one replaced kept.
+        if (!staged && this.unstashMap(board, key, scale))
+            return this.vouch(board, cap, key, scale)
+        if (!staged)
+            this.stashMap(key, scale)
         this.staged = null
         const owners = staged ? staged.owners : this.ownerState(board).slice()
         if (staged)
@@ -547,6 +555,45 @@ const atmosphericLighting = {
             this.build(this.collect(board), bounds, scale)
         this.finishLightMap(board, key, scale, owners)
         return this.vouch(board, cap, key, scale)
+    },
+    // TASK-1572 (atmosphericLighting.MAP_STASH): THE CAMERA'S LIGHT MAP AT THE OTHER RESOLUTION KEPT. The map's resolution follows
+    // the camera's scale below its size bounds (resolution), so a lit view at a far scale (the board drawn as the lit view at or
+    // below the surface cache's scale, TASK-1571, where the cache stood in before) made the map there and the next nearer view
+    // built the whole map again (a 4 MP canvas set and filled, spill and glow steps over 1 MP each: heavy frames while the
+    // camera moves). A build for another resolution keeps the map it replaces aside (stashMap: its canvases, key, scale, light
+    // state and owners); a later build for the stashed one's key and resolution with the board in the same light state and
+    // owners takes it back at once (unstashMap: the two swap; the same pixels as a build: the map is a function of these),
+    // counted in mapUnstashes. One map kept (its canvases' bytes besides the map's). False: as before.
+    MAP_STASH: true,
+    mapStash: null,
+    mapUnstashes: 0,
+    stashMap(key, scale) {
+        if (!this.MAP_STASH || !this.map || !this.gain || !this.mapState || !this.mapOwners || this.mapKey !== key || this.mapScale === scale)
+            return
+        this.mapStash = {map: this.map, gain: this.gain, key: this.mapKey, scale: this.mapScale, state: this.mapState, owners: this.mapOwners}
+        // (canvasFor makes new canvases for the build)
+        this.map = this.gain = null
+    },
+    unstashMap(board, key, scale) {
+        const kept = this.mapStash
+        if (!this.MAP_STASH || !kept || kept.key !== key || kept.scale !== scale || !this.sameLightState(board, kept.state))
+            return false
+        const owners = this.ownerState(board)
+        if (!kept.owners || kept.owners.length !== owners.length) return false
+        for (let k = 0; k < owners.length; ++k) if (owners[k] !== kept.owners[k]) return false
+        this.mapStash = this.map && this.gain && this.mapKey === key && this.mapState && this.mapOwners && this.mapScale !== scale ?
+            {map: this.map, gain: this.gain, key: this.mapKey, scale: this.mapScale, state: this.mapState, owners: this.mapOwners} : null
+        this.staged = null
+        this.map = kept.map
+        this.gain = kept.gain
+        this.mapState = kept.state
+        this.mapOwners = kept.owners
+        this.mapKey = key
+        this.mapScale = scale
+        ++this.mapEdits
+        ++this.rebuilds
+        ++this.mapUnstashes
+        return true
     },
     // owners: the ownerState the map was drawn with (mapOwners).
     finishLightMap(board, key, scale, owners) {
@@ -587,6 +634,10 @@ const atmosphericLighting = {
         if (!bounds || bounds.right <= bounds.left || bounds.bottom <= bounds.top) return false
         const key = JSON.stringify(bounds), scale = this.resolution(bounds, cap)
         if (!this.stagedFor(board, key, scale)) {
+            // TASK-1572 (MAP_STASH): the map kept aside for this resolution taken back, else the one replaced kept.
+            if (this.unstashMap(board, key, scale))
+                return true
+            this.stashMap(key, scale)
             this.mapKey = ''
             this.mapState = null
             this.staged = {key, scale, state: this.lightState(board).slice(), owners: this.ownerState(board).slice(),

@@ -24,7 +24,9 @@ const atmosphericBackground = {
     },
     bytes() {
         const bytes = c => c ? c.width * c.height * 4 : 0
-        return bytes(this.raster) + bytes(atmosphericLighting.map) + bytes(atmosphericLighting.gain)
+        // (TASK-1572: with the light map kept aside, atmosphericLighting.mapStash)
+        const kept = atmosphericLighting.mapStash
+        return bytes(this.raster) + bytes(atmosphericLighting.map) + bytes(atmosphericLighting.gain) + (kept ? bytes(kept.map) + bytes(kept.gain) : 0)
     },
     watched: new WeakSet(),
     // A surface without events (a test canvas's native backing, which jsdom's main context reports once the main canvas has

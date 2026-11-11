@@ -6005,13 +6005,20 @@ class Grid extends SpritesGroup {
     drawLevelStandIn(ctx) {
         const screen = typeof gameEvent !== 'undefined' ? gameEvent.screen : undefined
         const levels = this.levelMode(ctx)
+        // TASK-1572 (Grid.litFillOverlays): at or below the cache's scale without a cache to draw (none, or one not matching the
+        // board while the camera moves: drawSurfaceCache), outside a zoom gesture, the frame draws the lit view (drawMapSurface,
+        // TASK-1571): while that view is not made its ground fill is drawn here as the lit path's (the sectors of the camera's
+        // level on an exact ground, else overlay sectors), not with every unit and text live.
+        const noCache = !this.surfaceCache || !!screen?.surfaceMoving && !this.surfacePatchJob && !this.surfaceStateMatches(ctx)
+        const litFill = Grid.litFillOverlays && Grid.litGroundFill && noCache && this === grid && otherSettings.atmosphericVisuals &&
+            !(Grid.standInsInGesture && Grid.zoomGestureNow()) && this.canUseSurfaceCache()
         const pan = !levels && this.levelsOn() && ctx.canvas === mainCanvas && !!screen?.surfaceMoving && !screen.zoomGesture &&
-            !screen.surfaceZooming && this.canUseSurfaceCache() && !this.surfaceCache
+            !screen.surfaceZooming && this.canUseSurfaceCache() && (!this.surfaceCache || litFill)
         if (!levels && !pan)
             return false
         const t = ctx.getTransform()
         let standIn, viewPending = false
-        if (this.canUseSurfaceCache()) {
+        if (this.canUseSurfaceCache() && !litFill) {
             // TASK-1571 (Grid.standInsInGesture): the preview only in a zoom gesture.
             if (this.surfaceCache || !this.standInPreviewFits() || Grid.standInsInGesture && !Grid.zoomGestureNow())
                 return false
@@ -6083,7 +6090,9 @@ class Grid extends SpritesGroup {
         this.litFrame = undefined
         this.unitFrame = {kind: 'standin', live, overlays, plan: units}
         // TASK-1571: none built on the fill (the lit view's frames build them on its tiles).
-        if (!fill)
+        // TASK-1572 (Grid.litFillOverlays): but overlay sectors (units and texts on a transparent canvas: unitSectorGround gives
+        // the fill's squares no other ground), so the units are not drawn live in every frame while the view is made.
+        if (!fill || Grid.litFillOverlays)
             this.queueUnitSectors(units, wanted, range, board, cw, ch, ox, oy, upgrades)
         if (levels)
             this.levelFrameEnd(lv, live.length, 'standin')
@@ -6212,7 +6221,10 @@ class Grid extends SpritesGroup {
         if (!Grid.unitSectorsAtRest || !screen || screen.surfaceMoving || screen.zoomGesture || screen.surfaceZooming ||
                 this.zoomBoardPass || !otherSettings.atmosphericVisuals || this.levelMode(ctx))
             return
-        const kind = this.canUseSurfaceCache() ? 'cache' : 'lit'
+        // TASK-1572 (Grid.litFillOverlays): at or below the cache's scale without a cache the frames draw the lit view
+        // (drawMapSurface, drawLevelStandIn's litFill): its sectors then, as the lit path's.
+        const litFill = Grid.litFillOverlays && Grid.litGroundFill && !this.surfaceCache && this === grid
+        const kind = this.canUseSurfaceCache() && !litFill ? 'cache' : 'lit'
         if (kind === 'cache' && (this.cacheSectorUnsteady() || !this.surfaceStateMatches(ctx) || !this.surfaceCellLayerHolds()))
             return
         const cw = ctx.canvas.width, ch = ctx.canvas.height
@@ -6938,6 +6950,10 @@ class Grid extends SpritesGroup {
                             continue
                         }
                         const over = this.freshUnitSector(units, u, v, UNIT_OVERLAY)
+                        // TASK-1572 (Grid.litFillOverlays): a filled square's units and texts get an overlay sector (built by the
+                        // unit sector tasks, drawn over the fill now and over the tile when it comes), not live in every frame.
+                        if (!over && Grid.litFillOverlays)
+                            wanted.push({u, v})
                         if (over)
                             overlays.push({entry: over, x: u * LIT_TILE + ox, y: v * LIT_TILE + oy})
                         else if (r) {
@@ -6949,7 +6965,11 @@ class Grid extends SpritesGroup {
                     ;(missing ||= new Set()).add(u + ',' + v)
                     continue
                 }
+                const built0 = !this.litHas(view, u, v) && Grid.frameCallsNow()
                 const tile = this.litTile(view, u, v, true)
+                // TASK-1572 (Grid.litFrameBudget): a tile the frame built itself: its real calls (litFrameTileCalls).
+                if (built0 !== false && Grid.frameCallsNow() > built0)
+                    Grid.litFrameTileBuilt(Grid.frameCallsNow() - built0)
                 this.useSector(view, u, v)
                 if (inBoard) {
                     // A tile the edge runs meet stays live (the frame lights the runs over it before the units).
@@ -6975,7 +6995,7 @@ class Grid extends SpritesGroup {
                     // (the tile's quarters and the overlay drawn into it: what the frame draws there), AHEAD_COMPOSE_FRAME a frame,
                     // so the next frames draw one picture there instead of the quarters and the overlay.
                     if (over && tile && !edge && this.aheadOn() && (this.aheadComposed?.serial === this.drawSerial ? this.aheadComposed.n : 0) <
-                            Math.min(AHEAD_COMPOSE_FRAME, Math.floor((AHEAD_FRAME_MP - Grid.aheadPrevMp()) / AHEAD_COMPOSE_MP))) {
+                            Math.min(AHEAD_COMPOSE_FRAME, Math.floor((AHEAD_FRAME_MP - Grid.aheadPrevMp() - Grid.frameTileMp()) / AHEAD_COMPOSE_MP))) {
                         const whole = this.composeUnitSector(units, u, v, tile, over)
                         if (whole) {
                             this.drawUnitSectorAt(ctx, whole, u * LIT_TILE + ox, v * LIT_TILE + oy)
@@ -8006,8 +8026,13 @@ class Grid extends SpritesGroup {
                     list.push({key: u + ',' + v, far: Math.hypot(u - cu, v - cv)})
             }
         list.sort((a, b) => a.far - b.far)
-        const out = new Set(list.slice(0, LIT_FRAME_TILE_CAP).map(m => m.key))
+        const out = new Set(list.slice(0, Grid.litFrameBudget ? Grid.litFrameTilesFit(this) : LIT_FRAME_TILE_CAP).map(m => m.key))
+        // TASK-1572 (Grid.litFrameBudget): their offscreen megapixels reserved for the frame (the composes after them fit the rest).
+        if (Grid.litFrameBudget)
+            Grid.frameTileMpAt = {frame: Grid.frameNo, mp: out.size * LIT_FRAME_TILE_MP}
         work.built += out.size
+        if (Grid.litFrameBudget && out.size < Math.min(LIT_FRAME_TILE_CAP, list.length))
+            work.overBudget = (work.overBudget || 0) + Math.min(LIT_FRAME_TILE_CAP, list.length) - out.size
         work.filled += list.length - out.size
         return out
     }
@@ -12164,6 +12189,9 @@ Grid.aheadMpSpend = mp => {
 // last frame's own (aheadCallsLeft): a frame and the builds before it stay under a heavy frame's 500 calls.
 Grid.lastFrameCalls = 0
 Grid.frameCallsStart = 0
+Grid.frameCallsEnd = 0
+Grid.frameBuildCalls = 0
+Grid.lastFrameOwnCalls = 0
 Grid.frameCallsNow = () => typeof sectorDrawTotal !== 'undefined' ? sectorDrawTotal : 0
 Grid.frameBegin = () => {
     if (!Grid.sectorAhead)
@@ -12171,6 +12199,7 @@ Grid.frameBegin = () => {
     if (typeof sectorCountDraws === 'function')
         sectorCountDraws()
     Grid.frameCallsStart = Grid.frameCallsNow()
+    Grid.frameBuildCalls = 0
 }
 Grid.recentFrameCalls = []
 Grid.frameFinish = () => {
@@ -12182,6 +12211,9 @@ Grid.frameFinish = () => {
     if (recent.length > AHEAD_FRAME_SAMPLES)
         recent.shift()
     Grid.lastFrameCalls = Math.max(...recent)
+    // TASK-1572 (Grid.litFrameBudget): the frame's own calls besides the tiles it built itself, and where the next one's begin.
+    Grid.lastFrameOwnCalls = Grid.frameCallsNow() - Grid.frameCallsStart - Grid.frameBuildCalls
+    Grid.frameCallsEnd = Grid.frameCallsNow()
 }
 // The calls the builds before the next frame may still make while the camera moves (levelWorkLeft's, within the frame's room).
 Grid.aheadCallsLeft = () => {
@@ -12237,6 +12269,48 @@ const LIT_FRAME_TILES = 8
 // TASK-1564), so 2 keep a frame's own building near one 30 ms frame, while 3-4 would make the camera's stop (the squares
 // the ring did not reach) a frame of 40-55 ms, the stall TASK-1334 removed (40 tiles in one frame).
 const LIT_FRAME_TILE_CAP = 2
+// TASK-1572 (Grid.litFrameBudget): a frame builds its missing tiles itself (litFrameBuilds, at most LIT_FRAME_TILE_CAP) only while
+// the calls since the last frame (the tasks between, the frame so far), the last frame's own calls besides its builds and the
+// builds' (each the most of the last LIT_FRAME_TILE_SAMPLES measured, about 220-280) stay within LIT_FRAME_BUILD_CALLS, and the
+// builds' offscreen megapixels (LIT_FRAME_TILE_MP each: a tile's quarters and buildings, 0.41-0.47 measured in the TASK-1571
+// replays) with the builds' before the frame within LIT_FRAME_BUILD_MP: under a heavy frame's 500 calls / 1 MP (the frames
+// building 2 tiles were 750-1050 calls, ~0.9 MP). The squares past it get the ground fill this frame (the Worker and the tasks
+// build them); 0 when the frame has no room. False: LIT_FRAME_TILE_CAP a frame (TASK-1571).
+Grid.litFrameBudget = true
+const LIT_FRAME_BUILD_CALLS = 470
+const LIT_FRAME_BUILD_MP = 0.9
+const LIT_FRAME_TILE_MP = 0.45
+const LIT_FRAME_TILE_SAMPLES = 4
+Grid.litFrameTileCalls = [250]
+Grid.litFrameTileBuilt = calls => {
+    const recent = Grid.litFrameTileCalls
+    recent.push(calls)
+    if (recent.length > LIT_FRAME_TILE_SAMPLES)
+        recent.shift()
+    Grid.frameBuildCalls += calls
+}
+// The offscreen megapixels the frame's own tile builds were given (litFrameBuilds), for the composes (drawLitView).
+Grid.frameTileMpAt = {frame: -1, mp: 0}
+Grid.frameTileMp = () => Grid.frameTileMpAt.frame === Grid.frameNo ? Grid.frameTileMpAt.mp : 0
+// The tiles the frame being drawn by board may still build itself (0..LIT_FRAME_TILE_CAP), the composes it made so far
+// (AHEAD_COMPOSE_MP each) besides the builds' before it.
+Grid.litFrameTilesFit = board => {
+    // (Without the page's call counts, sectorCountDraws: no Worker, the headless tests: LIT_FRAME_TILE_CAP.)
+    if (typeof sectorDrawCountsOn === 'undefined' || !sectorDrawCountsOn || !Grid.sectorAhead)
+        return LIT_FRAME_TILE_CAP
+    const tile = Math.max(...Grid.litFrameTileCalls)
+    // The tasks' calls since the last frame, and the frame's own: those so far or the last frame's, the larger.
+    const between = Grid.frameCallsStart - Grid.frameCallsEnd
+    const own = Math.max(Grid.frameCallsNow() - Grid.frameCallsStart - Grid.frameBuildCalls, Grid.lastFrameOwnCalls)
+    const calls = Math.floor((LIT_FRAME_BUILD_CALLS - between - own) / tile)
+    const composed = board && board.aheadComposed?.serial === board.drawSerial ? board.aheadComposed.n : 0
+    const mp = Math.floor((LIT_FRAME_BUILD_MP - Grid.aheadPrevMp() - Grid.levelFrameWork.mp - composed * AHEAD_COMPOSE_MP) / LIT_FRAME_TILE_MP)
+    return Math.max(0, Math.min(LIT_FRAME_TILE_CAP, calls, mp))
+}
+// TASK-1572 (Grid.litFillOverlays): the squares a lit frame fills (drawLitView, drawLevelStandIn's fill) want an overlay unit
+// sector (queueUnitSectors), drawn over the fill, so their units and texts are not drawn live in every frame till the tile
+// comes (the stand-in squares had sectors on the stand-in's ground). False: live over the fill (TASK-1571).
+Grid.litFillOverlays = true
 const LIT_FIRST_TILE_BUDGET = 16
 const LIT_TILE_POOL = 16
 // TASK-1552 (Grid.litAhead): lit tiles built ahead of the camera (Grid.queueLitTiles, litAheadRange): the ring round the
