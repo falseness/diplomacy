@@ -121,17 +121,22 @@ const atmosphericLighting = {
     rimBuilds: 0,
     // Upper-left key light direction (degrees, screen space, y down) for shadows.
     KEY_ANGLE: -120,
-    // Tile look (TASK-1580): weathered carved warm-tan sandstone slabs set in crisp dark grout. Each visible cell is
-    // inset by half the grout width over a grout fill of the visible cells, so there are no outlines or seams. Neutral
-    // tiles draw one of a few procedurally generated, cached sandstone variants (tileVariant); owned tiles their colour
-    // with the same stone detail, under a faint sheen.
+    // Tile look (TASK-1580): weathered carved warm-tan sandstone slabs set in thin brass trim (TASK-1582). Each visible
+    // cell is inset by half the grout (trim) width over a grout fill of the visible cells, so there are no outlines or
+    // seams. Neutral tiles draw one of a few procedurally generated, cached sandstone variants (tileVariant); owned tiles
+    // their colour with the same stone detail, under a faint sheen.
     TILE: {
         variants: 8,
         rasterScale: 1.5,
-        // Warm tan before the light map, which keeps it near this tan across the board (KEY). A dark warm grey grout
-        // that reads as crisp lines between the slabs.
-        grout: '#57535b',
-        groutWidth: 0.055,
+        // Warm tan before the light map, which keeps it near this tan across the board (KEY). TASK-1582: the grout is a
+        // thin antique brass trim (drawGrout), as the concept's: a bronze fill of the gap (grout), a near-black shade line
+        // shifted up (trim.shade: the groove's shadowed upper wall) and a gold highlight line shifted down (trim.highlight:
+        // its lit lower lip), strokes of the same path. Widths and shifts (screen y, + down) are fractions of the gap
+        // (groutWidth x the hex radius, about the concept's trim width at its hex size).
+        grout: '#86521c',
+        groutWidth: 0.087,
+        trim: {shade: '#1c1004', shadeWidth: 0.4, shadeShift: -0.26,
+            highlight: '#aa641a', highlightWidth: 0.3, highlightShift: 0.25},
         stone: [252, 184, 104],
         // Owned tiles' faint sheen.
         sheen: 0.1,
@@ -1753,14 +1758,36 @@ const atmosphericLighting = {
                 this.hexagonPath(g, c.x, c.y, basis.r)
             }
         }
-        const path = this.memoPath('grout', cells, add)
-        ctx.fillStyle = this.TILE.grout
-        if (path)
-            ctx.fill(path)
-        else {
+        // TASK-1582: a path object (not ctx's current path, which keeps the transform it was traced under), so the trim's
+        // lines below are the same path shifted; traced once.
+        let path = this.memoPath('grout', cells, add)
+        if (!path && typeof Path2D === 'function' && typeof SectorPath === 'function') {
+            path = new SectorPath()
+            add(path)
+        }
+        const draw = op => {
+            if (path) return ctx[op](path)
             ctx.beginPath()
             add(ctx)
-            ctx.fill()
+            ctx[op]()
+        }
+        ctx.fillStyle = this.TILE.grout
+        draw('fill')
+        // TASK-1582: the brass trim's shade and highlight lines, the same hexagon edges stroked shifted up / down across
+        // the gap (each edge sits in the middle of its gap; the tiles drawn next cover what spills past it), clipped to
+        // the grout fill, so no line reaches past the drawn cells (into a hidden cell's half of its gap, off the board).
+        const {trim, groutWidth} = this.TILE
+        const gap = groutWidth * basis.r
+        draw('clip')
+        ctx.lineJoin = 'miter'
+        for (const [style, width, shift] of [[trim.shade, trim.shadeWidth, trim.shadeShift],
+            [trim.highlight, trim.highlightWidth, trim.highlightShift]]) {
+            ctx.save()
+            ctx.translate(0, shift * gap)
+            ctx.strokeStyle = style
+            ctx.lineWidth = width * gap
+            draw('stroke')
+            ctx.restore()
         }
         ctx.restore()
     },
