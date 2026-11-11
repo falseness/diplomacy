@@ -242,13 +242,20 @@ class Grid extends SpritesGroup {
         // yet). No allocation beyond the object: the lists are the frame's own.
         this.frameView = undefined
         this.squareStates = undefined
+        // TASK-1575 (ZOOMFADE 2/5, Grid.settleFades): the squares fading in (fades: {level, map: 'u,v' -> {u, v, start, kind}})
+        // and the last main canvas frame's not exact squares (fadePrev: {level, stretch, held, zoom}: the frame's own lists).
+        this.fades = undefined
+        this.fadePrev = null
         // What a unit sector's ground (a lit tile, a stand-in) was drawn from stays the board's while this is the same: one
         // more on a board change the lit sectors were cleared for (clearSectors); a change they were dirtied for dirties the
         // unit sectors there too (staleSectorsIn).
         this.unitGroundEpoch = 0
         this.zoomQuietUntil = 0
         this.levelWork = {zoomFrames: 0, settleFrames: 0, settled: 0, stretchedDrawn: 0, heldFrames: 0, heldSquares: 0,
-            budgetStops: 0, quietStops: 0, skippedRasters: 0, restFrames: 0, ends: {}}
+            budgetStops: 0, quietStops: 0, skippedRasters: 0, restFrames: 0, ends: {},
+            // TASK-1575: fades started, ended at full opacity, dropped (stretched again, off screen, a zoom, the level changed,
+            // over the draw cap), the frames drawing fades and the squares they drew fading.
+            fadesStarted: 0, fadesDone: 0, fadesDropped: 0, fadeFrames: 0, fadeSquares: 0, fadeDraws: 0}
         // TASK-1561: a unit sector build the task's draw call budget cut (buildUnitSector), and the count of the cells the
         // unit sector checks found changed (a cut build begins again when it moved).
         this.unitSectorBuilding = undefined
@@ -5945,12 +5952,14 @@ class Grid extends SpritesGroup {
     // Draws on ctx (frame at transform t, canvas cw x ch, the sectors' grid at ox, oy) the sectors cover.need (stretchCover),
     // clipped to squares (all: the whole canvas), over the surface cache or its stand-in preview (drawLevelUnderlay), the
     // levels of src worst first.
-    drawStretchedSectors(ctx, t, squares, src, cover, cw, ch, ox, oy, all = false) {
+    // TASK-1575: under false: no underlay (the squares are covered whole: a fade's previous picture, fadeFrame).
+    drawStretchedSectors(ctx, t, squares, src, cover, cw, ch, ox, oy, all = false, under = true) {
         ctx.save()
         if (!all)
             clipToDeviceRects(ctx, squares.map(({u, v}) => this.unitSquareRect(u, v, ox, oy, cw, ch)).filter(Boolean))
         ctx.setTransform(t.a, t.b, t.c, t.d, t.e, t.f)
-        this.drawLevelUnderlay(ctx)
+        if (under)
+            this.drawLevelUnderlay(ctx)
         ctx.setTransform(1, 0, 0, 1, 0, 0)
         const order = [...src.levels].reverse()
         const list = [...cover.need.values()].sort((p, q) => order.indexOf(p.level) - order.indexOf(q.level))
@@ -6005,6 +6014,164 @@ class Grid extends SpritesGroup {
         this.drawStretchedSectors(ctx, t, lv.held, lv.src, this.stretchCover(lv.plan.level, lv.held, lv.src, true), cw, ch, ox, oy)
         this.levelWork.heldSquares += lv.held.length
         ++this.levelWork.heldFrames
+    }
+    // TASK-1575 (ZOOMFADE 2/5, Grid.settleFades): SETTLE FADES. A square of the main canvas drawn stretched or held (or as a
+    // zoom gesture's frame drew it) in one frame and at the camera's level in the next (its exact sector, its units live, or
+    // the board drawn as before: a settle's swap, the settle's end, a pan's stretched square built) is not replaced at
+    // once: for SETTLE_FADE_MS of frame time (performance.now from the first frame that draws it exact: a slow frame ends
+    // it sooner, never later) its previous picture (the levels' sectors as drawStretchedSectors drew them, over the
+    // underlay where none covered it whole) is drawn over the frame's exact picture with globalAlpha 1 - a, a = the share
+    // of SETTLE_FADE_MS gone (from 0): the exact picture at alpha a over the previous one, for opaque pixels the same
+    // blend (a * exact + (1 - a) * previous), drawn once after the frame's squares (fadeFrame, Grid.draw: after the live
+    // squares' units, before the move tweens, the borders and the selection) so one site covers every path that draws a
+    // square exact. Only on-screen squares blend (one leaving the canvas drops its fade), a square stretched again drops
+    // its fade (the stretched picture is drawn), a zoom gesture's frame or another level drops them all; exact to exact
+    // redraws (a board change) never fade. The frames go on being drawn (no held still frame, no overlay composite: the
+    // fading squares change each frame, fadesPending) until every fade has ended. Squares mid-fade: squareStates.fading
+    // (render/visualsPerf.js work.fades). False: as 55df4426 (the swap at once).
+    fadesPending() {
+        const p = this.fadePrev
+        return !!(Grid.settleFades && (this.fades?.map.size || p && (p.stretch.length || p.held.length)))
+    }
+    dropFades() {
+        if (this.fades) {
+            this.levelWork.fadesDropped += this.fades.map.size
+            this.fades = undefined
+        }
+    }
+    // The fades of the main canvas frame just drawn on ctx (camera transform; the board's squares drawn): started for the
+    // squares the frame before did not draw exact, advanced, ended, and the fading squares' previous pictures drawn over.
+    fadeFrame(ctx) {
+        if (!Grid.settleFades || this !== grid || typeof mainCanvas === 'undefined' || ctx.canvas !== mainCanvas)
+            return
+        const prev = this.fadePrev, st = this.squareStates?.serial === this.drawSerial ? this.squareStates : null
+        const t = ctx.getTransform(), level = st ? st.level : t.a
+        this.fadePrev = st && (st.stretch.length || st.held.length) ? {level, stretch: st.stretch, held: st.held, zoom: st.mode === 'zoom'} : null
+        if (this.fades && this.fades.level !== level)
+            this.dropFades()
+        const starts = !!prev && prev.level === level && !(st && st.mode === 'zoom')
+        if (!starts && !this.fades)
+            return
+        // A zoom gesture's frame (every square a scaled picture) or a frame not drawn on the squares' grid: no fades.
+        if (st?.mode === 'zoom' || t.b !== 0 || t.c !== 0 || !(t.a > 0) || t.a !== t.d || !this.unitSectors) {
+            this.dropFades()
+            return
+        }
+        const cw = ctx.canvas.width, ch = ctx.canvas.height, ox = Math.round(t.e), oy = Math.round(t.f)
+        const squares = st ? st.squares : this.levelSquares(level, cw, ch, ox, oy)
+        const onScreen = new Set(), ne = new Set()
+        for (const {u, v} of squares)
+            if (this.unitSquareRect(u, v, ox, oy, cw, ch))
+                onScreen.add(u + ',' + v)
+        if (st)
+            for (const list of [st.stretch, st.held])
+                for (const {u, v} of list)
+                    ne.add(u + ',' + v)
+        const now = performance.now(), work = this.levelWork
+        const fades = this.fades ||= {level, map: new Map()}
+        if (starts) {
+            const begin = (list, kind) => {
+                for (const {u, v} of list) {
+                    const k = u + ',' + v
+                    if (!ne.has(k) && onScreen.has(k) && !fades.map.has(k)) {
+                        fades.map.set(k, {u, v, start: now, kind})
+                        ++work.fadesStarted
+                    }
+                }
+            }
+            begin(prev.held, 'held')
+            begin(prev.stretch, prev.zoom ? 'zoom' : 'stretch')
+        }
+        // The fades going on, by kind and start (one alpha each).
+        const groups = new Map(), fading = []
+        for (const [k, f] of fades.map) {
+            if (ne.has(k) || !onScreen.has(k)) {
+                fades.map.delete(k)
+                ++work.fadesDropped
+                continue
+            }
+            const a = (now - f.start) / SETTLE_FADE_MS
+            if (a >= 1) {
+                fades.map.delete(k)
+                ++work.fadesDone
+                continue
+            }
+            f.alpha = a
+            const g = f.kind + ':' + f.start
+            let group = groups.get(g)
+            if (!group)
+                groups.set(g, group = {kind: f.kind, a, list: []})
+            group.list.push(f)
+        }
+        if (!fades.map.size)
+            this.fades = undefined
+        if (!groups.size) {
+            if (st)
+                st.fading = []
+            return
+        }
+        // The previous pictures: per square the level covering it whole (stretchCover), else the best level meeting it over
+        // the underlay (a held square's partial cover; a zoom frame's square none covered); the camera's own level among them
+        // for a zoom frame's squares (drawZoomSectors' sources). Each square's sectors from one level only, clipped to the
+        // squares of that level and alpha, so no pixel is blended twice; at most LEVEL_MAX_DRAWS sectors (the squares past
+        // it end their fade: drawn exact).
+        const srcs = {}
+        let draws = 0
+        ctx.save()
+        for (const group of groups.values()) {
+            const withLevel = group.kind === 'zoom'
+            const src = srcs[withLevel] ||= this.stretchSources(level, t, cw, ch, withLevel)
+            const parts = new Map()
+            // A square's picture from cover (stretchCover of it alone): its part (whole or not, by level) and the draws it adds
+            // (sectors not in that part yet, the part's underlay); null past LEVEL_MAX_DRAWS.
+            const fit = cover => {
+                const entries = [...cover.need.values()], whole = cover.covered.size > 0
+                const key = (whole ? 'w' : 'p') + (entries[0]?.level ?? '')
+                const part = parts.get(key)
+                const cost = entries.filter(e => !part?.need.has(e.key)).length + (!whole && !part ? 1 : 0)
+                return draws + cost <= LEVEL_MAX_DRAWS ? {key, whole, entries, part, cost} : null
+            }
+            const coarse = {levels: src.levels.filter(L => L < level), by: src.by}
+            for (const f of group.list) {
+                const one = [{u: f.u, v: f.v}]
+                // Past the cap (finer levels: several sectors a square) the coarser levels' (a sector shared by squares), else
+                // the underlay alone: still a fade, never a swap at once; only when not even that fits the fade ends.
+                const pick = fit(this.stretchCover(level, one, src, true)) || fit(this.stretchCover(level, one, coarse, true)) ||
+                    fit({covered: new Set(), need: new Map()})
+                if (!pick) {
+                    fades.map.delete(f.u + ',' + f.v)
+                    ++work.fadesDropped
+                    continue
+                }
+                let part = pick.part
+                if (!part)
+                    parts.set(pick.key, part = {whole: pick.whole, squares: [], need: new Map()})
+                part.squares.push({u: f.u, v: f.v})
+                for (const e of pick.entries)
+                    part.need.set(e.key, e)
+                draws += pick.cost
+                fading.push(f)
+            }
+            // Drawn as the stretched squares are (drawStretchedSectors: clipped to the part's squares; the underlay only
+            // under squares no level covers whole), at alpha 1 - a.
+            for (const part of parts.values()) {
+                ctx.save()
+                ctx.globalAlpha = 1 - group.a
+                this.drawStretchedSectors(ctx, t, part.squares, src, part, cw, ch, ox, oy, false, !part.whole)
+                ctx.restore()
+            }
+        }
+        ctx.restore()
+        if (!fades.map.size)
+            this.fades = undefined
+        work.fadeDraws += draws
+        work.fadeSquares += fading.length
+        if (fading.length)
+            ++work.fadeFrames
+        if (st)
+            st.fading = fading
+        else if (fading.length)
+            this.squareStates = {serial: this.drawSerial, mode: 'board', level, squares, stretch: [], held: [], fading}
     }
     // A level frame's coverage (levelCoverage); with no square stretched or live the settle is over: the frames at rest
     // draw the sectors (sectorRest) until the camera pans or zooms.
@@ -6132,6 +6299,9 @@ class Grid extends SpritesGroup {
         ctx.restore()
         this.drawLevelStretch(ctx, t, lv, cw, ch, ox, oy)
         this.drawLevelHeld(ctx, t, lv, cw, ch, ox, oy)
+        // TASK-1575: a pan frame's stretched squares (no level frame: levelFrameEnd not run), for the fades (fadeFrame).
+        if (!levels)
+            this.squareStates = {serial: this.drawSerial, mode: 'pan', level: units.level, squares: lv.squares, stretch: lv.stretch, held: lv.held, fading: null}
         this.litFrame = undefined
         this.unitFrame = {kind: 'standin', live, overlays, plan: units}
         // TASK-1571: none built on the fill (the lit view's frames build them on its tiles).
@@ -6187,6 +6357,8 @@ class Grid extends SpritesGroup {
             stretched: cover.covered.size, bare: squares.length - cover.covered.size, live: 0}
         // TASK-1574: every square of a zoom frame is a scaled picture (stretched levels or the underlay), none exact.
         this.squareStates = {serial: this.drawSerial, mode: 'zoom', level, squares, stretch: squares, held: [], fading: null}
+        // TASK-1575: no fades in a zoom gesture; its squares fade in after it.
+        this.fadeFrame(ctx)
         ++this.levelWork.zoomFrames
         // The frames after the gesture: drawn on the levels until the camera's level is built (levelSettle).
         this.levelSettle = {since: performance.now(), level: null}
@@ -9580,7 +9752,8 @@ class Grid extends SpritesGroup {
                     this.drawOther(ctx, 'units')
             }
             else if (!layered) {
-                composite = this.beginOverlayComposite(ctx)
+                // TASK-1575: not while squares fade in (their pixels change each frame).
+                composite = this.fadesPending() ? null : this.beginOverlayComposite(ctx)
                 const target = composite ? composite.context : ctx
                 this.drawStillUnits(target, this.surfaceOverlayCells)
                 this.drawEntityOverlays(target, this.surfaceOverlayCells)
@@ -9590,6 +9763,9 @@ class Grid extends SpritesGroup {
             this.drawEntityOverlays(ctx, this.surfaceOverlayCells)
         else
             this.drawOther(ctx)
+        // TASK-1575 (Grid.settleFades): the squares fading in, their previous pictures over the frame's.
+        if (!pass)
+            this.fadeFrame(ctx)
         const main = ctx
         if (composite) {
             composite.endOverlays()
@@ -10272,6 +10448,9 @@ class Grid extends SpritesGroup {
         // A world point at device x in the raster is at device t.e + kx (x - raster.e) now.
         const kx = t.a / raster.a, ky = t.d / raster.d
         const x = t.e - kx * raster.e, y = t.f - ky * raster.f, w = kx * cw, h = ky * ch
+        // TASK-1575: a zoom raster's frame drops the fades (no squares).
+        this.dropFades()
+        this.fadePrev = null
         if (!atmosphericBackground.opaqueOver(ctx))
             ctx.clearRect(canvas.offset.x, canvas.offset.y, width, height)
         atmosphericBackground.draw(ctx)
@@ -10377,7 +10556,7 @@ class Grid extends SpritesGroup {
     // patched in place, is drawn over it).
     lodFrameSteady(recorder) {
         const screen = typeof gameEvent !== 'undefined' ? gameEvent.screen : undefined
-        if (this.frameSurface !== true || !screen || screen.surfaceMoving || screen.zoomGesture || zoomRasterTweens() || this.surfaceCacheBuild || this.surfacePatchJob ||
+        if (this.frameSurface !== true || !screen || screen.surfaceMoving || screen.zoomGesture || zoomRasterTweens() || this.fadesPending() || this.surfaceCacheBuild || this.surfacePatchJob ||
                 this.surfaceLayerJob || this.surfaceSplitJob || this.litView?.layerJob || otherSettings.atmosphericVisuals && !this.surfaceCacheLit)
             return false
         return this.recordingSteady(recorder)
@@ -10413,7 +10592,8 @@ class Grid extends SpritesGroup {
             return false
         const screen = typeof gameEvent !== 'undefined' ? gameEvent.screen : undefined
         const t = ctx.getTransform()
-        return !!screen && !screen.surfaceMoving && !screen.zoomGesture && !zoomRasterTweens() &&
+        // TASK-1575: nor while squares fade in (fadesPending).
+        return !!screen && !screen.surfaceMoving && !screen.zoomGesture && !zoomRasterTweens() && !this.fadesPending() &&
             t.b === 0 && t.c === 0 && t.a > 0 && t.d > 0
     }
     // Whether a recorded still frame (stillFrameCandidate) can stand for the next: the camera still at rest, and drawn from
@@ -12208,6 +12388,9 @@ const LEVEL_TILE_STEPS = 4
 const LEVEL_TILE_STEP_CALLS = 80
 // A settle (levelSettle) given up this long after its zoom's last frame (its squares then drawn as a pan's or rest frame's).
 const LEVEL_SETTLE_MS = 6000
+// TASK-1575 (ZOOMFADE 2/5): a square replacing its stretched (or held) picture by its exact one fades in over this many ms
+// of frame time (Grid.fadeFrame).
+const SETTLE_FADE_MS = 150
 // After a zoom gesture (and while its settle lasts) the background builds that do not draw the frame run a piece a frame
 // (the surface cache's build steps: Grid.oncePerFrame) or wait (its split, finish and bake, the owned tiles' prewarm, the
 // sky raster, the canvas pools' reserves, cache holds) for this long after its last zoom frame (Grid.zoomQuiet), so they do not crowd the frames the
@@ -12409,6 +12592,9 @@ Grid.litFillOverlays = true
 // TASK-1572: a settle's first frames draw the squares that would be live as the zoom gesture drew them, for at most
 // SETTLE_HOLD_MS after its last frame (Grid.settleHoldOn); false: as fa72a557 (live at once).
 Grid.settleHoldsLevels = true
+// TASK-1575 (ZOOMFADE 2/5): the settle fades (Grid.fadeFrame); false: the swap at once (55df4426).
+Grid.settleFades = true
+Grid.SETTLE_FADE_MS = SETTLE_FADE_MS
 Grid.SETTLE_HOLD_MS = 1000
 Grid.SETTLE_HOLD_TASK_MS = 24
 const LIT_FIRST_TILE_BUDGET = 16
