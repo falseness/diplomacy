@@ -240,7 +240,7 @@ class Grid extends SpritesGroup {
         // unit sectors there too (staleSectorsIn).
         this.unitGroundEpoch = 0
         this.zoomQuietUntil = 0
-        this.levelWork = {zoomFrames: 0, settleFrames: 0, settled: 0, stretchedDrawn: 0,
+        this.levelWork = {zoomFrames: 0, settleFrames: 0, settled: 0, stretchedDrawn: 0, heldFrames: 0, heldSquares: 0,
             budgetStops: 0, quietStops: 0, skippedRasters: 0, restFrames: 0, ends: {}}
         // TASK-1561: a unit sector build the task's draw call budget cut (buildUnitSector), and the count of the cells the
         // unit sector checks found changed (a cut build begins again when it moved).
@@ -5954,7 +5954,7 @@ class Grid extends SpritesGroup {
         const squares = this.levelSquares(plan.level, cw, ch, ox, oy)
         const src = this.stretchSources(plan.level, t, cw, ch)
         // first: the squares drawn live, built first (queueUnitSectors: a burst ends them).
-        const lv = {plan, squares, src, cover: this.stretchCover(plan.level, squares, src), stretch: [], standIn: 0, old: 0, first: new Set()}
+        const lv = {plan, squares, src, cover: this.stretchCover(plan.level, squares, src), stretch: [], held: [], standIn: 0, old: 0, first: new Set()}
         plan.first = lv.first
         return lv
     }
@@ -5970,10 +5970,26 @@ class Grid extends SpritesGroup {
             return
         this.drawStretchedSectors(ctx, t, lv.stretch, lv.src, this.stretchCover(lv.plan.level, lv.stretch, lv.src), cw, ch, ox, oy)
     }
+    // TASK-1572 (Grid.settleHoldsLevels): within SETTLE_HOLD_MS of a zoom gesture's last frame (levelSettle.since) a settle
+    // frame's squares no sector of the camera's level (nor an overlay) and no other level covers whole are drawn as the
+    // gesture's frames drew them (drawStretchedSectors' partial cover: the levels' sectors meeting them over the underlay),
+    // not with their units and texts live (16-62 squares, 550-3200 calls in each of the settle's first 2-3 frames on the
+    // desktop capture), while their sectors are built between frames (queueUnitSectors: first; with the Worker timed, not a
+    // burst: no live cost). Past the hold they are drawn live as before. False: as fa72a557.
+    settleHoldOn() {
+        return !!(Grid.settleHoldsLevels && this.levelSettle && performance.now() - this.levelSettle.since < Grid.SETTLE_HOLD_MS)
+    }
+    drawLevelHeld(ctx, t, lv, cw, ch, ox, oy) {
+        if (!lv.held.length)
+            return
+        this.drawStretchedSectors(ctx, t, lv.held, lv.src, this.stretchCover(lv.plan.level, lv.held, lv.src, true), cw, ch, ox, oy)
+        this.levelWork.heldSquares += lv.held.length
+        ++this.levelWork.heldFrames
+    }
     // A level frame's coverage (levelCoverage); with no square stretched or live the settle is over: the frames at rest
     // draw the sectors (sectorRest) until the camera pans or zooms.
     levelFrameEnd(lv, live, kind) {
-        const total = lv.squares.length, stretched = lv.stretch.length
+        const total = lv.squares.length, stretched = lv.stretch.length + lv.held.length
         // standIn: squares drawn on the stand-in's ground (no tile yet); old: from a sector of the level on an older ground.
         this.levelCoverage = {serial: this.drawSerial, mode: this.levelSettle ? 'settle' : 'rest', kind, level: lv.plan.level, total,
             exact: total - stretched, stretched, bare: live, live, standIn: kind === 'standin' ? total - stretched : lv.standIn, old: lv.old}
@@ -6053,6 +6069,7 @@ class Grid extends SpritesGroup {
         this.unitSectorCheck(this.drawRange(ctx))
         const range = this.litTileRange(cw, ch, ox, oy, 0), board = this.unitBoardSquares(units.level)
         const lv = this.levelPlan(units, t, cw, ch, ox, oy)
+        const hold = levels && this.settleHoldOn()
         // The stand-in under every square (the sectors are opaque where the board is).
         if (fill)
             this.drawGroundFill(ctx, [{x: 0, y: 0, w: cw, h: ch}])
@@ -6080,6 +6097,10 @@ class Grid extends SpritesGroup {
                 overlays.push({entry: over, x: u * LIT_TILE + ox, y: v * LIT_TILE + oy})
             else if (r && lv.cover.covered.has(u + ',' + v))
                 lv.stretch.push({u, v})
+            else if (r && hold) {
+                lv.held.push({u, v})
+                lv.first.add(u + ',' + v)
+            }
             else if (r) {
                 live.push(r)
                 lv?.first.add(u + ',' + v)
@@ -6087,6 +6108,7 @@ class Grid extends SpritesGroup {
         }
         ctx.restore()
         this.drawLevelStretch(ctx, t, lv, cw, ch, ox, oy)
+        this.drawLevelHeld(ctx, t, lv, cw, ch, ox, oy)
         this.litFrame = undefined
         this.unitFrame = {kind: 'standin', live, overlays, plan: units}
         // TASK-1571: none built on the fill (the lit view's frames build them on its tiles).
@@ -6268,6 +6290,7 @@ class Grid extends SpritesGroup {
         const range = this.litTileRange(cw, ch, ox, oy, 0), board = this.unitBoardSquares(plan.level)
         // TASK-1562: after a zoom, the squares without a sector of the camera's level stretched from another (lv).
         const lv = levels ? this.levelPlan(plan, t, cw, ch, ox, oy) : null
+        const hold = !!lv && this.settleHoldOn()
         const live = [], wanted = [], overlays = [], ground = [], upgrades = []
         ctx.save()
         ctx.setTransform(1, 0, 0, 1, 0, 0)
@@ -6283,6 +6306,13 @@ class Grid extends SpritesGroup {
                 const r = this.unitSquareRect(u, v, ox, oy, cw, ch)
                 if (r && !over && lv?.cover.covered.has(u + ',' + v)) {
                     lv.stretch.push({u, v})
+                    wanted.push({u, v})
+                    continue
+                }
+                // TASK-1572 (Grid.settleHoldsLevels): a square that would be live in a settle's first frames: as the gesture drew it.
+                if (r && !over && hold) {
+                    lv.held.push({u, v})
+                    lv.first.add(u + ',' + v)
                     wanted.push({u, v})
                     continue
                 }
@@ -6306,8 +6336,10 @@ class Grid extends SpritesGroup {
             this.drawSurfaceCacheRect(ctx, left, top, left + cw / t.a, top + ch / t.d)
             ctx.restore()
         }
-        if (lv)
+        if (lv) {
             this.drawLevelStretch(ctx, t, lv, cw, ch, ox, oy)
+            this.drawLevelHeld(ctx, t, lv, cw, ch, ox, oy)
+        }
         this.unitFrame = {kind: 'cache', live, overlays, plan}
         this.queueUnitSectors(plan, wanted, range, board, cw, ch, ox, oy, upgrades)
         if (lv)
@@ -6408,7 +6440,10 @@ class Grid extends SpritesGroup {
         // TASK-1565 pass 7 found for the lit tile steps.
         // (a frame's tasks AHEAD_WORKER_FRAME_MS together: levelFrameWork.unitMs)
         const timed = !!left && Grid.unitWorkerTime && Grid.aheadInWorker()
-        if (timed && Grid.levelFrameWork.unitMs >= AHEAD_WORKER_FRAME_MS) {
+        // TASK-1572 (Grid.settleHoldsLevels): while a settle holds its squares (no live ones: its frames ~40-120 calls) the
+        // recording gets SETTLE_HOLD_TASK_MS a frame, so the held squares' sectors come within the hold.
+        const timedMs = timed && this.levelMode() && this.settleHoldOn() ? Grid.SETTLE_HOLD_TASK_MS : AHEAD_WORKER_FRAME_MS
+        if (timed && Grid.levelFrameWork.unitMs >= timedMs) {
             ++this.levelWork.budgetStops
             this.unitSectorWanted ||= job
             return
@@ -6419,7 +6454,7 @@ class Grid extends SpritesGroup {
             return
         }
         const start = performance.now(), calls = {n: 0, max: burst ? UNIT_SECTOR_BURST_CALLS : timed ? Infinity : left ? left.calls : UNIT_SECTOR_TASK_CALLS}
-        const ms = burst ? (levels ? LEVEL_BURST_MS : UNIT_SECTOR_BURST_MS) : timed ? AHEAD_WORKER_FRAME_MS - Grid.levelFrameWork.unitMs :
+        const ms = burst ? (levels ? LEVEL_BURST_MS : UNIT_SECTOR_BURST_MS) : timed ? timedMs - Grid.levelFrameWork.unitMs :
             left ? LEVEL_TASK_MS : UNIT_SECTOR_TASK_MS
         if (burst)
             ++this.unitSectorWork.bursts
@@ -6863,6 +6898,8 @@ class Grid extends SpritesGroup {
             board = this.unitBoardSquares(units.level)
         }
         const lv = units && levels ? this.levelPlan(units, t, cw, ch, Math.round(t.e), Math.round(t.f)) : null
+        // TASK-1572 (Grid.settleHoldsLevels): a square that would be live in a settle's first frames: as the gesture drew it.
+        const hold = !!lv && this.settleHoldOn()
         // TASK-1559: the sectors drawn this frame are the cache's most recent and are not evicted before the next frame.
         this.beginSectorFrame()
         // TASK-1571 (Grid.litGroundFill): the squares without a tile the frame builds (litFrameBuilds), the others filled.
@@ -6918,6 +6955,12 @@ class Grid extends SpritesGroup {
                             ;(composed ||= new Set()).add(u + ',' + v)
                             continue
                         }
+                        else if (r && hold) {
+                            lv.held.push({u, v})
+                            lv.first.add(u + ',' + v)
+                            ;(composed ||= new Set()).add(u + ',' + v)
+                            continue
+                        }
                         else if (r) {
                             live.push(r)
                             lv?.first.add(u + ',' + v)
@@ -6944,18 +6987,26 @@ class Grid extends SpritesGroup {
                         }
                         // (After a zoom the stretched levels before the fill: a picture of the square, units and all.)
                         const r = this.unitSquareRect(u, v, ox, oy, cw, ch)
-                        if (r && lv && lv.cover.covered.has(u + ',' + v)) {
+                        const over = this.freshUnitSector(units, u, v, UNIT_OVERLAY)
+                        // TASK-1572 (Grid.litFillOverlays): a filled square's units and texts get an overlay sector (built by the
+                        // unit sector tasks, drawn over the fill now and over the tile when it comes), not live in every frame.
+                        // (Grid.settleHoldsLevels: a stretched one too, so the frames after the levels do not draw it live.)
+                        const stretched = !!r && !!lv && lv.cover.covered.has(u + ',' + v)
+                        if (!over && Grid.litFillOverlays && (!stretched || Grid.settleHoldsLevels))
+                            wanted.push({u, v})
+                        if (stretched) {
                             lv.stretch.push({u, v})
                             ;(composed ||= new Set()).add(u + ',' + v)
                             continue
                         }
-                        const over = this.freshUnitSector(units, u, v, UNIT_OVERLAY)
-                        // TASK-1572 (Grid.litFillOverlays): a filled square's units and texts get an overlay sector (built by the
-                        // unit sector tasks, drawn over the fill now and over the tile when it comes), not live in every frame.
-                        if (!over && Grid.litFillOverlays)
-                            wanted.push({u, v})
                         if (over)
                             overlays.push({entry: over, x: u * LIT_TILE + ox, y: v * LIT_TILE + oy})
+                        else if (r && hold) {
+                            lv.held.push({u, v})
+                            lv.first.add(u + ',' + v)
+                            ;(composed ||= new Set()).add(u + ',' + v)
+                            continue
+                        }
                         else if (r) {
                             live.push(r)
                             lv?.first.add(u + ',' + v)
@@ -7014,6 +7065,12 @@ class Grid extends SpritesGroup {
                         ;(composed ||= new Set()).add(u + ',' + v)
                         continue
                     }
+                    else if (r && hold && !edge) {
+                        lv.held.push({u, v})
+                        lv.first.add(u + ',' + v)
+                        ;(composed ||= new Set()).add(u + ',' + v)
+                        continue
+                    }
                     else if (r) {
                         live.push(r)
                         lv?.first.add(u + ',' + v)
@@ -7026,8 +7083,10 @@ class Grid extends SpritesGroup {
         ctx.restore()
         // TASK-1565: the canvas's squares whose tile is missing this frame (unitSectorTask keeps the lit steps' share for them).
         this.aheadTilesShown = {serial: this.drawSerial, n: missing ? missing.size : 0}
-        if (lv)
+        if (lv) {
             this.drawLevelStretch(ctx, t, lv, cw, ch, ox, oy)
+            this.drawLevelHeld(ctx, t, lv, cw, ch, ox, oy)
+        }
         const squareRect = key => {
             const [u, v] = key.split(',').map(Number)
             const x0 = Math.max(0, u * LIT_TILE + ox), y0 = Math.max(0, v * LIT_TILE + oy)
@@ -12298,6 +12357,12 @@ Grid.litFrameTilesFit = board => {
     // (Without the page's call counts, sectorCountDraws: no Worker, the headless tests: LIT_FRAME_TILE_CAP.)
     if (typeof sectorDrawCountsOn === 'undefined' || !sectorDrawCountsOn || !Grid.sectorAhead)
         return LIT_FRAME_TILE_CAP
+    // TASK-1572 (Grid.settleHoldsLevels): none in a settle's frames (levelSettle): its squares without a tile are drawn from
+    // the levels or the fill with their overlay sectors while the tile steps (Worker) build them; a settle frame building
+    // tiles itself was heavy (2 tiles at 0.151 / 0.18: ~365 calls each, 790-810 a frame; 1 tile + composes + an interface
+    // redraw: 1.03-1.07 MP; dev9-desk2, dev/dev-notes.md).
+    if (Grid.settleHoldsLevels && board?.levelSettle)
+        return 0
     const tile = Math.max(...Grid.litFrameTileCalls)
     // The tasks' calls since the last frame, and the frame's own: those so far or the last frame's, the larger.
     const between = Grid.frameCallsStart - Grid.frameCallsEnd
@@ -12311,6 +12376,11 @@ Grid.litFrameTilesFit = board => {
 // sector (queueUnitSectors), drawn over the fill, so their units and texts are not drawn live in every frame till the tile
 // comes (the stand-in squares had sectors on the stand-in's ground). False: live over the fill (TASK-1571).
 Grid.litFillOverlays = true
+// TASK-1572: a settle's first frames draw the squares that would be live as the zoom gesture drew them, for at most
+// SETTLE_HOLD_MS after its last frame (Grid.settleHoldOn); false: as fa72a557 (live at once).
+Grid.settleHoldsLevels = true
+Grid.SETTLE_HOLD_MS = 1000
+Grid.SETTLE_HOLD_TASK_MS = 24
 const LIT_FIRST_TILE_BUDGET = 16
 const LIT_TILE_POOL = 16
 // TASK-1552 (Grid.litAhead): lit tiles built ahead of the camera (Grid.queueLitTiles, litAheadRange): the ring round the
