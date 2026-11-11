@@ -159,6 +159,22 @@ const atmosphericLighting = {
             lit: 0.75,
             shadow: 0.6,
             lightAngle: -135
+        },
+        // TASK-1581: dark grey slate, the second neutral tone (slateVariant): the sandstone variant greyed (its carving
+        // kept), scaled to level, multiplied by tint (times a per-variant shade); no mist, the normal grout, so it never
+        // reads as fog. Which neutral cells are slate (slateTone, once per board): weight = edge x the cell's edge
+        // nearness (1 on the ring next to the map edge, falling to 0 at edgeRings rings in) + key x the key light's
+        // projection t at the cell centre (0 upper left .. 1 far corner, as keyGradient) + dither x (a per-cell hash in
+        // -0.5..0.5, so the boundary is ragged); slate where weight >= threshold.
+        slate: {
+            tint: [156, 151, 148],
+            level: 0.77,
+            shade: [0.94, 1.06],
+            edgeRings: 3,
+            edge: 1,
+            key: 0.35,
+            dither: 0.3,
+            threshold: 0.6
         }
     },
     tileVariants: null,
@@ -184,6 +200,12 @@ const atmosphericLighting = {
     },
     fogVariants: null,
     fogVariantBuilds: 0,
+    slateVariants: null,
+    slateVariantBuilds: 0,
+    // TASK-1581: the board's slate cells (slateTone): {arr, width, height, cells: Uint8Array x * height + y}; dropped when
+    // the map's slab is rebuilt (MapDepth.rebuild -> releaseTone).
+    tone: null,
+    toneBuilds: 0,
     tileFills: new Map(),
     // Soft object shadows: a darkened, blurred silhouette of the board object's own sprite,
     // turned about the object's base to point away from its strongest visible light (a lamp
@@ -1572,6 +1594,87 @@ const atmosphericLighting = {
         ++this.fogVariantBuilds
         return this.fogVariants[index] = surface
     },
+    // TASK-1581: slate variants, built once per hex radius from the sandstone variant of the same index (as fogVariant):
+    // the inset stone greyed, scaled to TILE.slate.level and multiplied by its tint times a per-variant shade.
+    slateVariant(index) {
+        if (!this.slateVariants || this.slateVariants.radius !== basis.r)
+            this.slateVariants = Object.assign(new Array(this.TILE.variants), {radius: basis.r})
+        if (this.slateVariants[index]) return this.slateVariants[index]
+        const S = this.TILE.slate, s = this.TILE.rasterScale, tile = this.tileVariant(index), r = basis.r
+        const surface = document.createElement('canvas')
+        surface.width = surface.height = tile.width
+        const g = surface.getContext('2d')
+        g.drawImage(tile, 0, 0)
+        g.setTransform(s, 0, 0, s, tile.width / 2, tile.height / 2)
+        const rand = this.random(0x27d4eb2f * (index + 1))
+        const shade = S.shade[0] + (S.shade[1] - S.shade[0]) * rand()
+        g.globalCompositeOperation = 'saturation'
+        g.fillStyle = 'rgb(128,128,128)'
+        g.fillRect(-r, -r, 2 * r, 2 * r)
+        g.globalCompositeOperation = 'multiply'
+        g.fillStyle = `rgb(${S.tint.map(v => Math.min(255, Math.round(v * S.level * shade))).join(',')})`
+        g.fillRect(-r, -r, 2 * r, 2 * r)
+        // Keep the tile's own alpha (multiply over transparent pixels paints them).
+        g.globalCompositeOperation = 'destination-in'
+        g.setTransform(1, 0, 0, 1, 0, 0)
+        g.drawImage(tile, 0, 0)
+        g.globalCompositeOperation = 'source-over'
+        ++this.slateVariantBuilds
+        return this.slateVariants[index] = surface
+    },
+    releaseTone() {
+        this.tone = null
+    },
+    // TASK-1581: the board's slate cells, worked out once per board (TILE.slate): rings = hex steps from the map edge (a
+    // breadth-first search from the cells next to the edge: an off-map or isMapEdge neighbour, as MapDepth's edges), t =
+    // the key light's projection of the cell centre over the slab's surface bounds (DIRECTION).
+    slateTone(_grid = grid) {
+        const arr = _grid.arr, width = arr.length, height = arr[0].length
+        const kept = this.tone
+        if (kept && kept.arr === arr && kept.width === width && kept.height === height) return kept
+        const S = this.TILE.slate, ring = new Int32Array(width * height).fill(-1), queue = []
+        const edge = (x, y) => x < 0 || y < 0 || x >= width || y >= height || arr[x][y].building.isMapEdge
+        for (let x = 0; x < width; ++x)
+            for (let y = 0; y < height; ++y) {
+                if (arr[x][y].building.isMapEdge) continue
+                if (neighborhood[x & 1].some(([dx, dy]) => edge(x + dx, y + dy))) {
+                    ring[x * height + y] = 0
+                    queue.push(x * height + y)
+                }
+            }
+        for (let head = 0; head < queue.length; ++head) {
+            const i = queue[head], x = Math.floor(i / height), y = i % height
+            for (const [dx, dy] of neighborhood[x & 1]) {
+                const nx = x + dx, ny = y + dy
+                if (edge(nx, ny) || ring[nx * height + ny] >= 0) continue
+                ring[nx * height + ny] = ring[i] + 1
+                queue.push(nx * height + ny)
+            }
+        }
+        let left = Infinity, top = Infinity, right = -Infinity, bottom = -Infinity
+        for (const i of queue) {
+            const c = arr[Math.floor(i / height)][i % height].hexagon.calcPos()
+            left = Math.min(left, c.x); right = Math.max(right, c.x)
+            top = Math.min(top, c.y); bottom = Math.max(bottom, c.y)
+        }
+        const [dx, dy] = this.DIRECTION, span = (right - left) * dx + (bottom - top) * dy || 1
+        const cells = new Uint8Array(width * height), list = []
+        for (const i of queue) {
+            const x = Math.floor(i / height), y = i % height, hexagon = arr[x][y].hexagon, c = hexagon.calcPos()
+            const t = Math.max(0, Math.min(1, ((c.x - left) * dx + (c.y - top) * dy) / span))
+            const near = Math.max(0, 1 - ring[i] / S.edgeRings)
+            const hash = (((hexagon.tileHash >>> 8) & 255) / 255) - 0.5
+            const weight = S.edge * near + S.key * t + S.dither * hash
+            cells[i] = weight >= S.threshold ? 1 : 0
+            list.push({x, y, ring: ring[i], t: Math.round(t * 1000) / 1000, slate: cells[i]})
+        }
+        ++this.toneBuilds
+        return this.tone = {arr, width, height, cells, list}
+    },
+    isSlate(hexagon) {
+        const tone = this.slateTone()
+        return tone.cells[hexagon.coord.x * tone.height + hexagon.coord.y] === 1
+    },
     // Fogged cells (hexagons with coord): one dark grout fill of them all a hair past their edges, so
     // no seam between them shows what lies under, then each cell's variant. Under an axis-aligned
     // transform every variant is drawn at the same device size on whole device pixels, so two cells
@@ -1695,7 +1798,8 @@ const atmosphericLighting = {
     drawTile(ctx, hexagon) {
         const c = hexagon.calcPos()
         if (hexagon.playerColor === 0) {
-            const variant = this.tileVariant(hexagon.tileHash % this.TILE.variants)
+            const index = hexagon.tileHash % this.TILE.variants
+            const variant = this.isSlate(hexagon) ? this.slateVariant(index) : this.tileVariant(index)
             const size = variant.width / this.TILE.rasterScale
             // A cell's tile canvas: its inset hexagon (tileBox: the hexagon's box and 2 px).
             this.drawCropped(ctx, variant, c.x - size / 2, c.y - size / 2, size, this.cropOverlays && this.tileBox(variant.width))

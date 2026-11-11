@@ -239,6 +239,8 @@ class MapDepth {
         }
     }
     rebuild(_grid) {
+        // TASK-1581: the tiles' slate tone is worked out per board from the map edge.
+        if (typeof atmosphericLighting !== 'undefined') atmosphericLighting.releaseTone()
         this.faces = []
         this.edges = []
         this.gridWidth = _grid.arr.length
