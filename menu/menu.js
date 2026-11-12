@@ -2847,6 +2847,8 @@ class MenuBannerRod {
 // red, the hot seat faceoff's swordsmen red and blue (the game's first two player colours).
 const MENU_RED = Object.freeze({r: 255, g: 0, b: 0})
 const MENU_BLUE = Object.freeze({r: 98, g: 168, b: 222})
+// The Play online emblem's second town: the game's green player colour.
+const MENU_GREEN = Object.freeze({r: 0, g: 179, b: 0})
 // Whether an asset key's image has loaded (a failed one never draws).
 function menuAssetReady(name) {
     const image = assets[name]
@@ -2899,21 +2901,62 @@ const MENU_EMBLEMS = {
         },
     },
     // Play online: a red and a green town cell, each with a glow in its player colour, linked by a dashed arc that
-    // leaves from behind one roof and enters behind the other.
+    // leaves from behind one roof and enters behind the other. TASK-1596: each cell is the game's own drawing, the owned
+    // hexagon in the player colour as the board draws it (the atmospheric grout and marble tile, else the classic
+    // hexagon) and the town asset over it at the board's size, so replacing the town asset changes the emblem.
     towns: {
-        assets: ['menu/towncell-red', 'menu/towncell-green'],
+        assets: ['town'],
         layout(disc) {
             const {x, y, r} = disc
-            const width = r * 0.86, height = width * 249 / 287, cy = y + r * 0.2
+            // A cell's box is its hexagon's: width 2 radii, height sqrt(3) radii.
+            const width = r * 0.86, height = width * Math.sqrt(3) / 2, cy = y + r * 0.2
             const cells = [
-                {image: 'menu/towncell-red', glow: 'rgba(255, 0, 0, 0.8)', x: x - r * 0.465, y: cy, width, height},
-                {image: 'menu/towncell-green', glow: 'rgba(0, 179, 0, 0.8)', x: x + r * 0.465, y: cy, width, height}]
+                {image: 'town:red', rgb: MENU_RED, glow: 'rgba(255, 0, 0, 0.8)', x: x - r * 0.465, y: cy, width, height},
+                {image: 'town:green', rgb: MENU_GREEN, glow: 'rgba(0, 179, 0, 0.8)', x: x + r * 0.465, y: cy, width, height}]
             // The arc's ends lie on the roofs to the inner side of the towers; its top is above the cells.
             const endX = r * 0.465 - width * 0.2, endY = cy - height * 0.28, topY = cy - height / 2 - r * 0.2
             const sag = endY - topY, radius = (endX * endX + sag * sag) / (2 * sag)
             const half = Math.asin(endX / radius)
             return {cells, arc: {x, y: topY + radius, radius, from: -Math.PI / 2 - half, to: -Math.PI / 2 + half,
                 width: r * 0.07, dash: [r * 0.12, r * 0.1]}}
+        },
+        // Draws one cell (layout's cells: centre x, y, box width) in board units scaled to the box: the hexagon as an owned
+        // cell of cell.rgb (Hexagon.draw: atmosphericLighting's grout and owned tile, else the player's hexagon raster) and
+        // the town asset over it as an entity draws it (assets.size square on the cell's centre). glow: a shadow colour and
+        // blur for the hexagon (the cell's outline: the town lies inside it).
+        drawCell(ctx, cell, glow = null) {
+            const k = cell.width / 2 / basis.r
+            ctx.save()
+            ctx.translate(cell.x, cell.y)
+            ctx.scale(k, k)
+            const shadow = () => {
+                if (!glow) return
+                ctx.shadowColor = glow.color
+                ctx.shadowBlur = glow.blur
+            }
+            if (otherSettings.atmosphericVisuals) {
+                const hexagon = {calcPos: () => ({x: 0, y: 0}), pos: {x: 0, y: 0}, playerColor: 1, isSuburb: false,
+                    unknown: false, tileHash: 0, player: {color: cell.rgb}}
+                ctx.save()
+                shadow()
+                // drawGrout draws the grout, then its trim clipped to it: the shadow only on the fill.
+                ctx.fillStyle = atmosphericLighting.TILE.grout
+                ctx.beginPath()
+                atmosphericLighting.hexagonPath(ctx, 0, 0, basis.r)
+                ctx.fill()
+                ctx.restore()
+                atmosphericLighting.drawGrout(ctx, [hexagon])
+                atmosphericLighting.drawTile(ctx, hexagon)
+            }
+            else {
+                const raster = menuHexagonRaster(cell.rgb)
+                ctx.save()
+                shadow()
+                ctx.drawImage(raster, -raster.width / 2, -raster.height / 2)
+                ctx.restore()
+            }
+            drawImage(ctx, 'town', {x: 0, y: 0})
+            ctx.restore()
         },
         paint(ctx, disc, {arc = true} = {}) {
             const layout = this.layout(disc)
@@ -2929,15 +2972,19 @@ const MENU_EMBLEMS = {
                 ctx.stroke()
                 ctx.restore()
             }
-            for (const cell of layout.cells) {
-                ctx.save()
-                ctx.shadowColor = cell.glow
-                ctx.shadowBlur = disc.r * 0.2
-                drawImage(ctx, cell.image, cell, cell.width, cell.height)
-                ctx.restore()
-            }
+            for (const cell of layout.cells)
+                this.drawCell(ctx, cell, {color: cell.glow, blur: disc.r * 0.2})
         },
     },
+}
+// The classic owned hexagon raster of a colour (Player.calcHexagon), by colour.
+const menuHexagonRasters = new Map()
+function menuHexagonRaster(rgb) {
+    const key = rgb.r + ',' + rgb.g + ',' + rgb.b + ',' + basis.r
+    let raster = menuHexagonRasters.get(key)
+    if (!raster)
+        menuHexagonRasters.set(key, raster = Player.prototype.calcHexagon.call({hexColor: rgbToHex(rgb.r, rgb.g, rgb.b)}))
+    return raster
 }
 function menuEmblem(name) {
     return MENU_EMBLEMS[name] ?? {assets: [name], paint(ctx, disc) {
@@ -3040,9 +3087,11 @@ class MenuBanner extends Button {
     emblemReady() {
         return !this.emblem || menuEmblem(this.emblem).assets.every(key => assets[key]?.complete && assets[key].naturalWidth)
     }
-    // Changes when an emblem image loads or is reloaded from another sprite folder (usePolishedSprites).
+    // Changes when an emblem image loads or is reloaded from another sprite folder (usePolishedSprites), and with
+    // atmosphericVisuals (the town cells draw the board's tiles of either look).
     emblemKey() {
-        return this.emblem ? `${this.emblemReady()},${menuEmblem(this.emblem).assets.map(key => assets[key]?.src).join(',')}` : ''
+        return this.emblem ? `${this.emblemReady()},${menuEmblem(this.emblem).assets.map(key => assets[key]?.src).join(',')},` +
+            `${!!otherSettings.atmosphericVisuals}` : ''
     }
     canvasFor(paint) {
         const canvas = document.createElement('canvas')

@@ -40,9 +40,6 @@ for (const name of demonSpriteImages) assets[name] = new Image()
 const undeadSpriteImages = ['undead/noob', 'undead/archer', 'undead/KOHb', 'undead/KOHbLeft',
     'undead/normchel', 'undead/catapult', 'undead/catapultLeft']
 for (const name of undeadSpriteImages) assets[name] = new Image()
-// Main menu emblem pictures (town cells cut from in-game screenshots). The menu does not wait for them.
-const menuImages = ['menu/towncell-red', 'menu/towncell-green']
-for (const name of menuImages) assets[name] = new Image()
 // Panel stat icons (row key -> entry: STAT_ICONS, render/staticons.js). The menu does not wait for them.
 const statIconImages = Object.freeze({
     statHp: 'assets/icons/stat-hp.svg',
@@ -360,7 +357,6 @@ function loadAssets() {
     assets.undo.src = "assets/undo.svg"
     
     assets.gold.src = "assets/gold.svg"
-    for (const name of menuImages) assets[name].src = "assets/" + name + ".png"
     for (const name in statIconImages) assets[name].src = statIconImages[name]
 
     // The game sprites the menu draws now, the others once the menu has started (waitForImagesLoad).
