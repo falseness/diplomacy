@@ -73,6 +73,7 @@ class InteractionWithCatapult extends InteractionWithRangeUnit {
     hitUnit() {}
     demonShieldsPortal() { return false } // A demon never shields its portal.
     hitBuilding(cell, catapult) {
+        this.noteAttack(cell.coord, catapult)
         if (cell.building.isBuildingProduction()) {
             this.hitBuildingProduction(cell.building, catapult)
             return
@@ -125,6 +126,7 @@ class InteractionWithCatapult extends InteractionWithRangeUnit {
                 this.moves = 0
                 this.addKillUnitUndo(catapult)
                 this.blindShotMark = {x: coord.x, y: coord.y}
+                this.noteAttack(coord, catapult)
                 this.removeSelect()
                 return true
             }
@@ -134,8 +136,10 @@ class InteractionWithCatapult extends InteractionWithRangeUnit {
                 this.moves = 0
                 this.addKillUnitUndo(catapult)
             }
-            if (!this.moves)
+            if (!this.moves) {
                 this.blindShotMark = {x: coord.x, y: coord.y}
+                this.noteAttack(coord, catapult)
+            }
             return result
         }
         

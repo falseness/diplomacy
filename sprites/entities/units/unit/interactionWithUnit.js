@@ -55,7 +55,13 @@ class InterationWithUnit {
     addHittedUnitUndo(cell) {
         actionManager.lastAction.units.push(cell.unit.toJSON())
     }
+    // TASK-1598: the hex this action attacked (Unit.faceAttackTarget turns the attacker toward it).
+    noteAttack(coord, unit) {
+        if (unit && coord)
+            unit.attackCoord = {x: coord.x, y: coord.y}
+    }
     hitUnit(cell, unit) {
+        this.noteAttack(cell.coord, unit)
         this.addHittedUnitUndo(cell)
 
         let cellUnit = cell.unit
@@ -71,6 +77,7 @@ class InterationWithUnit {
         }
     }
     hitBuilding(cell, unit) {
+        this.noteAttack(cell.coord, unit)
         this.addHittedBuildingUndo(cell)
 
         let cellBuilding = cell.building
@@ -234,7 +241,8 @@ class InterationWithUnit {
         return cell.building.isDemonPortal === true && !cell.building.killed &&
             this.cellHasEnemyUnit(cell, unit)
     }
-    markIgnoredBuilding(cell) {
+    markIgnoredBuilding(cell, unit) {
+        this.noteAttack(cell.coord, unit)
         this.addHittedBuildingUndo(cell)
         cell.building.wasHitted = true
     }
@@ -245,7 +253,7 @@ class InterationWithUnit {
                 this.hitBuilding(cell, unit)
                 return false
             }
-            this.markIgnoredBuilding(cell)
+            this.markIgnoredBuilding(cell, unit)
         }
         if (this.cellHasEnemyUnit(cell, unit)) {
             this.hitUnit(cell, unit)

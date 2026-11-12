@@ -1,7 +1,7 @@
 {
   "format": 1,
   "algorithm": "sha256(path NUL bytes NUL ...)",
-  "rulesVersion": "fd03cacbf5db5aabbf5d5fb9cfe99c606eaf104939d836d34f986dd5acfebdab",
+  "rulesVersion": "40a9e6456826a353b34d57a3b44c5f61bfbf5f860a871f884de524663b98ee50",
   "scripts": [
     {
       "path": "options/assert.js",
@@ -325,13 +325,13 @@
     },
     {
       "path": "sprites/entities/units/unit/interactionWithUnit.js",
-      "sha256": "7d9dee7d94b650df0f4279a030a847922e92c91227f72c9898c3a646b8974a55",
-      "bytes": 31320
+      "sha256": "b1144c2fcab310ff1924c7c7cd16cdde3c0fc2dae4be70a4a14c070d752a5362",
+      "bytes": 31678
     },
     {
       "path": "sprites/entities/units/unit/unit.js",
-      "sha256": "667923e28ee8bd7385d4b500374ca0ba476b535b4655412f3a67f10da1debf96",
-      "bytes": 9007
+      "sha256": "b8d806f78d3325e04307744141b750acec50840cc32d490226fc63de98839b58",
+      "bytes": 10409
     },
     {
       "path": "sprites/entities/units/noob.js",
@@ -365,8 +365,8 @@
     },
     {
       "path": "sprites/entities/units/range/rangeUnit/interactionWithRangeUnit.js",
-      "sha256": "ebdbc298a542a9653ff7d6c6ed52ee4f486f385ffa066f4bc33a573862685158",
-      "bytes": 6072
+      "sha256": "df866c4de2d364d471f6d908d9f164737cce594b051cbaffde6e4f4d76c32d0d",
+      "bytes": 6129
     },
     {
       "path": "sprites/entities/units/range/rangeUnit/rangeUnit.js",
@@ -395,8 +395,8 @@
     },
     {
       "path": "sprites/entities/units/range/catapult/interactionWithCatapult.js",
-      "sha256": "5aa92a5d57ddd61b15966c1c6d49b0737f7054c21aaab4886edfdde980ec3eac",
-      "bytes": 7915
+      "sha256": "f966db5860a539c53585675977568be80756435cb2555a721c898e0ccd570277",
+      "bytes": 8075
     },
     {
       "path": "sprites/entities/units/range/catapult/catapult.js",

@@ -170,11 +170,32 @@ class Unit extends Entity {
         
         // An attack's animation (UI only, render/attackFx.js): the target before the action, the effect after it.
         const attack = typeof attackFx !== 'undefined' ? attackFx.before(this, cell) : null
+        const origin = {x: this.coord.x, y: this.coord.y}, facing = this.mirrorX
+        this.attackCoord = null
         let noNeedInstructionsEnough = this.interaction.sendInstructions(cell, this)
+        this.faceAttackTarget(origin, facing)
         this.updateMovesBar()
         if (attack)
             attackFx.after(attack)
         return noNeedInstructionsEnough
+    }
+    // TASK-1598: a unit with a facing (mirrorX: KOHb, Archer, Catapult and their demon variants) faces the hex it just
+    // attacked or shot (attackCoord, set by InterationWithUnit.noteAttack): a smaller x faces left, a larger x right,
+    // the same column keeps the facing (the one it had, or the one a move to another column this action gave it). The
+    // attack is judged from where the unit stood when it struck (its cell after the action, or its origin when a last
+    // hit moved it onto the target). Every client runs this: local clicks, the AI and applyAction (replays, peers, the
+    // server) all go through sendInstructions. Display only, never serialized; combat is untouched.
+    faceAttackTarget(origin, facing) {
+        const target = this.attackCoord
+        this.attackCoord = null
+        if (!target || this.mirrorX === undefined)
+            return
+        const onTarget = coordsEqually(this.coord, target)
+        const standingX = onTarget ? origin.x : this.coord.x
+        if (target.x !== standingX)
+            this.mirrorX = target.x < standingX
+        else if (standingX === origin.x)
+            this.mirrorX = facing // (a same-column move toward the target, e.g. MirroringInteraction, reset it)
     }
     kill() {
         grid.setUnit(new Empty(), this.coord)

@@ -34,6 +34,7 @@ class InteractionWithRangeUnit extends InterationWithUnit {
             coordsEqually(rangeUnit.coord, coord)
     }
     hitBuildingProduction(building, unit) {
+        this.noteAttack(building.coord, unit)
         if (building.isExternalProduction()) {
             actionManager.lastAction.externalProduction = building.toUndoJSON()
         }
@@ -63,7 +64,7 @@ class InteractionWithRangeUnit extends InterationWithUnit {
             this.removeSelect()
             return true
         }
-        this.markIgnoredBuilding(cell)
+        this.markIgnoredBuilding(cell, rangeUnit)
     }
     cellHasEnemyBuildingProduction(cell, rangeUnit) {
         return (cell.building.isBuildingProduction() &&
