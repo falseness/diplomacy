@@ -7,7 +7,13 @@ class Archer extends RangeUnit {
     static range = 2
     constructor(x, y) {
         super(x, y, 'archer')
+        this.mirrorX = false
         this.interaction = new InteractionWithArcher(this.speed, this.range)
+    }
+    // TASK-1597: a player archer has archerLeft art (mirrorX after a left move). Demon variants (Spitter, EmberArcher,
+    // Hexcaster, DemonQueen) and the demon-owned undead archer keep their single image.
+    get hasMirroredImage() {
+        return this.constructor === Archer && this.player?.role !== 'DEMONS'
     }
     nextTurn() {
         super.nextTurn()

@@ -26,6 +26,15 @@ class InteractionWithArcher extends InteractionWithRangeUnit {
         super.changeCoord(coord, archer, killUnit)
         this.updateRange(archer)
     }
+    // TASK-1597: face the move direction like MirroringInteraction (left move -> mirrorX); a move along the same
+    // column keeps the facing.
+    move(coord, cell, arr, archer) {
+        const oldX = archer.coord.x
+        super.move(coord, cell, arr, archer)
+        const newX = archer.coord.x
+        if (newX !== oldX)
+            archer.mirrorX = newX < oldX
+    }
     getAvailableCommandDestinations(archer) {
         this.updateRange(archer)
         return super.getAvailableCommandDestinations(archer)
