@@ -20,6 +20,6 @@ class KOHb extends Unit {
     }
     draw(ctx) {
         this.drawBars(ctx)
-        drawCachedImage(ctx, cachedImages[this.bodyImageName], this.pos)
+        drawCachedImage(ctx, this.bodyImage, this.pos)
     }
 }

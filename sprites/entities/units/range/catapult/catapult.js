@@ -39,7 +39,7 @@ class Catapult extends RangeUnit {
     }
     draw(ctx) {
         this.drawBars(ctx)
-        drawCachedImage(ctx, cachedImages[this.bodyImageName], this.pos)
+        drawCachedImage(ctx, this.bodyImage, this.pos)
     }
 }
 // Siege demons inherit building damage/undo mechanics and use their own artwork.

@@ -204,8 +204,13 @@ class Entity extends Sprite {
             return left ? keys.undeadLeft : keys.undeadPlain
         return left ? keys.left : keys.plain
     }
+    // TASK-1594: the cached body image drawn: the owner's colour variant of a polished player unit (teamColourImage),
+    // else cachedImages[bodyImageName].
+    get bodyImage() {
+        return teamColourImage(this.bodyImageName, this.player?.color)
+    }
     draw(ctx) {
-        drawCachedImage(ctx, cachedImages[this.bodyImageName], this.pos)
+        drawCachedImage(ctx, this.bodyImage, this.pos)
     }
     nextTurn() {
         console.log("ERROR entity next turn")

@@ -333,6 +333,8 @@ class EntityInterface {
         this.setPanelColors(color.hex)
         this.suburbImage.color = color.hex
         this.img.image = entity.image || entity.bodyImageName || entity.name
+        // TASK-1594: the owner's colour: a polished player unit's portrait draws its colour variant (teamColourPortrait).
+        this.imgColour = color.rgb
         this.entity.name.text = entity.displayName || entity.name
         this.townTowerText = null
         this.townTowerShown = false
@@ -590,8 +592,14 @@ class EntityInterface {
             this.suburbImage.pos = pos
             this.suburbImage.r = radius
         }
-        else if (this.img.image)
-            drawImage(ctx, this.img.image, portrait, p, p)
+        else if (this.img.image) {
+            const variant = typeof teamColourPortrait == 'function' && p >= 1 ?
+                teamColourPortrait(this.img.image, this.imgColour, p) : null
+            if (variant)
+                ctx.drawImage(variant, portrait.x - p / 2, portrait.y - p / 2, p, p)
+            else
+                drawImage(ctx, this.img.image, portrait, p, p)
+        }
         this.iconsPending = null
         let y = rowsTop + size * 1.15 / 2
         ctx.textAlign = 'left'

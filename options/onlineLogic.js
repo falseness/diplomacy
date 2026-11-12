@@ -287,7 +287,7 @@ const onlineObservation = {
             // vision may reveal a peer beyond our turn-opening fog.
             // Bars first, as in Unit.draw: the moves bar stays under the unit's own body.
             sprite.drawBars(ctx)
-            drawCachedImage(ctx, cachedImages[sprite.bodyImageName], sprite.pos)
+            drawCachedImage(ctx, grid.getEntityBodyImage(sprite), sprite.pos)
         }
         // Match grid overlays: occupied building bars stay above every unit body.
         for (const {sprite} of this.buildings.values()) if (sprite)

@@ -1,7 +1,7 @@
 {
   "format": 1,
   "algorithm": "sha256(path NUL bytes NUL ...)",
-  "rulesVersion": "5b83a8b9a04a3e85a99150ccca6b4b414d6e95714f777539682f4e121b7a8d05",
+  "rulesVersion": "5f21bd7e93567415043ded74c89320cebbd26df9769d88615c2df93d2b0681e7",
   "scripts": [
     {
       "path": "options/assert.js",
@@ -120,8 +120,8 @@
     },
     {
       "path": "render/loadassets.js",
-      "sha256": "5f96c8ae34ba9d70790a1b276e67cb129d117cf208650a807ce4a44b7a0c9c7a",
-      "bytes": 20975
+      "sha256": "c68cd261d61a73071c3d3c9931e3fcf58af8fe0768bb7406c3ce183cf42a4a95",
+      "bytes": 22239
     },
     {
       "path": "render/staticons.js",
@@ -145,8 +145,8 @@
     },
     {
       "path": "render/moveTween.js",
-      "sha256": "9a40d7fa04beda1c0f1c063e448e33bb47e2c6693d6920edf28d4e432b1abd7f",
-      "bytes": 4080
+      "sha256": "6f59edb93e9540459ce777ca1f174e8c53633b4222907868d7f5fbd60cac3daf",
+      "bytes": 4062
     },
     {
       "path": "render/draw.js",
@@ -155,8 +155,8 @@
     },
     {
       "path": "interface/entityinterface.js",
-      "sha256": "d843324288bb6559ef799edd06f9be44107fb88d25c0b8fa8d818d506e840309",
-      "bytes": 34217
+      "sha256": "165e0c38c5ccd166c75e054c5c72bfd771f0942d3e820bcf7ca8720121a688d1",
+      "bytes": 34675
     },
     {
       "path": "interface/barrackinterface.js",
@@ -310,8 +310,8 @@
     },
     {
       "path": "groups/grid.js",
-      "sha256": "7158e25887c630b2b2a544fbaf294661b9a9e6345e68f9ec9d01ab9ff545c87b",
-      "bytes": 778097
+      "sha256": "88fc68f4f0d93cef9bf098ebea482fe4a9ef1146b047c1515359a69ca109c012",
+      "bytes": 778405
     },
     {
       "path": "sprites/entities/hpBar.js",
@@ -320,8 +320,8 @@
     },
     {
       "path": "sprites/entities/entity.js",
-      "sha256": "33a2c933b8e3bdc28f4df236ca6df6f26b0802b37c60ba9d58981ec37deba133",
-      "bytes": 6472
+      "sha256": "d98508b1ce3b88213062f008754fd7c7369d549d677998cff852fda7afc24dec",
+      "bytes": 6713
     },
     {
       "path": "sprites/entities/units/unit/interactionWithUnit.js",
@@ -350,8 +350,8 @@
     },
     {
       "path": "sprites/entities/units/KOHb/KOHb.js",
-      "sha256": "65cbf2e6c6da92021a7b98071b5df9ccafafac1edfbe820c9ca6e24769c7ce20",
-      "bytes": 620
+      "sha256": "d6d6aa6d114431d3747e4423a7a04b5fb0d8c3e16bb6781f87fb5ccdf5ada176",
+      "bytes": 602
     },
     {
       "path": "sprites/entities/units/earlyDemons.js",
@@ -400,8 +400,8 @@
     },
     {
       "path": "sprites/entities/units/range/catapult/catapult.js",
-      "sha256": "94e610aaca85055266f9e70e8d68667ad49a5848f28e607acecbf1ef1cd1cbbd",
-      "bytes": 2032
+      "sha256": "4597219c05641e74b63aa758ff6431b2da8229dc405ef2d23a36bf12c60fa8c2",
+      "bytes": 2014
     },
     {
       "path": "sprites/entities/buildings/building.js",

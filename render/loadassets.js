@@ -218,6 +218,28 @@ function teamColourImage(name, rgb) {
         paintTeamColourImage(variant, base, key)
     return variant
 }
+// TASK-1594: the player-colour variant at a given pixel size, rasterized from the SVG (the unit panel's portrait is
+// drawn larger than the board's cached sprites): null when the board's image would be drawn as it is (not a polished
+// player unit, polished sprites off, no colour, image not loaded). One kept per name (the panel shows one unit).
+const teamColourPortraits = new Map()
+function teamColourPortrait(name, rgb, size) {
+    const image = assets[name]
+    if (!teamColourVariants.has(name) || !rgb || !otherSettings.usePolishedSprites || failedImages.has(name) ||
+            !image || !image.complete || !image.naturalWidth)
+        return null
+    size = Math.max(1, Math.round(size))
+    const key = (rgb.r << 16) | (rgb.g << 8) | rgb.b
+    const kept = teamColourPortraits.get(name)
+    if (kept && kept.key === key && kept.size === size && kept.src === image.src)
+        return kept.canvas
+    const base = document.createElement('canvas')
+    base.width = base.height = size
+    base.getContext('2d').drawImage(image, 0, 0, size, size)
+    const canvas = kept ? kept.canvas : document.createElement('canvas')
+    paintTeamColourImage(canvas, base, key)
+    teamColourPortraits.set(name, {key, size, src: image.src, canvas})
+    return canvas
+}
 // Repaints every built variant from its (repainted) base; restoreImageCaches calls it after a context loss.
 function rebuildTeamColourImages() {
     for (const [name, variants] of teamColourVariants) {

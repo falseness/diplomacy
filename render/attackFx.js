@@ -689,7 +689,7 @@ class AttackFx {
         return 'melee'
     }
     imageOf(entity) {
-        return typeof cachedImages !== 'undefined' && typeof grid !== 'undefined' ? cachedImages[grid.getEntityBodyImageName(entity)] : undefined
+        return typeof cachedImages !== 'undefined' && typeof grid !== 'undefined' ? grid.getEntityBodyImage(entity) : undefined
     }
     // Whether the screen's player sees coord: no fog, or in vision (and not an unknown cell).
     seen(coord) {

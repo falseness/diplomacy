@@ -93,7 +93,7 @@ const moveTween = {
             ctx.translate(state.pos.x - unit.pos.x, state.pos.y - unit.pos.y)
             unit.drawBars(ctx)
             ctx.restore()
-            drawCachedImage(ctx, cachedImages[grid.getEntityBodyImageName(unit)], state.pos)
+            drawCachedImage(ctx, grid.getEntityBodyImage(unit), state.pos)
         }
     }
 }

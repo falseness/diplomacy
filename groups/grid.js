@@ -832,12 +832,19 @@ class Grid extends SpritesGroup {
             return entity.imageName
         return entity.bodyImageName
     }
+    // TASK-1594: the cached image an entity's body draws: a demon portal's category image, a polished player unit's
+    // owner-colour variant (teamColourImage), else cachedImages[its body image name].
+    getEntityBodyImage(entity) {
+        if (entity.isDemonPortal)
+            return cachedImages[entity.imageName]
+        return teamColourImage(entity.bodyImageName, players[entity.playerColor]?.color)
+    }
     drawEntityBody(ctx, entity) {
         if (entity.isDemonPortal) {
             entity.draw(ctx)
             return
         }
-        drawCachedImage(ctx, cachedImages[this.getEntityBodyImageName(entity)], entity.pos)
+        drawCachedImage(ctx, this.getEntityBodyImage(entity), entity.pos)
     }
     // The cell's unit as drawn in place: none while it is tweening (moveTween draws it), attacking (attackFx draws it) or
     // healing (healFx draws it).
@@ -2851,7 +2858,7 @@ class Grid extends SpritesGroup {
                     buildingImages[index] != (building ?
                         cachedImages[this.getEntityBodyImageName(building)] : undefined) ||
                     !atmospheric && unitImages[index] != (unit ?
-                        cachedImages[this.getEntityBodyImageName(unit)] : undefined)) {
+                        this.getEntityBodyImage(unit) : undefined)) {
                     if (differs(index))
                         return false
                 }
@@ -2935,7 +2942,7 @@ class Grid extends SpritesGroup {
                 buildingImages[index] = building ?
                     cachedImages[this.getEntityBodyImageName(building)] : undefined
                 unitImages[index] = unit ?
-                    cachedImages[this.getEntityBodyImageName(unit)] : undefined
+                    this.getEntityBodyImage(unit) : undefined
                 ++index
             }
         }
@@ -2981,7 +2988,7 @@ class Grid extends SpritesGroup {
         const inertBuildings = from.surfaceCacheInertBuildings.slice(), natureNames = from.surfaceCacheNatureNames
         const units = from.surfaceCacheUnits.slice(), unitImages = from.surfaceCacheUnitImages
         // Drawn the same: the same class with the captured image (its body image now).
-        const imageOf = entity => cachedImages[this.getEntityBodyImageName(entity)]
+        const imageOf = entity => this.getEntityBodyImage(entity)
         let matched = 0, differing = 0
         for (let i = 0; i < this.arr.length; ++i) {
             for (let j = 0, index = i * h; j < h; ++j, ++index) {
@@ -3743,7 +3750,7 @@ class Grid extends SpritesGroup {
             }
             cells.push(box)
             // The sprites' rectangles for drawPatchCells only when the cell's sprite changed (another image or none).
-            const image = b => b && b.notEmpty() ? cachedImages[this.getEntityBodyImageName(b)] || null : null
+            const image = b => b && b.notEmpty() ? this.getEntityBodyImage(b) || null : null
             const shownBefore = before && before.notEmpty() ?
                 images[index] || natureNames[index] && cachedImages[natureNames[index]] || image(before) : null
             if (shownBefore !== image(cell.building))
@@ -4061,7 +4068,7 @@ class Grid extends SpritesGroup {
         const w = this.patchCellsWindow
         if (!w)
             return true
-        const image = cachedImages[this.getEntityBodyImageName(entity)]
+        const image = this.getEntityBodyImage(entity)
         return !image || !entity.pos || entity.pos.x <= w.x1 && entity.pos.x + image.width >= w.x0 &&
             entity.pos.y <= w.y1 && entity.pos.y + image.height >= w.y0
     }

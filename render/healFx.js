@@ -380,7 +380,7 @@ class HealFx {
         return n
     }
     imageOf(entity) {
-        return typeof cachedImages !== 'undefined' && typeof grid !== 'undefined' ? cachedImages[grid.getEntityBodyImageName(entity)] : undefined
+        return typeof cachedImages !== 'undefined' && typeof grid !== 'undefined' ? grid.getEntityBodyImage(entity) : undefined
     }
     ease(t) {
         return 0.5 - 0.5 * Math.cos(Math.PI * Math.max(0, Math.min(1, t)))
