@@ -1,9 +1,14 @@
 #!/usr/bin/env python3
-"""Relight existing painted surfaces; never alter geometry, opacity or anchors."""
+"""Relight existing painted surfaces; never alter geometry, opacity or anchors.
+
+bush, lake and mountain are the polished hand-built vectors (TASK-1588): the
+atmospheric variant is the sprite verbatim, no relight. hill and sea keep the
+relight below."""
 from pathlib import Path
 import re
 
 ROOT = Path(__file__).resolve().parents[1]
+VERBATIM = ('bush', 'lake', 'mountain')
 
 
 def paint(hex_color, delta):
@@ -13,6 +18,10 @@ def paint(hex_color, delta):
 
 for name in ('bush', 'hill', 'mountain', 'lake', 'sea'):
     source = (ROOT / 'assets/sprites' / (name + '.svg')).read_text()
+    if name in VERBATIM:
+        target = ROOT / 'assets/atmosphere/nature' / (name + '.svg')
+        target.write_bytes((ROOT / 'assets/sprites' / (name + '.svg')).read_bytes())
+        continue
 
     def relight(match):
         rgb = [int(match[1][i:i+2], 16) for i in (0, 2, 4)]
@@ -38,7 +47,7 @@ for name in ('bush', 'hill', 'mountain', 'lake', 'sea'):
         'stone-front': (15, 0, -22), 'stone-side': (-34, -26, 4),
         'stone-dark': (-30, -20, 8), 'snow': (0, -3, -30),
         'snow-side': (-28, -22, -2), 'snow-shade': (-48, -32, 2),
-    } if name == 'mountain' else {}
+    } if name == 'mountain' else {}  # unused while mountain is VERBATIM
     for face, delta in faces.items():
         pattern = r'<linearGradient id="' + face + r'"[^>]*>.*?</linearGradient>'
         original = re.search(pattern, source)[0]
