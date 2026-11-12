@@ -63,30 +63,31 @@ class TutorialCardsTree {
     // All as One (lesson 9) opens the fourth row, right after Rotate and Heal ends the third (TASK-1541), so the first
     // three rows are the basic lessons and every lesson from 9 on is advanced.
     static ADVANCED_FROM = 'tutorial-21'
-    // Medallion pictures by tutorial id (not the display number): the file and its fit, as in the concept: 'unit'
-    // sprites a little larger and lowered, 'low' buildings raised so their art is centred. The menu loads them as its
-    // own images from these paths, so the sprite and visuals settings (which switch the shared assets' folders, see
-    // render/loadassets.js loadSprites) never change them. A {shape: 'suburb'} entry has no file: the game's suburb
-    // hexagon (sprites/elements/image.js SuburbImage, as the town interface's suburb portrait) is drawn in the disc.
-    // An id without an entry keeps the empty medallion.
+    // Medallion pictures by tutorial id (not the display number): the game asset key (render/loadassets.js: the
+    // units' and demons' names, the atmospheric building keys for buildings) and its fit, as in the concept: 'unit'
+    // sprites a little larger and lowered, 'low' buildings raised so their art is centred. TASK-1595: drawn from the
+    // shared assets (no menu-only images), so replacing an asset file or switching the sprite/visuals settings changes
+    // the picture; a polished player unit is drawn in the tutorials' red player colour (teamColourPortrait). A
+    // {shape: 'suburb'} entry has no asset: the game's suburb hexagon (sprites/elements/image.js SuburbImage, as the
+    // town interface's suburb portrait) is drawn in the disc. An id without an entry keeps the empty medallion.
     static IMAGES = {
-        'tutorial-0': {src: 'assets/sprites/noob.svg', fit: 'unit'},
-        'tutorial-16': {src: 'assets/sprites/noob.svg', fit: 'moves', moves: {count: 2, left: 1}},
-        'tutorial-17': {src: 'assets/sprites/normchel.svg', fit: 'unit'},
-        'tutorial-1': {src: 'assets/sprites/archer.svg', fit: 'unit'},
-        'tutorial-7': {src: 'assets/atmosphere/buildings/tower.svg'},
-        'tutorial-22': {src: 'assets/atmosphere/buildings/town.svg'},
-        'tutorial-3': {src: 'assets/atmosphere/buildings/wall.svg', fit: 'low'},
-        'tutorial-18': {src: 'assets/atmosphere/buildings/farm.svg'},
+        'tutorial-0': {asset: 'noob', fit: 'unit'},
+        'tutorial-16': {asset: 'noob', fit: 'moves', moves: {count: 2, left: 1}},
+        'tutorial-17': {asset: 'normchel', fit: 'unit'},
+        'tutorial-1': {asset: 'archer', fit: 'unit'},
+        'tutorial-7': {asset: 'tower'},
+        'tutorial-22': {asset: 'town'},
+        'tutorial-3': {asset: 'wall', fit: 'low'},
+        'tutorial-18': {asset: 'farm'},
         'tutorial-20': {shape: 'suburb'},
-        'tutorial-21': {src: 'assets/atmosphere/buildings/demonPortalRanged.svg'},
-        'tutorial-23': {src: 'assets/sprites/hexcaster.svg', fit: 'unit'},
-        'tutorial-19': {src: 'assets/sprites/KOHb.svg', fit: 'unit'},
-        'tutorial-2': {src: 'assets/atmosphere/buildings/barrack.svg'},
-        'tutorial-5': {src: 'assets/sprites/emberArcher.svg', fit: 'unit'},
-        'tutorial-15': {src: 'assets/atmosphere/buildings/bastion.svg', fit: 'low'},
-        'tutorial-13': {src: 'assets/sprites/catapult.svg'},
-        'tutorial-6': {src: 'assets/sprites/demonLord.svg', fit: 'unit'},
+        'tutorial-21': {asset: 'demonPortalRanged'},
+        'tutorial-23': {asset: 'hexcaster', fit: 'unit'},
+        'tutorial-19': {asset: 'KOHb', fit: 'unit'},
+        'tutorial-2': {asset: 'barrack'},
+        'tutorial-5': {asset: 'emberArcher', fit: 'unit'},
+        'tutorial-15': {asset: 'bastion', fit: 'low'},
+        'tutorial-13': {asset: 'catapult'},
+        'tutorial-6': {asset: 'demonLord', fit: 'unit'},
     }
     // The picture's box as a share of the medallion's diameter and its shift down as a share of that box.
     // 'moves': a unit sprite drawn over a unit's move bar (an entry's moves: {count, left}) as in the game.
@@ -109,19 +110,14 @@ class TutorialCardsTree {
         return menuCompact() ? TutorialCardsTree.NO_DRAW : undefined
     }
     static SUBURB = {size: 0.6, stroke: 0.02 / 0.275, color: '#ff0000'}
-    static images = {}
-    // The loaded picture of a tutorial id (created on first use), or null while it loads or without an entry; a shape
-    // entry is ready at once (the entry itself).
+    // The loaded asset image of a tutorial id, or null while it loads (the menu draws before the other game sprites
+    // have loaded, render/loadassets.js waitForImagesLoad) or without an entry; a shape entry is ready at once (the
+    // entry itself).
     static image(id) {
         const entry = TutorialCardsTree.IMAGES[id]
         if (!entry) return null
         if (entry.shape) return entry
-        let image = TutorialCardsTree.images[entry.src]
-        if (!image) {
-            image = TutorialCardsTree.images[entry.src] = new Image()
-            image.src = entry.src
-        }
-        return image.complete && image.naturalWidth > 0 ? image : null
+        return menuAssetReady(entry.asset) ? assets[entry.asset] : null
     }
     constructor(_menu) {
         this.menu = _menu
@@ -169,7 +165,6 @@ class TutorialCardsTree {
         this.passed = readTutorialPassed()
         this.nextId = tutorials.find(tutorial => !this.passed.includes(tutorial.id))?.id ?? null
         this.entries = tutorials.map(tutorial => {
-            TutorialCardsTree.image(tutorial.id)
             const button = new TutorialCard(this, tutorial)
             const checkMark = this.passed.includes(tutorial.id) ? {pos: {x: 0, y: 0}, width: 0, height: 0,
                 get x() { return this.pos.x }, get y() { return this.pos.y }} : null
@@ -494,9 +489,10 @@ class TutorialCardsTree {
         // plus movesBarMarginY (0.1 r), r = box.height / 1.6. Drawn under the sprite, as in the game.
         const r = box.height / 1.6
         const bar = moves ? this.drawMovesBar(ctx, moves, x, box.y + box.height / 2 + 0.1 * r, r) : undefined
-        ctx.drawImage(image, box.x, box.y, box.width, box.height)
+        const asset = TutorialCardsTree.IMAGES[id].asset
+        drawMenuAsset(ctx, asset, box.x, box.y, box.width, box.height, {rgb: MENU_RED, slot: 'menu:' + id})
         ctx.restore()
-        return {src: TutorialCardsTree.IMAGES[id].src, box, disc: {x, y, radius}, ...(bar && {bar})}
+        return {asset, src: image.src, box, disc: {x, y, radius}, ...(bar && {bar})}
     }
     // The suburb hexagon (SuburbImage: the red player's fill, black stroke) centred in the disc and clipped to it.
     drawMedallionSuburb(ctx, x, y, radius) {

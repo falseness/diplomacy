@@ -220,24 +220,26 @@ function teamColourImage(name, rgb) {
 }
 // TASK-1594: the player-colour variant at a given pixel size, rasterized from the SVG (the unit panel's portrait is
 // drawn larger than the board's cached sprites): null when the board's image would be drawn as it is (not a polished
-// player unit, polished sprites off, no colour, image not loaded). One kept per name (the panel shows one unit).
+// player unit, polished sprites off, no colour, image not loaded). One kept per slot: the name by default (the panel
+// shows one unit); the menu passes its own slot per picture (TASK-1595: tutorial cards, the hot seat faceoff's red and
+// blue swordsmen), so pictures drawn in the same frame do not repaint each other.
 const teamColourPortraits = new Map()
-function teamColourPortrait(name, rgb, size) {
+function teamColourPortrait(name, rgb, size, slot = name) {
     const image = assets[name]
     if (!teamColourVariants.has(name) || !rgb || !otherSettings.usePolishedSprites || failedImages.has(name) ||
             !image || !image.complete || !image.naturalWidth)
         return null
     size = Math.max(1, Math.round(size))
     const key = (rgb.r << 16) | (rgb.g << 8) | rgb.b
-    const kept = teamColourPortraits.get(name)
-    if (kept && kept.key === key && kept.size === size && kept.src === image.src)
+    const kept = teamColourPortraits.get(slot)
+    if (kept && kept.key === key && kept.size === size && kept.src === image.src && kept.name === name)
         return kept.canvas
     const base = document.createElement('canvas')
     base.width = base.height = size
     base.getContext('2d').drawImage(image, 0, 0, size, size)
     const canvas = kept ? kept.canvas : document.createElement('canvas')
     paintTeamColourImage(canvas, base, key)
-    teamColourPortraits.set(name, {key, size, src: image.src, canvas})
+    teamColourPortraits.set(slot, {name, key, size, src: image.src, canvas})
     return canvas
 }
 // Repaints every built variant from its (repainted) base; restoreImageCaches calls it after a context loss.

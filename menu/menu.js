@@ -2842,8 +2842,32 @@ class MenuBannerRod {
     }
 }
 
+// TASK-1595: the menu draws the game's own assets (render/loadassets.js keys), never menu-only copies, so replacing
+// an asset file changes its menu pictures too. Player colours of the menu pictures: the tutorials' human player is
+// red, the hot seat faceoff's swordsmen red and blue (the game's first two player colours).
+const MENU_RED = Object.freeze({r: 255, g: 0, b: 0})
+const MENU_BLUE = Object.freeze({r: 98, g: 168, b: 222})
+// Whether an asset key's image has loaded (a failed one never draws).
+function menuAssetReady(name) {
+    const image = assets[name]
+    return !!image && image.complete && image.naturalWidth > 0 && !failedImages.has(name)
+}
+// Draws asset name into the box (x, y, width, height): a polished player unit with an rgb as its player-colour
+// variant (teamColourPortrait, rasterized at the box's device pixel size, kept under slot), anything else as the
+// asset's own image. Returns what was drawn.
+function drawMenuAsset(ctx, name, x, y, width, height, {rgb = null, slot = 'menu:' + name} = {}) {
+    let image = assets[name]
+    if (rgb) {
+        const t = typeof ctx.getTransform == 'function' ? ctx.getTransform() : null
+        const scale = t ? Math.hypot(t.a, t.b) || 1 : 1
+        image = teamColourPortrait(name, rgb, Math.max(width, height) * scale, slot) ?? image
+    }
+    ctx.drawImage(image, x, y, width, height)
+    return image
+}
+
 // Banner emblems, painted inside the disc (already clipped to it). Geometry is in fractions of the disc radius r.
-// A plain assets key (e.g. 'noob') draws that sprite.
+// A plain assets key (e.g. 'noob') draws that asset, a player unit in the tutorials' red.
 const MENU_EMBLEMS = {
     // Hot seat: two swordsmen face each other, swords crossing, on a red/blue background split at about 120 deg.
     faceoff: {
@@ -2863,11 +2887,13 @@ const MENU_EMBLEMS = {
             ctx.fill()
             // The sprite holds its sword at 0.24 of its width; the hilts stand just apart so the blades cross above them.
             const size = r * 1.3, centre = r * 0.055 + size * 0.26, centreY = y + r * 0.9 - size * 0.44
+            // The red swordsman stands on the red (left) side, mirrored, the blue one on the right.
             for (const side of [-1, 1]) {
                 ctx.save()
                 ctx.translate(x + side * centre, centreY)
                 ctx.scale(side, 1)
-                drawImage(ctx, 'normchel', {x: 0, y: 0}, size, size)
+                drawMenuAsset(ctx, 'normchel', -size / 2, -size / 2, size, size,
+                    side < 0 ? {rgb: MENU_RED, slot: 'menu:faceoff:red'} : {rgb: MENU_BLUE, slot: 'menu:faceoff:blue'})
                 ctx.restore()
             }
         },
@@ -2916,7 +2942,8 @@ const MENU_EMBLEMS = {
 function menuEmblem(name) {
     return MENU_EMBLEMS[name] ?? {assets: [name], paint(ctx, disc) {
         const size = disc.r * 1.75
-        drawImage(ctx, name, {x: disc.x, y: disc.y + disc.r * 0.08}, size, size)
+        drawMenuAsset(ctx, name, disc.x - size / 2, disc.y + disc.r * 0.08 - size / 2, size, size,
+            {rgb: MENU_RED, slot: 'menu:emblem:' + name})
     }}
 }
 
