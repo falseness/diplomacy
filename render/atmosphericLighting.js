@@ -141,11 +141,15 @@ const atmosphericLighting = {
         // shifted up (trim.shade: the groove's shadowed upper wall) and a gold highlight line shifted down (trim.highlight:
         // its lit lower lip), strokes of the same path. Widths and shifts (screen y, + down) are fractions of the gap
         // (groutWidth x the hex radius, about the concept's trim width at its hex size).
-        grout: '#86521c',
+        grout: '#86471c',
         groutWidth: 0.087,
         trim: {shade: '#1c1004', shadeWidth: 0.4, shadeShift: -0.26,
-            highlight: '#aa641a', highlightWidth: 0.3, highlightShift: 0.25},
-        stone: [252, 184, 104],
+            highlight: '#aa561a', highlightWidth: 0.3, highlightShift: 0.25,
+            // TASK-1585: at a distant zoom the trim reads as the concept's dark joints: a stroke of the whole gap (width x the
+            // gap) in color over the brass, at alpha from 0 with a hex at most from device pixels wide to alpha with one at
+            // most to; the tiles drawn up to shrink smaller about their centres (farJoint), so the joints widen.
+            far: {color: '#18070c', width: 2.2, alpha: 1, from: 70, to: 46, shrink: 0.03}},
+        stone: [255, 182, 109],
         // Owned tiles' faint sheen.
         sheen: 0.1,
         // Owned tiles carry the stone detail too: the variant's luminance about its mean, times owned, added to the colour
@@ -172,7 +176,11 @@ const atmosphericLighting = {
             bevel: 0.13,
             lit: 0.75,
             shadow: 0.6,
-            lightAngle: -135
+            lightAngle: -135,
+            // TASK-1585: the slab's dome, as the concept's carved tiles: its stone multiplied towards mul (a dusty rose-brown)
+            // from the middle (hex distance from, of the inset tile's apothem) to its rim (to), more on the side away from the
+            // key light (x (1 + lean x the pixel's offset along the light, -1..1)), so each slab is lit on its crown.
+            dome: {from: 0.56, to: 0.95, mul: [0.86, 0.6, 0.63], lean: 0.55}
         },
         // TASK-1581: dark grey slate, the second neutral tone (slateVariant): the sandstone variant greyed (its carving
         // kept), scaled to level, multiplied by tint (times a per-variant shade); no mist, the normal grout, so it never
@@ -181,14 +189,23 @@ const atmosphericLighting = {
         // projection t at the cell centre (0 upper left .. 1 far corner, as keyGradient) + dither x (a per-cell hash in
         // -0.5..0.5, so the boundary is ragged); slate where weight >= threshold.
         slate: {
-            tint: [156, 151, 148],
-            level: 0.77,
+            tint: [167, 139, 144],
+            level: 0.79,
             shade: [0.94, 1.06],
-            edgeRings: 3,
+            edgeRings: 2,
             edge: 1,
             key: 0.35,
             dither: 0.3,
-            threshold: 0.6
+            threshold: 0.6,
+            // TASK-1585: the open board is a mix of tan and slate too, as the concept's (warm stone round its armies, dark
+            // slate away from them): + far x min(1, the cell's hex steps from the nearest lamp (a town, a gold mine, a
+            // portal: emitsLight) / reach) + patch x smooth value noise (a lattice of patchScale cells, -0.5..0.5).
+            far: 1,
+            reach: 3,
+            mid: 0.4,
+            patch: 0.8,
+            patchScale: 3,
+            patchSeed: 24
         }
     },
     tileVariants: null,
@@ -1545,7 +1562,55 @@ const atmosphericLighting = {
             g.closePath()
             g.fill()
         }
+        // TASK-1585: the slab's dome (multiply leaves the transparent outside of the tile as it is: the dome is transparent there).
+        this.applyDome(g)
         return this.tileVariants[index] = surface
+    },
+    // TASK-1585: TILE.sandstone.dome as a multiply raster the size of a variant (opaque over the inset tile, transparent
+    // outside it), built once per hex radius: the sandstone variants (so slate and fog too) and the owned tiles are multiplied
+    // by it; the owned tiles' detail is read without it (tileDetailSteps divides it out).
+    domes: null,
+    dome() {
+        if (this.domes && this.domes.radius === basis.r) return this.domes
+        const {from, to, mul, lean, lightAngle} = {...this.TILE.sandstone.dome, lightAngle: this.TILE.sandstone.lightAngle}
+        const s = this.TILE.rasterScale, size = Math.ceil(2 * basis.r * s) + 4, R = this.tileRadius() * s
+        const canvas = document.createElement('canvas')
+        canvas.width = canvas.height = size
+        const g = canvas.getContext('2d')
+        g.setTransform(s, 0, 0, s, size / 2, size / 2)
+        g.beginPath()
+        this.hexagonPath(g, 0, 0, this.tileRadius())
+        g.fillStyle = '#fff'
+        g.fill()
+        const image = g.getImageData(0, 0, size, size), d = image.data, c = size / 2, apothem = R * Math.sqrt(3) / 2
+        const a = lightAngle * Math.PI / 180, lx = -Math.cos(a), ly = -Math.sin(a)
+        const factor = new Float32Array(size * size)
+        for (let y = 0; y < size; y++)
+            for (let x = 0; x < size; x++) {
+                const i = y * size + x, p = 4 * i
+                const dx = x + 0.5 - c, dy = y + 0.5 - c, ax = Math.abs(dx) * Math.sqrt(3) / 2
+                const h = Math.max(Math.abs(dy), ax + Math.abs(dy) / 2) / apothem
+                let k = Math.min(1, Math.max(0, (h - from) / (to - from)))
+                k = k * k * (3 - 2 * k) * (1 + lean * Math.max(-1, Math.min(1, (dx * lx + dy * ly) / R)))
+                for (let ch = 0; ch < 3; ch++) d[p + ch] = Math.round(255 * (1 - (1 - mul[ch]) * k))
+                factor[i] = (0.299 * d[p] + 0.587 * d[p + 1] + 0.114 * d[p + 2]) / 255
+            }
+        g.putImageData(image, 0, 0)
+        return this.domes = {radius: basis.r, canvas, factor, size}
+    },
+    // Multiplies a tile raster (a variant's size) by the dome, keeping the raster's own alpha (keep: the canvas whose alpha
+    // it keeps, the raster's own by default).
+    applyDome(g, keep = null) {
+        const {canvas} = this.dome()
+        g.save()
+        g.setTransform(1, 0, 0, 1, 0, 0)
+        g.globalCompositeOperation = 'multiply'
+        g.drawImage(canvas, 0, 0)
+        if (keep) {
+            g.globalCompositeOperation = 'destination-in'
+            g.drawImage(keep, 0, 0)
+        }
+        g.restore()
     },
     // Fog variants, built once per hex radius from the sandstone variant of the same index: the
     // cell in dark grout, the inset stone over it greyed, both multiplied by FOG.tint, then the mist
@@ -1667,6 +1732,23 @@ const atmosphericLighting = {
                 queue.push(nx * height + ny)
             }
         }
+        // TASK-1585: hex steps from the nearest lamp (breadth-first from every lamp cell).
+        const lamp = new Int32Array(width * height).fill(-1), lamps = []
+        for (let x = 0; x < width; ++x)
+            for (let y = 0; y < height; ++y)
+                if (this.emitsLight(arr[x][y].building) || arr[x][y].hexagon.playerColor) {
+                    lamp[x * height + y] = 0
+                    lamps.push(x * height + y)
+                }
+        for (let head = 0; head < lamps.length; ++head) {
+            const i = lamps[head], x = Math.floor(i / height), y = i % height
+            for (const [dx, dy] of neighborhood[x & 1]) {
+                const nx = x + dx, ny = y + dy
+                if (nx < 0 || ny < 0 || nx >= width || ny >= height || lamp[nx * height + ny] >= 0) continue
+                lamp[nx * height + ny] = lamp[i] + 1
+                lamps.push(nx * height + ny)
+            }
+        }
         let left = Infinity, top = Infinity, right = -Infinity, bottom = -Infinity
         for (const i of queue) {
             const c = arr[Math.floor(i / height)][i % height].hexagon.calcPos()
@@ -1680,12 +1762,26 @@ const atmosphericLighting = {
             const t = Math.max(0, Math.min(1, ((c.x - left) * dx + (c.y - top) * dy) / span))
             const near = Math.max(0, 1 - ring[i] / S.edgeRings)
             const hash = (((hexagon.tileHash >>> 8) & 255) / 255) - 0.5
-            const weight = S.edge * near + S.key * t + S.dither * hash
+            const away = lamp[i] < 0 ? 1 : Math.min(1, lamp[i] / S.reach)
+            const weight = S.edge * near + S.key * t + S.dither * hash + S.far * (away - S.mid) + S.patch * this.patchNoise(x, y, S.patchScale)
             cells[i] = weight >= S.threshold ? 1 : 0
             list.push({x, y, ring: ring[i], t: Math.round(t * 1000) / 1000, slate: cells[i]})
         }
         ++this.toneBuilds
         return this.tone = {arr, width, height, cells, list}
+    },
+    // TASK-1585: smooth value noise at a cell (column x, row y; odd columns half a row lower), -0.5..0.5: a lattice of
+    // scale cells with a hashed value at each node, interpolated (smoothstep).
+    patchNoise(x, y, scale) {
+        const node = (i, j) => {
+            let h = Math.imul(i, 374761393) + Math.imul(j, 668265263) + Math.imul(this.TILE.slate.patchSeed, 0x9e3779b9) >>> 0
+            h = Math.imul(h ^ (h >>> 13), 1274126177) >>> 0
+            return ((h ^ (h >>> 16)) & 1023) / 1023 - 0.5
+        }
+        const u = x / scale, v = (y + (x & 1) / 2) / scale, i = Math.floor(u), j = Math.floor(v)
+        const fu = u - i, fv = v - j, su = fu * fu * (3 - 2 * fu), sv = fv * fv * (3 - 2 * fv)
+        const top = node(i, j) + (node(i + 1, j) - node(i, j)) * su, bottom = node(i, j + 1) + (node(i + 1, j + 1) - node(i, j + 1)) * su
+        return top + (bottom - top) * sv
     },
     isSlate(hexagon) {
         const tone = this.slateTone()
@@ -1828,6 +1924,13 @@ const atmosphericLighting = {
             draw('stroke')
             ctx.restore()
         }
+        const far = trim.far, k = this.farJoint(ctx)
+        if (k > 0) {
+            ctx.globalAlpha = far.alpha * k
+            ctx.strokeStyle = far.color
+            ctx.lineWidth = far.width * gap
+            draw('stroke')
+        }
         ctx.restore()
     },
     // TASK-1552: while Grid.litTileSteps draws a step into a lit tile's quarters (pathMemo: a Map), a union path of cells
@@ -1861,12 +1964,17 @@ const atmosphericLighting = {
         if (list.length > this.PATH_MEMO_PATHS) list.pop()
         return path
     },
+    // TASK-1585: the joints' share of a tile at ctx's zoom (TILE.trim.far): 0 at normal zoom, up to 1 when distant.
+    farJoint(ctx) {
+        const far = this.TILE.trim.far, t = ctx.getTransform(), px = 2 * basis.r * Math.hypot(t.a, t.b)
+        return Math.min(1, Math.max(0, (far.from - px) / (far.from - far.to)))
+    },
     drawTile(ctx, hexagon) {
-        const c = hexagon.calcPos()
+        const c = hexagon.calcPos(), shrink = 1 - this.TILE.trim.far.shrink * this.farJoint(ctx)
         if (hexagon.playerColor === 0) {
             const index = hexagon.tileHash % this.TILE.variants
             const variant = this.isSlate(hexagon) ? this.slateVariant(index) : this.tileVariant(index)
-            const size = variant.width / this.TILE.rasterScale
+            const size = variant.width / this.TILE.rasterScale * shrink
             // A cell's tile canvas: its inset hexagon (tileBox: the hexagon's box and 2 px).
             this.drawCropped(ctx, variant, c.x - size / 2, c.y - size / 2, size, this.cropOverlays && this.tileBox(variant.width))
             return
@@ -1881,7 +1989,7 @@ const atmosphericLighting = {
             return
         }
         const marble = this.ownedTile(hexagon.tileHash % this.TILE.variants, fill)
-        const size = marble.width / this.TILE.rasterScale
+        const size = marble.width / this.TILE.rasterScale * shrink
         this.drawCropped(ctx, marble, c.x - size / 2, c.y - size / 2, size, this.cropOverlays && this.tileBox(marble.width))
     },
     // Marble detail, built once per hex radius from the variant of the same index: each pixel's luminance
@@ -1912,10 +2020,12 @@ const atmosphericLighting = {
         const {data} = tile.getContext('2d').getImageData(box.x, box.y, box.w, box.h)
         yield
         const offset = new Float32Array(data.length / 4), step = this.DETAIL_STEP_PIXELS
+        // TASK-1585: the stone's carving without the dome (the owned tiles take the dome themselves).
+        const {factor, size: domeSize} = this.dome()
         let sum = 0, weight = 0
         for (let i = 0; i < offset.length; i++) {
-            const a = data[4 * i + 3]
-            offset[i] = 0.299 * data[4 * i] + 0.587 * data[4 * i + 1] + 0.114 * data[4 * i + 2]
+            const a = data[4 * i + 3], f = factor[(box.y + Math.floor(i / box.w)) * domeSize + box.x + i % box.w] || 1
+            offset[i] = (0.299 * data[4 * i] + 0.587 * data[4 * i + 1] + 0.114 * data[4 * i + 2]) / f
             sum += offset[i] * a
             weight += a
             if ((i + 1) % step === 0) yield
@@ -2184,6 +2294,8 @@ const atmosphericLighting = {
             }
             g.putImageData(image, box.x, box.y)
         }
+        // TASK-1585: the slab's dome, as the stone's.
+        this.applyDome(g, this.tileVariant(index))
         g.setTransform(this.TILE.rasterScale, 0, 0, this.TILE.rasterScale, size / 2, size / 2)
         g.globalCompositeOperation = 'source-atop'
         this.drawSheen(g, 0, 0, this.TILE.sheen)

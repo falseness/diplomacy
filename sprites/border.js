@@ -202,9 +202,11 @@ class MapDepth {
     // from the upper-left key light, only below and right of it: a broad layer and a near one (blur
     // and offset in hex radii; each offset exceeds the blur reach so nothing spills left or above).
     // A small cached raster (raster pixels per hex radius), drawn scaled under the board.
+    // TASK-1585: and a near-black void under the board (a layer's own color): the concept's board floats over a dark
+    // background, the night sky showing only further off.
     static ATMOSPHERIC_SHADOW = {
-        color: 'rgba(4, 8, 20, 0.66)',
-        layers: [{blur: 0.6, x: 0.9, y: 1.2}, {blur: 0.2, x: 0.35, y: 0.45}],
+        color: 'rgba(8, 8, 11, 0.66)',
+        layers: [{blur: 0.6, x: 0.9, y: 1.2}, {blur: 0.2, x: 0.35, y: 0.45}, {blur: 1, x: 0, y: 3.6, color: 'rgb(12, 12, 12)'}],
         raster: 4
     }
     constructor() {
@@ -884,6 +886,7 @@ class MapDepth {
         // down by the side depth; the board covers the slab itself.
         ctx.fillStyle = ctx.shadowColor = config.color
         for (const layer of config.layers) {
+            ctx.fillStyle = ctx.shadowColor = layer.color || config.color
             ctx.shadowBlur = 2 * layer.blur * config.raster
             ctx.shadowOffsetX = layer.x * config.raster
             ctx.shadowOffsetY = layer.y * config.raster
