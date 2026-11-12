@@ -12,6 +12,7 @@ let assets = {
     farm: new Image(),
     noob: new Image(),
     archer: new Image(),
+    archerLeft: new Image(),
     KOHb: new Image(),
     KOHbLeft: new Image(),
     normchel: new Image(),
@@ -83,7 +84,7 @@ const atmosphericBuildingImages = Object.freeze({
     demonPortalMage: 'assets/atmosphere/buildings/demonPortalMage.svg',
 })
 let imagesCountLoaded = 0
-let spriteImages = ['town', 'farm', 'noob', 'archer',
+let spriteImages = ['town', 'farm', 'noob', 'archer', 'archerLeft',
         'KOHb', 'KOHbLeft', 'normchel', 
         'catapult', 'catapultLeft', 'barrack', 'wall', 'bastion', 'tower',
         'mountain', 'lake', 'sea', 'goldmine', 'bush', 'hill'].concat(demonSpriteImages, undeadSpriteImages)
@@ -154,6 +155,7 @@ function restoreImageCaches() {
         if (cachedImages[name] && image && image.complete && image.naturalWidth > 0)
             paintCachedImage(cachedImages[name], name)
     }
+    rebuildTeamColourImages()
     if (typeof grid != 'undefined' && grid) {
         grid.surfaceCacheState = undefined
         // TASK-1562: the unit sectors were drawn from the lost sprites (kept across zooms now).
@@ -183,6 +185,114 @@ function cacheAllImages() {
     }
 }
 let cachedImages = {}
+
+// TASK-1593: player-colour cloth variants of the polished player units. The polished art paints its cloth in fixed
+// colours (noob, archer red; normchel, KOHb blue); a variant moves those cloth pixels to the player's hue, keeping
+// their luminance, relative saturation and alpha, and leaves every other pixel (gold, iron, skin, leather, outline)
+// as it is. Built from the cached base canvas (no extra SVG raster), never for spritesOld, undead/ or demon images.
+const TEAM_COLOUR_IMAGES = Object.freeze(['noob', 'archer', 'archerLeft', 'normchel', 'KOHb', 'KOHbLeft'])
+// name -> Map(rgb integer -> variant canvas). Keys are integers, so a lookup allocates nothing.
+const teamColourVariants = new Map(TEAM_COLOUR_IMAGES.map(name => [name, new Map()]))
+let teamColourBuilds = 0
+// The cached image to draw for a unit body of the given owner colour ({r, g, b}): the variant for the polished
+// player units, else cachedImages[name]. Per-frame path: integer key, Map lookups, no allocation once built.
+function teamColourImage(name, rgb) {
+    const base = cachedImages[name]
+    const variants = teamColourVariants.get(name)
+    if (!variants || !base || !rgb || !otherSettings.usePolishedSprites || failedImages.has(name))
+        return base
+    const key = (rgb.r << 16) | (rgb.g << 8) | rgb.b
+    let variant = variants.get(key)
+    if (variant === undefined) {
+        variant = document.createElement('canvas')
+        variant.rgbKey = key
+        if (typeof variant.addEventListener == 'function') {
+            variant.addEventListener('contextlost', () => requestAnimationFrame(restoreImageCaches))
+            variant.addEventListener('contextrestored', restoreImageCaches)
+        }
+        variants.set(key, variant)
+    }
+    // A new base canvas (sprites reloaded, theme switch), a repainted one (context loss: contentVersion) or a
+    // changed assets.size rebuilds the variant in place, so references to it stay valid.
+    if (variant.base !== base || variant.baseVersion !== base.contentVersion || variant.width !== base.width)
+        paintTeamColourImage(variant, base, key)
+    return variant
+}
+// Repaints every built variant from its (repainted) base; restoreImageCaches calls it after a context loss.
+function rebuildTeamColourImages() {
+    for (const [name, variants] of teamColourVariants) {
+        const base = cachedImages[name]
+        if (!base || failedImages.has(name))
+            continue
+        for (const [key, variant] of variants)
+            paintTeamColourImage(variant, base, key)
+    }
+}
+// Cloth classes of the polished art (artifacts/concepts/units_concept_style/concept_art/ranged_demons/vsvg.py
+// unit_recolored): red cloth hue < 0.045 or > 0.93 with saturation > 0.45 (and max channel > 0.12), blue cloth
+// 0.55 < hue < 0.75 with saturation > 0.35. Hue in [0, 1), HSV saturation.
+function teamColourIsCloth(h, s, mx) {
+    return ((h < 0.045 || h > 0.93) && s > 0.45 && mx > 0.12) || (h > 0.55 && h < 0.75 && s > 0.35)
+}
+function teamColourHsv(r, g, b) {
+    const mx = Math.max(r, g, b), mn = Math.min(r, g, b), d = mx - mn
+    let h = 0
+    if (d > 0)
+        h = (mx == r ? ((g - b) / d + 6) % 6 : mx == g ? (b - r) / d + 2 : (r - g) / d + 4) / 6
+    return [h, mx > 0 ? d / mx : 0, mx]
+}
+function paintTeamColourImage(variant, base, key) {
+    const width = base.width, height = base.height
+    variant.width = width
+    variant.height = height
+    variant.base = base
+    variant.baseVersion = base.contentVersion
+    ++teamColourBuilds
+    if (!width || !height)
+        return
+    const data = base.getContext('2d').getImageData(0, 0, width, height)
+    const px = data.data
+    const pr = ((key >> 16) & 255) / 255, pg = ((key >> 8) & 255) / 255, pb = (key & 255) / 255
+    const [ph, ps] = teamColourHsv(pr, pg, pb)
+    // The player's colour at full value: the cloth hue target (r, g, b sum to its own luminance below).
+    const [hr, hg, hb] = teamColourFromHsv(ph, 1, 1)
+    // Mean cloth saturation of the base: a cloth pixel keeps its saturation relative to it.
+    let clothSat = 0, cloth = 0
+    for (let i = 0; i < px.length; i += 4) {
+        if (px[i + 3] == 0) continue
+        const [h, s, mx] = teamColourHsv(px[i] / 255, px[i + 1] / 255, px[i + 2] / 255)
+        if (teamColourIsCloth(h, s, mx)) { clothSat += s; ++cloth }
+    }
+    const satScale = cloth ? ps / (clothSat / cloth) : 0
+    for (let i = 0; i < px.length; i += 4) {
+        if (px[i + 3] == 0) continue
+        const r = px[i] / 255, g = px[i + 1] / 255, b = px[i + 2] / 255
+        const [h, s, mx] = teamColourHsv(r, g, b)
+        if (!teamColourIsCloth(h, s, mx)) continue
+        const lum = 0.299 * r + 0.587 * g + 0.114 * b
+        const sat = Math.min(1, s * satScale)
+        // Grey of the pixel's luminance mixed toward the hue colour by sat, scaled to keep the luminance; when a
+        // channel would pass 1 the mix is pulled back toward the grey (same hue and luminance, less saturation).
+        let cr = 1 - sat + sat * hr, cg = 1 - sat + sat * hg, cb = 1 - sat + sat * hb
+        const cl = 0.299 * cr + 0.587 * cg + 0.114 * cb
+        cr *= lum / cl; cg *= lum / cl; cb *= lum / cl
+        const over = Math.max(cr, cg, cb)
+        if (over > 1) {
+            const t = (1 - lum) / (over - lum)
+            cr = lum + (cr - lum) * t; cg = lum + (cg - lum) * t; cb = lum + (cb - lum) * t
+        }
+        px[i] = Math.round(cr * 255)
+        px[i + 1] = Math.round(cg * 255)
+        px[i + 2] = Math.round(cb * 255)
+    }
+    variant.getContext('2d').putImageData(data, 0, 0)
+    variant.contentVersion = (variant.contentVersion || 0) + 1
+}
+function teamColourFromHsv(h, s, v) {
+    const k = n => (n + h * 6) % 6
+    const f = n => v - v * s * Math.max(0, Math.min(k(n), 4 - k(n), 1))
+    return [f(5), f(3), f(1)]
+}
 
 // Menu fonts (assets/fonts, OFL.txt): the menu draws its texts in these families (menu/menu.js), the game keeps
 // Times New Roman. Each family lists Times New Roman after it, so a font that fails to load falls back to it.
@@ -252,7 +362,9 @@ function loadSprites(names = spriteImages) {
             continue
         }
         const folder = demonSpriteImages.includes(spriteImages[i]) ? "sprites" : spritesFolder
-        assets[spriteImages[i]].src = "assets/" + folder + "/" + spriteImages[i] + ".svg"
+        // The old theme has no mirrored archer art: archerLeft is the plain archer there.
+        const file = folder == "spritesOld" && spriteImages[i] == 'archerLeft' ? 'archer' : spriteImages[i]
+        assets[spriteImages[i]].src = "assets/" + folder + "/" + file + ".svg"
     }
 }
 // What the menu itself draws (menu/, the menu interfaces): the logo, check marks, slider arrows and the
