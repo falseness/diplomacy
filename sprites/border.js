@@ -145,24 +145,65 @@ class MapDepth {
     // The board's solid backing under the cells (drawUnderlay, renderUnderlay); TASK-1571: the plain ground fill of a lit
     // square without its tile (Grid.drawGroundFill).
     static GROUND_FILL = '#4d5150'
-    // Atmospheric slab sides: grey stone faces [lit top edge, face, foot] by side (2 lower right,
-    // away from the upper-left key light; 3 bottom; 4 lower left, towards it), the faces away from
-    // the key cooled by the blue sky's fill (atmosphericLighting.RIM); a bottom face in a
-    // notch between protruding cells is shaded by them. The lit edge fades into the face over
-    // ATMOSPHERIC_FACE_EDGE of the face's height.
-    static ATMOSPHERIC_FACES = {
-        2: ['#7f8496', '#3c4256', '#262b3a'],
-        3: ['#a6a6b8', '#4e5468', '#3a3e50'],
-        4: ['#c8b4a8', '#706260', '#54484a'],
-        notch: ['#70758a', '#3e4458', '#20252f']
+    // TASK-1583: atmospheric slab sides are fractured rock (the concept's base under the board outline): a skirt below
+    // each exposed lower edge (sides 2 lower right, 3 bottom, 4 lower left; a bottom face in a notch between protruding
+    // cells, notch) down to a rocky foot, deeper than the slab (depth, which the camera frames; the skirt runs into the
+    // sky margin; sideDepth = ROCK.depth hex radii). The rock is one field in the board's lattice frame (a cell's place by
+    // its column and row, the same at any screen size), periodic over period (columns, rows in half hex heights): every face draws the part
+    // of the same field under it, so neighbouring faces join without a seam and a face's sprite depends only on its side
+    // and its cell's place in the period (rockSprite, built once per hex radius, MapDepth.rockBuilds, at ROCK.raster
+    // pixels per world unit). The field: dense rounded boulders (a jittered grid of chunk x by chunk y hex radii, each a
+    // dome around its seed (chunk.dome) of its own tone: the boulder's face is the lit golden-grey surface, brightest on
+    // its crown (chunk.face: the level at its edge relative to the crown), with a soft key-light glow on slopes facing the
+    // upper left and a faint shade away (chunk.slope, capped at lightMax; not over the plain stone at a vertex, which sits
+    // at the mean boulder level chunk.plain), thin dark gaps between boulders, a little wider and darker towards the foot:
+    // crease), grey stone turning cool grey and slightly darker towards the foot (top, bottom), each face its own tone by its turn from the key
+    // (tone, blended to the mean of both faces within corner hex radii of a vertex), a shade under the rim's overhang and a
+    // lit ledge (tiers), the rim's warm light below the rim (rimLight: a glow of alpha falling off over falloff hex radii
+    // right under the rim plus a faint tail down to reach, on crowns and creases alike from base up), teal light leaking from the creases near some crack
+    // centres in the lower stone (crack: a continuous vein along the crack's path (crack.path), brighter on the gaps it
+    // crosses, in a soft halo and a cool cast on the stone around), and a foot level
+    // with the board: scallop.depth hex radii below the outline's upper level, deeper by up to scallop.amplitude under a
+    // protruding cell, each block of the foot hanging its own way (scallop.jag) with a dark underside (lip).
+    static ROCK = {
+        depth: 2.3,
+        period: {columns: 10, rows: 4},
+        scallop: {depth: 1.5, amplitude: 0.35, flat: 0.35, ramp: 0.55, jag: 0.12, knot: 0.3},
+        pad: 0.12,
+        corner: 0.3,
+        // (the outline's smoothing for depths below it, hex radii either side)
+        smooth: 0.25,
+        // Plain stone near every outline vertex (no crease, bevel, block tilt or tone, crack line) within plain[0] hex
+        // radii, fading to the full field by plain[1]: both faces draw the same pixels down the vertex column.
+        plain: [0.13, 0.2],
+        raster: 1.25,
+        stone: [128, 118, 102],
+        // (the lower stone's cool grey, blended in towards the foot)
+        stoneLow: [112, 114, 118],
+        top: 0.27,
+        bottom: 0.77,
+        tiers: [{at: 0.3, width: 0.08, gain: -0.04}, {at: 0.65, width: 0.15, gain: -0.05}],
+        tone: {2: 0.72, 3: 1.0, 4: 1.35, notch: 0.82},
+        chunk: {x: 0.7, y: 0.55, tone: 0.14, tilt: 0.3, grain: 0.03, bevel: 0.35, dome: 0.85, slope: 0.05, face: 0.5, plain: 0.7, lightMax: 0.22, shadow: 0.1,
+            glow: [236, 172, 110], shade: [70, 68, 68]},
+        rim: {width: 0.15, steps: 8, colors: ['#ffe2a0', '#fff4d4', '#ffcc70', '#eea448', '#c88032'], groove: 'rgba(30, 16, 6, 0.25)', grooveWidth: 0.03},
+        crack: {spacing: 0.6, share: 0.45, at: [0.5, 0.75], steps: [5, 8], step: 0.14, branch: 0.5, line: 0.035, halo: 0.08, snap: 0.09,
+            path: 0.03, seed: 20, color: [20, 200, 235], alpha: {line: 1.5, halo: 0.06, path: 1.3}, cast: {reach: 0.5, amount: 0.04}},
+        // A warm highlight down the protruding corners of the outline (flat within flat of the corner, so the vertex
+        // column is no thin line, then falling off over width; reach hex radii, alpha).
+        edge: {flat: 0.15, width: 0.1, reach: 1.0, alpha: 0.3},
+        crease: {width: [0.012, 0.03], dark: [0.05, 0.25], band: 0.012},
+        lip: {solid: 0.13, width: 0.1, dark: 1.0},
+        rimLight: {color: [255, 175, 95], alpha: 2.3, falloff: 0.15, tail: 0.12, base: 0.5, reach: 1.0, tint: [1.05, 1.0, 0.92], tintReach: 1.4}
     }
-    static ATMOSPHERIC_FACE_EDGE = 0.16
+    static rockSprites = null
+    static rockBuilds = 0
     // Atmospheric drop shadow: the slab (top face and sides) casts a soft shadow onto the sky away
     // from the upper-left key light, only below and right of it: a broad layer and a near one (blur
     // and offset in hex radii; each offset exceeds the blur reach so nothing spills left or above).
     // A small cached raster (raster pixels per hex radius), drawn scaled under the board.
     static ATMOSPHERIC_SHADOW = {
-        color: 'rgba(4, 8, 20, 0.8)',
+        color: 'rgba(4, 8, 20, 0.66)',
         layers: [{blur: 0.6, x: 0.9, y: 1.2}, {blur: 0.2, x: 0.35, y: 0.45}],
         raster: 4
     }
@@ -177,6 +218,8 @@ class MapDepth {
         this.gridWidth = 0
         this.gridHeight = 0
         this.depth = 0.55 * basis.r
+        // TASK-1583: the atmospheric rock skirt's reach below the edges (sideDepth).
+        this.rockDepth = MapDepth.ROCK.depth * basis.r
         this.shadowBlur = 0.38 * basis.r
         this.shadowOffset = 0.18 * basis.r
         this.bounds = {
@@ -207,6 +250,8 @@ class MapDepth {
             this.outline = undefined
             this.outlineLoop = undefined
             this.rim = undefined
+            this.lowerRuns = []
+            this.rimRibbons = undefined
             return
         }
 
@@ -237,6 +282,42 @@ class MapDepth {
             this.rim.moveTo(this.edges[i].begin.x, this.edges[i].begin.y)
             this.rim.lineTo(this.edges[i].end.x, this.edges[i].end.y)
         }
+        // TASK-1583: the lower edges (the rock skirt's sides 2-4) as runs along the outline, from an edge that is not one
+        // (so no run is split at the loop's start), and the brass rim on them (rimRibbons).
+        const lower = edge => edge.side >= 2 && edge.side <= 4
+        const start = Math.max(0, orderedEdges.findIndex(edge => !lower(edge)))
+        this.lowerRuns = []
+        let run = null
+        for (let i = 0; i < orderedEdges.length; ++i) {
+            const edge = orderedEdges[(start + i) % orderedEdges.length]
+            if (!lower(edge)) {
+                run = null
+                continue
+            }
+            if (!run) this.lowerRuns.push(run = [edge.begin])
+            run.push(edge.end)
+        }
+        this.rimRibbons = this.createRimRibbons()
+    }
+    // TASK-1583: the brass rim under the lower edges as ribbons of the runs (lowerRuns), each the run and the run moved down
+    // by its thickness (a vertical thickness on every edge, so at a corner both edges' bands cover the same rows): the
+    // groove under the rim (rim width + groove), then ROCK.rim.steps ribbons from the rim's whole width (its foot colour)
+    // to the narrowest (the edge's colour), filled widest first (renderAtmosphericSides). [{path, color}]
+    createRimRibbons() {
+        const R = MapDepth.ROCK.rim, rw = R.width * basis.r, ribbons = []
+        const ribbon = (thickness, color) => {
+            const path = typeof SectorPath === 'function' ? new SectorPath() : new Path2D()
+            for (const points of this.lowerRuns) {
+                path.moveTo(points[0].x, points[0].y)
+                for (let i = 1; i < points.length; ++i) path.lineTo(points[i].x, points[i].y)
+                for (let i = points.length - 1; i >= 0; --i) path.lineTo(points[i].x, points[i].y + thickness)
+                path.closePath()
+            }
+            ribbons.push({path, color})
+        }
+        ribbon(rw + R.grooveWidth * basis.r, R.groove)
+        for (let i = R.steps - 1; i >= 0; --i) ribbon(rw * (i + 1) / R.steps, MapDepth.rimColor(i / (R.steps - 1)))
+        return ribbons
     }
     rebuild(_grid) {
         // TASK-1581: the tiles' slate tone is worked out per board from the map edge.
@@ -245,6 +326,8 @@ class MapDepth {
         this.edges = []
         this.gridWidth = _grid.arr.length
         this.gridHeight = _grid.arr[0].length
+        // TASK-1583: cells' rows in half hex heights from the first cell's (MapDepth.rockPlace).
+        const origin = _grid.arr[0][0].hexagon.calcPos(), halfHex = basis.r * Math.sqrt(3) / 2
 
         for (let x = 0; x < this.gridWidth; ++x) {
             for (let y = 0; y < this.gridHeight; ++y) {
@@ -254,6 +337,7 @@ class MapDepth {
                 const vertices = this.getVertices(pos)
                 const parity = x & 1
                 const cellFaces = []
+                const rockPlace = MapDepth.rockPlace(x, Math.round((pos.y - origin.y) / halfHex))
 
                 for (let i = 0; i < vertices.length; ++i) {
                     const neighbour = {
@@ -276,7 +360,8 @@ class MapDepth {
                         bottomBegin: {x: edge.begin.x, y: edge.begin.y + this.depth},
                         bottomEnd: {x: edge.end.x, y: edge.end.y + this.depth},
                         side: i,
-                        sortY: Math.max(edge.begin.y, edge.end.y) + this.depth
+                        sortY: Math.max(edge.begin.y, edge.end.y) + this.depth,
+                        rockPlace
                     }
                     this.faces.push(face)
                     cellFaces.push(face)
@@ -321,7 +406,7 @@ class MapDepth {
                 left: minX - shadowPadding,
                 right: maxX + shadowPadding,
                 top: minY - shadowPadding,
-                bottom: maxY + this.depth + this.shadowOffset + shadowPadding
+                bottom: maxY + Math.max(this.depth, this.rockDepth) + this.shadowOffset + shadowPadding
             },
             surfaceBounds: {left: minX, right: maxX, top: minY, bottom: maxY}
         }
@@ -509,6 +594,10 @@ class MapDepth {
         const xs = points.map(p => p.x), ys = points.map(p => p.y)
         return Math.max(...xs) < w.x0 || Math.min(...xs) > w.x1 || Math.max(...ys) < w.y0 || Math.min(...ys) > w.y1
     }
+    // The depth the slab's sides reach below its edges: the rock skirt with atmospheric visuals, else the slab's.
+    get sideDepth() {
+        return typeof otherSettings !== 'undefined' && otherSettings.atmosphericVisuals ? Math.max(this.depth, this.rockDepth) : this.depth
+    }
     renderAtmosphericSides(ctx) {
         if (!otherSettings.atmosphericVisuals) return
         // Only exposed edges have faces. Paint before terrain/fog so no face can
@@ -516,38 +605,262 @@ class MapDepth {
         ctx.save()
         const t = ctx.getTransform()
         const axisAligned = t.b === 0 && t.c === 0 && t.a > 0 && t.d > 0
+        const depth = this.sideDepth, pad = MapDepth.ROCK.pad * basis.r
         for (const face of this.faces) {
             if (face.side < 2 || face.side > 4) continue
-            const depth = this.depth
             if (axisAligned && (
-                    Math.max(face.begin.x, face.end.x) * t.a + t.e < -1 ||
-                    Math.min(face.begin.x, face.end.x) * t.a + t.e > ctx.canvas.width + 1 ||
+                    (Math.max(face.begin.x, face.end.x) + pad) * t.a + t.e < -1 ||
+                    (Math.min(face.begin.x, face.end.x) - pad) * t.a + t.e > ctx.canvas.width + 1 ||
                     (Math.max(face.begin.y, face.end.y) + depth) * t.d + t.f < -1 ||
                     Math.min(face.begin.y, face.end.y) * t.d + t.f > ctx.canvas.height + 1) ||
                     this.outsideClipWindow(face.begin, face.end, {x: face.end.x, y: face.end.y + depth}, {x: face.begin.x, y: face.begin.y + depth}))
                 continue
-            // Face geometry is replaced on rebuild; context keys do not retain
-            // discarded canvases. Camera transforms need no new gradient.
-            face.atmosphericGradients ||= new WeakMap()
-            let shade = face.atmosphericGradients.get(gradientContext(ctx))
-            if (!shade) {
-                const colors = MapDepth.ATMOSPHERIC_FACES[face.notch ? 'notch' : face.side]
-                shade = ctx.createLinearGradient(0, Math.min(face.begin.y, face.end.y), 0, Math.max(face.begin.y, face.end.y) + depth)
-                shade.addColorStop(0, colors[0])
-                shade.addColorStop(MapDepth.ATMOSPHERIC_FACE_EDGE, colors[1])
-                shade.addColorStop(1, colors[2])
-                face.atmosphericGradients.set(gradientContext(ctx), shade)
-            }
-            ctx.fillStyle = shade
-            ctx.beginPath()
-            ctx.moveTo(face.begin.x, face.begin.y)
-            ctx.lineTo(face.end.x, face.end.y)
-            ctx.lineTo(face.end.x, face.end.y + depth)
-            ctx.lineTo(face.begin.x, face.begin.y + depth)
-            ctx.closePath()
-            ctx.fill()
+            const place = face.rockPlace || {kx: 0, ky: 0}
+            const sprite = MapDepth.rockSprite(face.notch ? 'notch' : face.side, place.kx, place.ky)
+            ctx.drawImage(sprite.canvas, face.begin.x + sprite.x, face.begin.y + sprite.y, sprite.width, sprite.height)
+        }
+        // The brass rim (rimRibbons), over the faces.
+        for (const {path, color} of this.rimRibbons || []) {
+            ctx.fillStyle = color
+            ctx.fill(path)
         }
         ctx.restore()
+    }
+    // The rim's colour at t (0 at the edge .. 1 at its foot), between ROCK.rim.colors.
+    static rimColor(t) {
+        const colors = MapDepth.ROCK.rim.colors, x = t * (colors.length - 1), i = Math.min(colors.length - 2, Math.floor(x)), f = x - i
+        const rgb = c => [1, 3, 5].map(k => parseInt(c.slice(k, k + 2), 16)), a = rgb(colors[i]), b = rgb(colors[i + 1])
+        return 'rgb(' + a.map((v, k) => Math.round(v + (b[k] - v) * f)).join(', ') + ')'
+    }
+    // TASK-1583: the rock sprite of a face (side 2, 3, 4 or 'notch') of the cell at place (kx, ky) of the field's period
+    // (rockPlace), its world box relative to the face's begin vertex ({canvas, x, y, width, height}); kept per hex radius.
+    static rockSprite(side, kx, ky) {
+        if (!MapDepth.rockSprites || MapDepth.rockSprites.radius !== basis.r)
+            MapDepth.rockSprites = {radius: basis.r, sprites: new Map()}
+        const key = side + ':' + kx + ':' + ky
+        let sprite = MapDepth.rockSprites.sprites.get(key)
+        if (!sprite) {
+            sprite = MapDepth.buildRockSprite(side, kx, ky)
+            MapDepth.rockSprites.sprites.set(key, sprite)
+            ++MapDepth.rockBuilds
+        }
+        return sprite
+    }
+    // A cell's place in the rock field's period: its column mod period.columns and its height in half hex heights (row)
+    // mod period.rows (both even).
+    static rockPlace(column, row) {
+        const P = MapDepth.ROCK.period, mod = (a, n) => ((a % n) + n) % n
+        return {kx: mod(column, P.columns), ky: mod(row, P.rows)}
+    }
+    // A unit-interval hash of a whole number and a salt.
+    static rockHash(n, salt) {
+        let v = Math.imul(n * 0x27d4eb2d ^ Math.imul(salt + 1, 0x165667b1), 0x85ebca6b)
+        v = Math.imul(v ^ (v >>> 15), 0xc2b2ae35)
+        return ((v ^ (v >>> 13)) >>> 0) / 4294967296
+    }
+    static buildRockSprite(side, kx, ky) {
+        const R = MapDepth.ROCK, C = R.chunk, S = R.scallop, X = R.crack, r = basis.r, k = R.raster, h = r * Math.sqrt(3) / 2
+        const hash = MapDepth.rockHash
+        // The outline around a face (getVertices; the bottom row from right to left: side 2 down to a protruding cell's
+        // bottom 3, side 4 up to the upper level, a notch, the next cell's 2): each kind's end relative to its begin, its
+        // begin relative to its cell's centre, the outline's upper level (local y) and the faces before and after it.
+        const END = {2: {x: -r / 2, y: h}, 3: {x: -r, y: 0}, 4: {x: -r / 2, y: -h}, notch: {x: -r, y: 0}}
+        const BEGIN = {2: {x: r, y: 0}, 3: {x: r / 2, y: h}, 4: {x: -r / 2, y: h}, notch: {x: r / 2, y: h}}
+        const PREV = {2: 'notch', 3: 2, 4: 3, notch: 4}, NEXT = {2: 3, 3: 4, 4: 'notch', notch: 2}
+        const slope = kind => END[kind].y / END[kind].x
+        const end = END[side], upper = side == 3 || side == 4 ? -h : 0
+        // (a protruding cell's centre, local x: the foot is deepest under it)
+        const low = side == 2 ? -r : side == 3 ? -r / 2 : side == 4 ? r / 2 : r
+        // The outline's y at local x: this face's edge, its neighbours' past its ends.
+        const edgeY = x => x > 0 ? slope(PREV[side]) * x : x < end.x ? end.y + slope(NEXT[side]) * (x - end.x) : end.y * x / end.x
+        // (the outline averaged over smooth hex radii either side: the depth below it that the rim light, tiers and foot
+        // gradient follow has no cusp at a vertex, so no thin ridge runs down the vertex column)
+        const edgeSmooth = x => {
+            let sum = 0
+            for (let j = -4; j <= 4; ++j) sum += edgeY(x + j * R.smooth * r / 4)
+            return sum / 9
+        }
+        // The foot's depth below the upper level (no jag): scallop.depth, deeper under a protruding cell.
+        const footBase = x => {
+            // (distance from the nearest protruding cell's centre, hex radii: flat under it, ramping up over ramp)
+            const dx = Math.abs(((x - low) / r % 3 + 4.5) % 3 - 1.5), t = Math.max(0, Math.min(1, (dx - S.flat) / S.ramp))
+            return (S.depth + S.amplitude * (1 - t * t * (3 - 2 * t))) * r
+        }
+        // (the foot's breakup: knots every scallop.knot hex radii along the period, each hanging +- jag)
+        const nk = Math.round(R.period.columns * 1.5 / S.knot), kw = R.period.columns * 1.5 * r / nk
+        const jagAt = x => {
+            const t = (kx * 1.5 * r + BEGIN[side].x + x) / kw, j = Math.floor(t), f = t - j
+            const v = j => S.jag * r * (2 * hash(((j % nk) + nk) % nk, 3) - 1)
+            return v(j) + (v(j + 1) - v(j)) * f
+        }
+        const pad = R.pad * r
+        const x0 = Math.min(0, end.x) - pad, x1 = Math.max(0, end.x) + pad
+        const y0 = Math.min(0, end.y) - 2 * pad, y1 = upper + (S.depth + S.amplitude + S.jag) * r + 2 / k
+        const W = Math.ceil((x1 - x0) * k), H = Math.ceil((y1 - y0) * k)
+        // The field's frame: the cell's place in the period plus the face's begin.
+        const PX = R.period.columns * 1.5 * r, PY = R.period.rows * h
+        const ox = kx * 1.5 * r + BEGIN[side].x, oy = ky * h + BEGIN[side].y
+        // Chunks: a jittered grid of seeds dividing the period, each with its tone and its foot's hang.
+        const nx = Math.max(1, Math.round(PX / (C.x * r))), ny = Math.max(1, Math.round(PY / (C.y * r))), sx = PX / nx, sy = PY / ny
+        const unit = Math.min(sx, sy), bevel = C.bevel * unit
+        const sample = (wx, wy) => {
+            const ci = Math.floor(wx / sx), cj = Math.floor(wy / sy)
+            let d1 = Infinity, d2 = Infinity, n1 = 0, n2 = 0, tilt = 0
+            for (let j = cj - 1; j <= cj + 1; ++j)
+                for (let i = ci - 1; i <= ci + 1; ++i) {
+                    const n = (((j % ny) + ny) % ny) * nx + (((i % nx) + nx) % nx)
+                    const qx = (i + 0.05 + 0.9 * hash(n, 1)) * sx, qy = (j + 0.1 + 0.8 * hash(n, 2)) * sy
+                    const dist = Math.hypot((qx - wx) / sx, (qy - wy) / sy) * unit
+                    if (dist < d1) {
+                        d2 = d1
+                        n2 = n1
+                        d1 = dist
+                        n1 = n
+                        const a = 2 * Math.PI * hash(n, 5)
+                        tilt = C.tilt * ((wx - qx) / sx * Math.cos(a) + (wy - qy) / sy * Math.sin(a))
+                    } else if (dist < d2) {
+                        d2 = dist
+                        n2 = n
+                    }
+                }
+            return [d2 - d1, n1, n2, tilt, d1]
+        }
+        // The face's tone at local x: its own, blended to the mean with its neighbour's within corner of a vertex (the
+        // same on both faces there).
+        const T = R.tone, Z = R.corner * r, smooth = t => t * t * (3 - 2 * t)
+        const plainAt = x => {
+            const dist = Math.min(Math.abs(x), Math.abs(x - end.x)) / r, t = Math.max(0, Math.min(1, (dist - R.plain[0]) / (R.plain[1] - R.plain[0])))
+            return 1 - smooth(t)
+        }
+        const toneAt = x => {
+            const own = T[side], a = (own + T[PREV[side]]) / 2, b = (own + T[NEXT[side]]) / 2
+            if (x > 0) return a + (T[PREV[side]] - a) * smooth(Math.min(1, x / Z))
+            if (x < end.x) return b + (T[NEXT[side]] - b) * smooth(Math.min(1, (end.x - x) / Z))
+            if (-x < Z) return a + (own - a) * smooth(-x / Z)
+            if (x - end.x < Z) return b + (own - b) * smooth((x - end.x) / Z)
+            return own
+        }
+        // Cracks: slots of crack.spacing along the period, share of them cracked: a jagged line of crack.steps steps
+        // (crack.step hex radii) up and down from a centre low in the stone, sometimes a branch (crack.branch), fading
+        // towards its ends.
+        const ns = Math.max(1, Math.round(PX / (X.spacing * r))), cs = PX / ns, segments = []
+        const reach = (X.steps[1] + 2) * X.step * r
+        for (let s = Math.floor((ox + x0 - reach) / cs); s <= Math.floor((ox + x1 + reach) / cs); ++s) {
+            // (crack.seed picks the cracked slots and their shapes)
+            const m = ((s % ns) + ns) % ns + X.seed * 1000
+            if (hash(m, 11) >= X.share) continue
+            const cx = (s + 0.2 + 0.6 * hash(m, 12)) * cs - ox
+            const centre = {x: cx, y: upper + footBase(cx) * (X.at[0] + (X.at[1] - X.at[0]) * hash(m, 13))}
+            const n = X.steps[0] + Math.floor(hash(m, 14) * (X.steps[1] - X.steps[0] + 1)), salt = 20
+            const walk = (from, count, heading, spread, fade0, key) => {
+                let q = from
+                for (let i = 0; i < count; ++i) {
+                    const angle = heading + (hash(m, key + 2 * i) * 2 - 1) * spread, len = X.step * r * (0.6 + 0.8 * hash(m, key + 2 * i + 1))
+                    const next = {x: q.x + Math.cos(angle) * len, y: q.y + Math.sin(angle) * len}
+                    segments.push({a: q, b: next, fade: fade0 * (1 - 0.7 * (i + 1) / (count + 1))})
+                    q = next
+                }
+                return q
+            }
+            const lean = (hash(m, 15) * 2 - 1) * 0.7
+            walk(centre, Math.ceil(n / 2), Math.PI / 2 + lean, 0.6, 1, salt)
+            walk(centre, Math.floor(n / 2), -Math.PI / 2 + lean, 0.6, 1, salt + 40)
+            if (hash(m, 16) < X.branch)
+                walk(centre, 2, Math.PI / 2 + lean + (hash(m, 17) < 0.5 ? -1 : 1) * 1.1, 0.5, 0.8, salt + 80)
+        }
+        // (a crack's light: its line on the creases within crack.snap of its path, a vein along the path itself outside the
+        // plain stone at a vertex, a soft halo around the path)
+        const segmentGlow = (x, y, gap, plain) => {
+            let best = 0
+            for (const q of segments) {
+                const vx = q.b.x - q.a.x, vy = q.b.y - q.a.y, t = Math.max(0, Math.min(1, ((x - q.a.x) * vx + (y - q.a.y) * vy) / (vx * vx + vy * vy)))
+                const dist = Math.hypot(x - q.a.x - vx * t, y - q.a.y - vy * t)
+                if (dist > 3 * X.snap * r) continue
+                best = Math.max(best, q.fade * (X.alpha.line * Math.exp(-((gap / (X.line * r)) ** 2)) * Math.exp(-((dist / (X.snap * r)) ** 2)) +
+                    (1 - plain) * X.alpha.path * Math.exp(-((dist / (X.path * r)) ** 2)) + X.alpha.halo * Math.exp(-((dist / (X.halo * r)) ** 2))))
+            }
+            return best
+        }
+        const centres = segments.map(q => q.a)
+        // (the protruding corners: a cell's lower vertices, local x)
+        const corners = side == 2 ? [end.x] : side == 3 ? [0, end.x] : side == 4 ? [0] : []
+        const canvas = document.createElement('canvas')
+        canvas.width = W
+        canvas.height = H
+        const g = canvas.getContext('2d')
+        const image = g.createImageData(W, H), d = image.data
+        const height = new Float32Array(W * H), level = new Float32Array(W * H), alpha = new Float32Array(W * H)
+        const glow = new Float32Array(W * H), cast = new Float32Array(W * H), tone = new Float32Array(W * H)
+        const lowF = new Float32Array(W * H), raw = new Float32Array(W * H), plain = new Float32Array(W * H)
+        for (let py = 0; py < H; ++py)
+            for (let px = 0; px < W; ++px) {
+                const i = py * W + px, x = x0 + (px + 0.5) / k, y = y0 + (py + 0.5) / k
+                const top = edgeY(x)
+                if (y < top - 1 / k) continue
+                const [gap, n1, n2, tilt, d1] = sample(ox + x, oy + y), w = plainAt(x)
+                const foot = upper + footBase(x) + jagAt(x)
+                if (y > foot + 1 / k) continue
+                alpha[i] = Math.max(0, Math.min(1, (y - top) * k + 0.5, (foot - y) * k + 0.5))
+                // (a rounded boulder: a dome around its seed (chunk.dome of the cell size), falling into the gap at its edge)
+                const e = Math.min(1, gap / bevel), dome = Math.sqrt(Math.max(0, 1 - (d1 / (C.dome * unit)) ** 2))
+                raw[i] = dome * (1 - (1 - e) * (1 - e))
+                plain[i] = w
+                height[i] = raw[i] * (1 - w) + C.plain * w
+                const soft = edgeSmooth(x), below = Math.max(0, y - soft) / r, f = Math.max(0, Math.min(1, (y - soft) / Math.max(1e-6, foot - soft)))
+                let tier = 1
+                for (const L of R.tiers) tier += L.gain * Math.exp(-(((below - L.at) / L.width) ** 2))
+                let gh = Math.imul(Math.floor((ox + x) * k) * 0x27d4eb2d ^ Math.floor((oy + y) * k) * 0x165667b1, 0x85ebca6b)
+                gh = ((gh ^ (gh >>> 13)) >>> 0) / 4294967296
+                // (creases wider and darker towards the foot; level bands across the plain stone at a vertex, the same in
+                // both faces' sprites)
+                const cw = R.crease.width[0] + (R.crease.width[1] - R.crease.width[0]) * f, band = Math.abs((((oy + y) % sy) + sy) % sy - sy / 2)
+                const creased = ((1 - w) * Math.exp(-((gap / (cw * r)) ** 2)) + w * Math.exp(-(((band - sy / 2) / (R.crease.band * r)) ** 2))) *
+                    (R.crease.dark[0] + (R.crease.dark[1] - R.crease.dark[0]) * f) / R.crease.dark[1]
+                const lip = Math.max(0, Math.min(1, 1 - (foot - y - R.lip.solid * r) / (R.lip.width * r)))
+                tone[i] = toneAt(x)
+                lowF[i] = f
+                level[i] = tone[i] * (R.top + (R.bottom - R.top) * f ** 1.2) * (1 + (1 - w) * ((2 * hash(n1, 4) - 1) * C.tone + tilt) + (2 * gh - 1) * C.grain) *
+                    (C.face + (1 - C.face) * height[i]) * tier * (1 - R.crease.dark[1] * creased) * (1 - R.lip.dark * lip)
+                glow[i] = segmentGlow(x, y, gap + w * 4 * X.line * r, w)
+                for (const c of centres) {
+                    const qc = Math.hypot(x - c.x, y - c.y) / (X.cast.reach * r)
+                    if (qc < 1) cast[i] = Math.max(cast[i], X.cast.amount * (1 - qc) ** 2)
+                }
+            }
+        // Light: the height's slope per hex radius against the upper-left key.
+        const lx = -Math.SQRT1_2, ly = -Math.SQRT1_2, per = k * r
+        for (let py = 0; py < H; ++py)
+            for (let px = 0; px < W; ++px) {
+                const i = py * W + px, p = 4 * i
+                if (!alpha[i]) continue
+                const x = x0 + (px + 0.5) / k, y = y0 + (py + 0.5) / k
+                const at = j => alpha[j] ? raw[j] : raw[i]
+                const gx = px > 0 && px < W - 1 ? (at(i + 1) - at(i - 1)) / 2 * per : 0
+                const gy = py > 0 && py < H - 1 ? (at(i + W) - at(i - W)) / 2 * per : 0
+                // (the boulders' slope light, faded out over the plain stone at a vertex: no shaded strip beside it)
+                const lit = -(gx * lx + gy * ly) * C.slope * (1 - plain[i])
+                const below = Math.max(0, (y - edgeSmooth(x)) / r), q = below / R.rimLight.reach
+                let warm = (R.rimLight.alpha * Math.exp(-q / R.rimLight.falloff) + R.rimLight.tail) * Math.max(0, 1 - q)
+                for (const vx of corners)
+                    warm = Math.max(warm, R.edge.alpha * Math.exp(-((Math.max(0, Math.abs(x - vx) - R.edge.flat * r) / (R.edge.width * r)) ** 2)) * Math.max(0, 1 - below / R.edge.reach))
+                const gain = Math.min(1.1, tone[i] / T[3]), tq = Math.min(1, below / R.rimLight.tintReach), tintAt = 1 - tq * tq * (3 - 2 * tq)
+                const rgb = [0, 0, 0]
+                for (let c = 0; c < 3; ++c) {
+                    let v = (R.stone[c] + (R.stoneLow[c] - R.stone[c]) * lowF[i]) * level[i]
+                    v += lit > 0 ? (C.glow[c] * gain - v) * Math.min(C.lightMax, lit) : (C.shade[c] - v) * Math.min(1, -lit * C.shadow)
+                    v += R.rimLight.color[c] * warm * (R.rimLight.base + (1 - R.rimLight.base) * height[i])
+                    // (the rim's warm cast on the upper stone: a tint towards orange at about the same luminance)
+                    v *= 1 + (R.rimLight.tint[c] - 1) * tintAt
+                    v += (X.color[c] * 0.45 - v) * cast[i]
+                    rgb[c] = v + glow[i] * X.color[c]
+                }
+                d[p] = rgb[0]
+                d[p + 1] = rgb[1]
+                d[p + 2] = rgb[2]
+                d[p + 3] = 255 * alpha[i]
+            }
+        g.putImageData(image, 0, 0)
+        return {canvas, x: x0, y: y0, width: W / k, height: H / k}
     }
     releaseAtmosphericShadow() {
         if (this.atmosphericShadow) this.atmosphericShadow.canvas.width = this.atmosphericShadow.canvas.height = 0
@@ -558,7 +871,9 @@ class MapDepth {
         const b = this.surfaceBounds
         const pad = Math.max(...config.layers.map(layer => layer.blur * 1.5 + Math.max(layer.x, layer.y))) * basis.r
         const left = b.left - pad, top = b.top - pad
-        const w = b.right - b.left + 2 * pad, h = b.bottom - b.top + this.depth + 2 * pad
+        // TASK-1583: cast by the rock skirt's foot with atmospheric visuals (sideDepth, the foot's mean depth).
+        const depth = otherSettings.atmosphericVisuals ? (MapDepth.ROCK.scallop.depth + MapDepth.ROCK.scallop.amplitude / 2 - Math.sqrt(3) / 4) * basis.r : this.depth
+        const w = b.right - b.left + 2 * pad, h = b.bottom - b.top + depth + 2 * pad
         const k = config.raster / basis.r
         const canvas = document.createElement('canvas')
         canvas.width = Math.max(1, Math.ceil(w * k))
@@ -573,9 +888,9 @@ class MapDepth {
             ctx.shadowOffsetX = layer.x * config.raster
             ctx.shadowOffsetY = layer.y * config.raster
             ctx.fill(this.outline)
-            ctx.translate(0, this.depth)
+            ctx.translate(0, depth)
             ctx.fill(this.outline)
-            ctx.translate(0, -this.depth)
+            ctx.translate(0, -depth)
         }
         this.atmosphericShadow = {canvas, left, top, width: w, height: h}
         ++MapDepth.atmosphericShadowBuilds

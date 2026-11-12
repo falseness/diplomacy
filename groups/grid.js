@@ -1300,7 +1300,7 @@ class Grid extends SpritesGroup {
         const t = g.getTransform()
         g.restore()
         const {a, d, e, f} = t, w = this.arr.length, h = this.arr[0].length
-        const reach = CELL_LAYER_EDGE_REACH * basis.r + (mapDepth.depth || 0) + (mapDepth.shadowOffset || 0) + 2 * (mapDepth.shadowBlur || 0)
+        const reach = CELL_LAYER_EDGE_REACH * basis.r + (mapDepth.sideDepth || 0) + (mapDepth.shadowOffset || 0) + 2 * (mapDepth.shadowBlur || 0)
         return {key: [W, H, a, d, e, f, basis.offset.x, basis.offset.y, basis.r, w, h, reach].join(), a, d, e, f, reach}
     }
     // TASK-1455: the surface cache's cell mask of a board the menu can start (map: a GameMap; its size and shape, which
@@ -9303,7 +9303,7 @@ class Grid extends SpritesGroup {
         const loop = mapDepth.outlineLoop
         if (!loop)
             return false
-        const m = LIT_PART_REACH * basis.r + (mapDepth.depth || 0)
+        const m = LIT_PART_REACH * basis.r + (mapDepth.sideDepth || 0)
         const left = (x0 - view.e) / view.a - m, right = (x1 - view.e) / view.a + m
         const top = (y0 - view.f) / view.d - m, bottom = (y1 - view.f) / view.d + m
         const cx = (left + right) / 2, cy = (top + bottom) / 2
@@ -10365,7 +10365,7 @@ class Grid extends SpritesGroup {
             return null
         const x0 = Math.max(0, Math.floor(t.a * (b.left - margin) + t.e)), y0 = Math.max(0, Math.floor(t.d * (b.top - margin) + t.f))
         const x1 = Math.min(canvas.width, Math.ceil(t.a * (b.right + margin) + t.e))
-        const y1 = Math.min(canvas.height, Math.ceil(t.d * (b.bottom + mapDepth.depth + margin) + t.f))
+        const y1 = Math.min(canvas.height, Math.ceil(t.d * (b.bottom + mapDepth.sideDepth + margin) + t.f))
         const g = canvas.getContext('2d')
         g.save()
         g.setTransform(1, 0, 0, 1, 0, 0)
@@ -10479,7 +10479,7 @@ class Grid extends SpritesGroup {
         const loop = mapDepth.outlineLoop
         if (!mapDepth.outline || !loop || loop.length < 3)
             return undefined
-        if (this.zoomSlab?.outline === mapDepth.outline && this.zoomSlab.margin === margin)
+        if (this.zoomSlab?.outline === mapDepth.outline && this.zoomSlab.margin === margin && this.zoomSlab.depth === mapDepth.sideDepth)
             return this.zoomSlab.path
         const area = points => {
             let a = 0
@@ -10489,7 +10489,7 @@ class Grid extends SpritesGroup {
             }
             return a
         }
-        const path = new Path2D(), depth = mapDepth.depth, wound = area(loop) > 0
+        const path = new Path2D(), depth = mapDepth.sideDepth, wound = area(loop) > 0
         const add = points => {
             const a = area(points)
             if (!a)
@@ -10504,8 +10504,9 @@ class Grid extends SpritesGroup {
         const bottom = loop.map(p => ({x: p.x, y: p.y + depth}))
         add(loop)
         add(bottom)
+        // (TASK-1583: the sides down to sideDepth, the atmospheric rock skirt's reach)
         for (const face of mapDepth.faces)
-            add([face.begin, face.end, face.bottomEnd, face.bottomBegin])
+            add([face.begin, face.end, {x: face.end.x, y: face.end.y + depth}, {x: face.begin.x, y: face.begin.y + depth}])
         if (margin > 0) {
             const band = (a, b) => {
                 const dx = b.x - a.x, dy = b.y - a.y, k = margin / Math.hypot(dx, dy)
@@ -10525,7 +10526,7 @@ class Grid extends SpritesGroup {
                 path.closePath()
             }
         }
-        this.zoomSlab = {outline: mapDepth.outline, margin, path}
+        this.zoomSlab = {outline: mapDepth.outline, margin, depth, path}
         return path
     }
     // Draws the board as the main canvas's frame at camera t draws it (its level of detail; directly: drawMapSurface) on
