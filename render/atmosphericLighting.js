@@ -94,13 +94,21 @@ const atmosphericLighting = {
     // Smooth (near-Gaussian) radial falloff of every spill layer, so no rim or hex edge shows.
     SPILL_STOPS: [[0, 1], [0.1, 0.985], [0.2, 0.94], [0.3, 0.87], [0.4, 0.77], [0.5, 0.64], [0.6, 0.49],
         [0.7, 0.33], [0.8, 0.18], [0.9, 0.06], [1, 0]],
-    // Glow of owned tiles on the stone next to them: reach in hex radii, colour mixed towards white.
-    // Owned tiles: colour gamma (deeper), a stone mix [r, g, b, amount]. A cool colour shows far
+    // Glow of owned tiles on the stone next to them: reach in hex radii, the owner's tint (colourFill) mixed towards white.
+    // TASK-1584: owned tiles are a restrained tint of the owner's colour (tint, colourFill: OKLab lightness La + Lb x L +
+    // Lc x chroma + warm[0] x cos(hue - warm[1]); chroma scale x ref x (c / ref) ^ gamma x (1 + vary harmonics); hue
+    // turned by turn[0] + turn[1] x cos(hue - turn[2]) degrees; a cool owner shifted by cool x its blueness; the rest of
+    // the territory lightened by normal), fitted (artifacts TASK-1584 tools/vopt.py) so pure red reads as the concept's
+    // pale crimson and the fight forever map's violet as its blue, chroma never above the owner's own or 0.16, and every
+    // palette's tiles stay apart (CIEDE2000 >= 15). A cool colour shows far
     // over the warm stone, so it also spills as cool light (cool: a blue multiply and a blue lift, at
     // alpha times how much bluer than red the owner is, over reach with stops [t, alpha]): the stone
     // next to the blue territory glows a luminous blue that fades out over about three cells and
     // joins the cool rim (RIM), while the board's interior keeps no blue haze.
-    TERRITORY: {reach: 2.2, mix: 0.5, depth: 2.1, stone: [215, 200, 190, 0.12],
+    TERRITORY: {reach: 2.2, mix: 0.25,
+        tint: {lightness: [-0.2106, 1.5839, -1.0], warm: [0.0266, 245.84], turn: [-14.06, 29.57, 129.22],
+            chroma: {scale: 0.4412, ref: 0.258, gamma: 0.2, vary: [-0.1463, 303.04, -0.3122, 58.71]},
+            cool: [0.0244, -0.0324], normal: 0.05},
         cool: {reach: 5, alpha: 0.75, stops: [[0, 1], [0.3, 0.75], [0.6, 0.35], [1, 0]],
             map: [170, 200, 250], gain: [0, 35, 85]}},
     // Cool sky fill on the side away from the key light: the sky's blue lights the board's right
@@ -140,8 +148,9 @@ const atmosphericLighting = {
         stone: [252, 184, 104],
         // Owned tiles' faint sheen.
         sheen: 0.1,
-        // Owned tiles carry the stone detail too: the variant's luminance about its mean, times owned, added to the colour.
-        owned: 1.4,
+        // Owned tiles carry the stone detail too: the variant's luminance about its mean, times owned, added to the colour
+        // (TASK-1584: 0.5, the stone showing through a restrained tint as in the concept, not the marble's 1.4).
+        owned: 0.5,
         // tileVariant's sandstone: each slab's shade +- shade; mottle layers [count, min radius, max radius (hex radii),
         // alpha] of light and dark patches; pits, cracks and chips per slab [min, max]; lip (lit edges) and hollow (shadowed
         // pits, cracks, edges) colours; the bevel band's width (hex radii), its lit and shadowed alphas, and the key light's
@@ -1157,7 +1166,9 @@ const atmosphericLighting = {
         // A clipped redraw (updateMapRegion) skips the glows that do not reach its clip window.
         const w = fill && this.clipWindow
         if (w && (pos.x + reach < w.x0 || pos.x - reach > w.x1 || pos.y + reach < w.y0 || pos.y - reach > w.y1)) return false
-        const color = part ? spill[part].join(',') : `${mix(owner.r)},${mix(owner.g)},${mix(owner.b)}`
+        // TASK-1584: an owner's glow is its restrained tint (colourFill, a suburb's), not its raw colour.
+        const tint = !part && this.colourFill(owner, true).match(/\d+/g).map(Number)
+        const color = part ? spill[part].join(',') : `${mix(tint[0])},${mix(tint[1])},${mix(tint[2])}`
         const colors = stops.map(([t, a]) => t + ':' + `rgba(${color},${+(a * strength).toFixed(4)})`)
         // Centred on the origin and drawn moved to the cell: one gradient a colour and reach, not one a cell, so a patch
         // of the light map uncovering or capturing a cell makes none (Grid.patchSurfaceCache, Grid.patchLitView).
@@ -1730,8 +1741,11 @@ const atmosphericLighting = {
         g.fillStyle = sheen
         g.fillRect(x - r, y - r, 2 * r, 2 * r)
     },
-    // Owned tile colour, deepened like coloured stone (TERRITORY.depth gamma, a little stone
-    // mixed in), then as the classic tile shows it: full on suburbs, lightened elsewhere.
+    // TASK-1584: an owned tile's colour, a restrained tint of the owner's colour over the stone detail (ownedTileSteps adds
+    // the variant's detail to it), TERRITORY.tint in OKLab (oklab / fromOklab): the vivid colours lose most chroma (gamma)
+    // and dull ones keep theirs apart, the hue turns (pure red towards crimson), and a cool owner (bluer than red, as
+    // TERRITORY.cool's spill) takes the board's cool light as a shift: crimson and blue fills as the concept's while every
+    // palette colour stays apart. A suburb shows the tint, the rest of the territory the tint lightened towards white.
     tileFill(hexagon) {
         return this.colourFill(hexagon.player.color, hexagon.isSuburb)
     },
@@ -1739,13 +1753,38 @@ const atmosphericLighting = {
         const key = r + ',' + g + ',' + b + (suburb ? ',s' : '')
         let fill = this.tileFills.get(key)
         if (!fill) {
-            const {depth, stone} = this.TERRITORY
-            const deep = (c, i) => 255 * (c / 255) ** depth * (1 - stone[3]) + stone[i] * stone[3]
-            const mix = (c, i) => Math.round(suburb ? deep(c, i) : deep(c, i) + (255 - deep(c, i)) * 0.4)
-            fill = `rgb(${mix(r, 0)},${mix(g, 1)},${mix(b, 2)})`
+            const {lightness: [la, lb, lc], warm: [lh, hl], turn, chroma: {scale, ref, gamma, vary: [k1, h1, k2, h2]}, cool, normal} =
+                this.TERRITORY.tint
+            const [l, a, bb] = this.oklab([r, g, b]), c = Math.hypot(a, bb), h = Math.atan2(bb, a), rad = Math.PI / 180
+            const w = Math.max(0, b - r) / 255
+            const c2 = c > 1e-6 ? scale * ref * (c / ref) ** gamma *
+                Math.max(0.05, 1 + k1 * Math.cos(h - h1 * rad) + k2 * Math.cos(2 * (h - h2 * rad))) : 0
+            const h2nd = h + (turn[0] + turn[1] * Math.cos(h - turn[2] * rad)) * rad
+            const lit = la + lb * l + lc * c2 + lh * Math.cos(h - hl * rad) * Math.min(1, c / 0.05)
+            const rgb = this.fromOklab([lit, c2 * Math.cos(h2nd) + w * cool[0], c2 * Math.sin(h2nd) + w * cool[1]])
+            const mix = v => Math.round(suburb ? v : v + (255 - v) * normal)
+            fill = `rgb(${mix(rgb[0])},${mix(rgb[1])},${mix(rgb[2])})`
             this.tileFills.set(key, fill)
         }
         return fill
+    },
+    // sRGB [0..255] -> OKLab [L, a, b], and back (clamped to 0..255).
+    oklab(rgb) {
+        const [r, g, b] = rgb.map(v => (v /= 255) <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4)
+        const l = Math.cbrt(0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b)
+        const m = Math.cbrt(0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b)
+        const s = Math.cbrt(0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b)
+        return [0.2104542553 * l + 0.7936177850 * m - 0.0040720468 * s, 1.9779984951 * l - 2.4285922050 * m + 0.4505937099 * s,
+            0.0259040371 * l + 0.7827717662 * m - 0.8086757660 * s]
+    },
+    fromOklab([L, a, b]) {
+        const l = (L + 0.3963377774 * a + 0.2158037573 * b) ** 3, m = (L - 0.1055613458 * a - 0.0638541728 * b) ** 3
+        const s = (L - 0.0894841775 * a - 1.2914855480 * b) ** 3
+        return [4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s, -1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s,
+            -0.0041960863 * l - 0.7034186147 * m + 1.7076147010 * s].map(v => {
+            v = Math.min(1, Math.max(0, v))
+            return 255 * (v <= 0.0031308 ? 12.92 * v : 1.055 * v ** (1 / 2.4) - 0.055)
+        })
     },
     // The grout: one fill of the drawn, known cells, before their inset tiles.
     drawGrout(ctx, hexagons) {
