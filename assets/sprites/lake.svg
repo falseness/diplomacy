@@ -14,7 +14,7 @@
 <stop offset="0" stop-color="#e6fffb" stop-opacity="0"/><stop offset="0.5" stop-color="#e6fffb" stop-opacity="0.55"/><stop offset="1" stop-color="#e6fffb" stop-opacity="0"/></linearGradient>
 <clipPath id="c"><path d="M84 326C84 278 130 240 200 232C270 222 330 196 410 214C470 232 496 290 480 344C462 396 380 438 290 444C200 448 130 426 102 392C90 376 84 350 84 326Z"/></clipPath>
 </defs>
-<g transform="matrix(0.9101 0 0 0.9101 7.80 -12.11)">
+<g transform="matrix(0.9101 0 0 0.9101 -4.20 -16.11)">
 <ellipse cx="282" cy="372" rx="236" ry="148" fill="#0e0b07" opacity="0.92" filter="url(#b)"/>
 <path d="M57 308a230 158 0 1 0 460 0a230 158 0 1 0 -460 0Z" fill="url(#rim)"/>
 <path d="M73 308a214 142 0 1 0 428 0a214 142 0 1 0 -428 0Z" fill="url(#wall)"/>

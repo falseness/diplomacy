@@ -67,7 +67,7 @@
 <filter id="bt" x="-30%" y="-80%" width="160%" height="260%"><feGaussianBlur stdDeviation="5"/></filter>
 <radialGradient id="sh"><stop offset="0" stop-color="#14220f" stop-opacity=".55"/><stop offset="1" stop-color="#14220f" stop-opacity="0"/></radialGradient>
 </defs>
-<g transform="matrix(0.7519 0 0 0.7519 60.92 14.34)">
+<g transform="matrix(0.7519 0 0 0.7519 40.92 14.34)">
 <ellipse cx="288" cy="570" rx="245" ry="22" fill="url(#sh)"/>
 <path d="M283 515 L284 549 Q290 555 296 549 L297 515Z" fill="#5a2a18"/>
 <path d="M291 517 L292 551 Q295 551 296 547 L297 517Z" fill="#2a120a"/>

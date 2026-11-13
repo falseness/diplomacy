@@ -12,7 +12,7 @@
 <linearGradient id="hl" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff0d2"/><stop offset="0.7" stop-color="#ffc888" stop-opacity="0.7"/><stop offset="1" stop-color="#f8a050" stop-opacity="0"/></linearGradient>
 <linearGradient id="midg" x1="0" y1="0" x2="0.4" y2="1"><stop offset="0" stop-color="#7c7e8e"/><stop offset="1" stop-color="#444654"/></linearGradient>
 </defs>
-<g transform="scale(0.888889)">
+<g transform="translate(-4 0) scale(0.888889)">
 <!-- silhouette -->
 <path d="M265 58 L300 135 L340 215 L356 244 L390 168 L425 232 L470 305 L520 362 L556 410 L530 445 L470 484 L380 506 L300 522 L200 522 L120 486 L60 456 L44 440 L72 392 L100 345 L130 300 L160 245 L195 185 L232 115 Z" fill="url(#dark)"/>
 <!-- base rock band -->
