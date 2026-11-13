@@ -10479,9 +10479,10 @@ class Grid extends SpritesGroup {
         return this.copyZoomImage(canvas, t, bitmap)
     }
     // The slab's footprint in world space grown by margin: its top face (mapDepth's outline), that face moved down by the
-    // side depth, the side faces between them and, around the top and bottom outlines and the slab's vertical edges at the
-    // outline's points, bands margin wide with round ends; each wound as the outline is, so that the path clipped (nonzero)
-    // is their union. Kept per outline and margin. Undefined without an outline.
+    // side depth, the side faces between them (TASK-1612: and the rock past the board's side vertices) and, around the top
+    // and bottom outlines and the slab's vertical edges at the outline's points, bands margin wide with round ends; each
+    // wound as the outline is, so that the path clipped (nonzero) is their union. Kept per outline and margin. Undefined
+    // without an outline.
     zoomSlabPath(margin) {
         const loop = mapDepth.outlineLoop
         if (!mapDepth.outline || !loop || loop.length < 3)
@@ -10514,6 +10515,15 @@ class Grid extends SpritesGroup {
         // (TASK-1583: the sides down to sideDepth, the atmospheric rock skirt's reach)
         for (const face of mapDepth.faces)
             add([face.begin, face.end, {x: face.end.x, y: face.end.y + depth}, {x: face.begin.x, y: face.begin.y + depth}])
+        // (TASK-1612: and past the board's side vertices, as far as an open face's rock reaches, MapDepth.rockSideReach)
+        const reach = MapDepth.rockSideReach()
+        for (const face of mapDepth.faces) {
+            const open = face.open || '', e = face.end, b = face.begin
+            if (open.includes('e'))
+                add([{x: e.x - reach, y: e.y}, e, {x: e.x, y: e.y + depth}, {x: e.x - reach, y: e.y + depth}])
+            if (open.includes('b'))
+                add([b, {x: b.x + reach, y: b.y}, {x: b.x + reach, y: b.y + depth}, {x: b.x, y: b.y + depth}])
+        }
         if (margin > 0) {
             const band = (a, b) => {
                 const dx = b.x - a.x, dy = b.y - a.y, k = margin / Math.hypot(dx, dy)
