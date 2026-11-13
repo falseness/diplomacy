@@ -33,8 +33,10 @@
         const observedSegment = saved ? segment : lastInput === null ? 'idle-before' : start-lastInput<250 ? 'zooming' : 'settled-after'
         frame = {timestamp, start, segment:observedSegment, input: lastInput !== null && start-lastInput<250 ? lastInputType : null, visible: !document.hidden, focused: document.hasFocus(), camera: camera(), renderMs: 0, ...counters,
             surfaceCacheRevision:grid.surfaceCacheRevision, surfaceCacheStages:grid.surfaceCacheStages, surfaceCacheThreshold:grid.getSurfaceCacheGeometry().scale, rasterizations: atmosphericBackground.rasterizations, cacheBytes: atmosphericBackground.bytes()}
+        taskSources.enter('update')
         try { return originalLoop(timestamp) }
         finally {
+            taskSources.exit()
             if (report.board === null && (report.board = liveBoard()) !== null) Object.assign(report, {flag: otherSettings.atmosphericVisuals, initialCamera: frame.camera})
             Object.assign(frame,counters,{surfaceCacheRevision:grid.surfaceCacheRevision,surfaceCacheStages:grid.surfaceCacheStages,rasterizations:atmosphericBackground.rasterizations,cacheBytes:atmosphericBackground.bytes()})
             frame.end = performance.now()
@@ -86,6 +88,8 @@
             // TASK-1574 (ZOOMFADE 1/5): swapPops, fades, settleMs, zoomExactCoverage and the frame's squares (squareFrame), from
             // swapRaw when the capture stops (swapFinish).
             frame.work.swapRaw = swapRaw()
+            // TASK-1614: the main thread's JS time since the previous frame by source (exclusive ms, taskSources below).
+            frame.work.taskMs = taskSources.frameEnd()
             work = freshWork()
             if (frame.gapMs > 50) report.longGaps.push({timestamp, gapMs: frame.gapMs})
             report.samples.push(frame)
@@ -215,20 +219,168 @@
         coverageLast = c && c.serial === g.drawSerial ? {mode: c.mode, kind: c.kind, total: c.total, exact: c.exact, stretched: c.stretched, live: c.live, bare: c.bare, standIn: c.standIn, old: c.old} : {mode: 'standard'}
         return coverageLast
     }
+    // TASK-1614 (diagnostic, only while a capture is active): the main thread's JS time by source, and the long tasks
+    // (PerformanceObserver 'longtask', over 50 ms) named by it. Wrappers below charge the time inside them to their source,
+    // exclusively (a nested source's time is its own, not its caller's): sprite (sprite raster and cache), lit-tiles (the
+    // lit view's tiles and a new board's held start), sprite-image (an <img> drawn: an SVG sprite decoded / rasterized),
+    // light-map, owned-tiles, surface-cache (its build / split / patch steps),
+    // sector-worker (the Worker's messages received) and sector-main (sectors built on the main thread), sky, tutorial-ui,
+    // game-start (GameManager.start: the board made), frame (drawAll outside the others) and update (the game loop outside
+    // drawAll). Each long task gets by: {source: ms inside it} and other (its time no wrapper saw: style, layout, paint and
+    // the canvas raster flushed at the frame's end, GC, unwrapped code). work.taskMs: the same per frame (since the frame
+    // before). report.longTasks: [{t, ms, by, other}].
+    const taskSources = (() => {
+        const stack = [], segments = [], perFrame = {}
+        let mark = 0, observer = null, target = null, wrapped = false
+        const charge = now => {
+            const top = stack[stack.length - 1]
+            if (top !== undefined && now > mark) {
+                perFrame[top] = (perFrame[top] || 0) + now - mark
+                const last = segments[segments.length - 1]
+                if (last && last.s === top && mark - last.b < 2) last.b = now
+                else segments.push({s: top, a: mark, b: now})
+            }
+            mark = now
+        }
+        const enter = source => { if (!active) return; charge(performance.now()); stack.push(source) }
+        const exit = () => { if (!stack.length) return; charge(performance.now()); stack.pop() }
+        const wrap = (obj, name, source) => {
+            const fn = obj && obj[name]
+            if (typeof fn !== 'function' || fn.taskSource || /^(async\s+)?(function\s*)?\*/.test(Function.prototype.toString.call(fn).trim()) ||
+                    fn.constructor?.name === 'GeneratorFunction')
+                return
+            const w = function(...args) {
+                if (!active) return fn.apply(this, args)
+                enter(source)
+                try { return fn.apply(this, args) }
+                finally { exit() }
+            }
+            w.taskSource = source
+            obj[name] = w
+        }
+        const wrapAll = () => {
+            if (wrapped) return
+            wrapped = true
+            const G = typeof Grid !== 'undefined' ? Grid.prototype : null
+            const L = typeof atmosphericLighting !== 'undefined' ? atmosphericLighting : null
+            if (typeof SpriteCache !== 'undefined') for (const n of ['build', 'restockAtRest', 'beginFrame', 'makeRoom']) wrap(SpriteCache, n, 'sprite')
+            // (a global function declaration called by name sees the window property)
+            for (const n of ['drawSupersampledImage', 'loadSprites', 'whenGameSpritesReady']) wrap(window, n, 'sprite')
+            if (L) {
+                for (const n of ['spillSprite', 'liftSprite', 'tileVariant']) wrap(L, n, 'sprite')
+                for (const n of ['ownedTile', 'prewarmOwnedTiles', 'tileFill']) wrap(L, n, 'owned-tiles')
+                for (const n of ['stepLightMap', 'lightMap', 'build', 'updateMapRegion', 'prewarmGlows', 'finishLightMap', 'unstashMap']) wrap(L, n, 'light-map')
+            }
+            if (G) {
+                for (const n of ['litTile', 'holdStartFrame', 'stepLitView', 'queueLitTiles', 'setLitView', 'litLayerStep', 'drawLitLayerRaster', 'renderLitCellSprites']) wrap(G, n, 'lit-tiles')
+                for (const n of ['surfaceCacheBuildStep', 'surfaceSplitStep', 'surfacePatchStep', 'standInPreviewStep', 'patchSurfaceCache', 'startSurfaceCacheBuild']) wrap(G, n, 'surface-cache')
+                for (const n of ['buildUnitSector']) wrap(G, n, 'sector-main')
+            }
+            if (typeof SectorWorker !== 'undefined') wrap(SectorWorker, 'receive', 'sector-worker')
+            if (typeof atmosphericBackground !== 'undefined') for (const n of ['rasterSteps', 'decorateSteps', 'syncKey']) wrap(atmosphericBackground, n, 'sky')
+            if (typeof TutorialManager !== 'undefined') for (const n of ['start', 'switchTo', 'drawLoading', 'checkResult']) wrap(TutorialManager, n, 'tutorial-ui')
+            for (const target of [typeof tutorialResultInterface !== 'undefined' && tutorialResultInterface, typeof tutorialPauseInterface !== 'undefined' && tutorialPauseInterface])
+                if (target) for (const n of ['draw', 'show', 'click', 'layOut', 'place']) wrap(target, n, 'tutorial-ui')
+            if (typeof GameManager !== 'undefined') wrap(GameManager, 'start', 'game-start')
+            // An <img> drawn on a canvas (the sprites' SVG images: decoded and rasterized at the size drawn, on a first draw at
+            // that size) is sprite-image time, whatever function drew it.
+            for (const proto of [CanvasRenderingContext2D.prototype, typeof OffscreenCanvasRenderingContext2D !== 'undefined' && OffscreenCanvasRenderingContext2D.prototype]) {
+                if (!proto) continue
+                const drawImage = proto.drawImage
+                proto.drawImage = function(image) {
+                    if (!active || !(image instanceof HTMLImageElement)) return drawImage.apply(this, arguments)
+                    enter('sprite-image')
+                    try { return drawImage.apply(this, arguments) }
+                    finally { exit() }
+                }
+            }
+        }
+        const name = entry => {
+            const a = entry.startTime, b = a + entry.duration, by = {}
+            let seen = 0
+            for (let i = segments.length - 1; i >= 0; --i) {
+                const x = segments[i]
+                if (x.b <= a - 60000) break
+                const o = Math.min(b, x.b) - Math.max(a, x.a)
+                if (o > 0) { by[x.s] = (by[x.s] || 0) + o; seen += o }
+            }
+            const round = v => Math.round(v * 10) / 10
+            return {t: round(a), ms: round(entry.duration), by: Object.fromEntries(Object.entries(by).map(([k, v]) => [k, round(v)])), other: round(Math.max(0, entry.duration - seen))}
+        }
+        return {
+            enter, exit,
+            frameEnd() {
+                const out = {}
+                for (const k in perFrame) { out[k] = Math.round(perFrame[k] * 10) / 10; delete perFrame[k] }
+                // segments older than a minute are past any long task still to be delivered
+                const old = performance.now() - 60000
+                let drop = 0
+                while (drop < segments.length && segments[drop].b < old) ++drop
+                if (drop) segments.splice(0, drop)
+                return out
+            },
+            start(report) {
+                wrapAll()
+                target = report
+                report.longTasks = []
+                stack.length = 0
+                segments.length = 0
+                for (const k in perFrame) delete perFrame[k]
+                if (typeof PerformanceObserver === 'function' && PerformanceObserver.supportedEntryTypes?.includes('longtask')) {
+                    observer = new PerformanceObserver(list => { if (target) for (const entry of list.getEntries()) target.longTasks.push(name(entry)) })
+                    observer.observe({type: 'longtask'})
+                    report.longTaskObserver = true
+                }
+                else report.longTaskObserver = false
+            },
+            stop() {
+                if (observer) {
+                    if (target) for (const entry of observer.takeRecords()) target.longTasks.push(name(entry))
+                    observer.disconnect()
+                    observer = null
+                }
+                target = null
+                stack.length = 0
+            }
+        }
+    })()
     drawAll = function(...args) {
         if (!frame) return originalDraw.apply(this, args)
         frame.camera = camera() // Camera after the existing update, actually used by this draw.
         const start = performance.now()
         if (typeof turnPlaybackView !== 'undefined') turnPlaybackView.heldFrame = false
         if (typeof grid !== 'undefined' && grid) grid.cacheHeldFrame = false
+        taskSources.enter('frame')
+        holdNote = null
+        boardDrawn = false
         try { return originalDraw.apply(this, args) }
         finally {
+            taskSources.exit()
             frame.renderMs += performance.now() - start
             // TASK-1519: a turn playback's held start frame (turnPlaybackView.holdFrame: nothing drawn).
             if (typeof turnPlaybackView !== 'undefined' && turnPlaybackView.heldFrame && work.renderPath === null) work.renderPath = 'playback-held'
             // TASK-1520: a frame held while the surface cache is built (Grid.holdCacheFrame: nothing drawn).
             else if (typeof grid !== 'undefined' && grid && grid.cacheHeldFrame && work.renderPath === null) work.renderPath = 'cache-held'
+            // TASK-1614: every frame names the path that drew it. A frame drawAll returned from before drawing the board (a hold
+            // not labelled above) or whose board took no labelled path is named by what it did (renderPathOf).
+            if (work.renderPath === null) work.renderPath = renderPathOf()
         }
+    }
+    // TASK-1614: the name of a frame's path when no drawing wrapper named it: the hold drawAll returned at (holdNote: start-held,
+    // zoom-held); a board drawn (grid.draw ran in this drawAll) without a wrapper naming it: the surface it drew by its own
+    // record (Grid.frameSurface; work.pathFallback marks such frames); no board drawn ('no-board': no grid, or drawMain not
+    // reached).
+    let holdNote = null, boardDrawn = false
+    const SURFACE_PATHS = {lit: 'lit-tiles', standin: 'stand-in', fill: 'ground-fill', true: 'surface-cache', false: 'direct'}
+    const renderPathOf = () => {
+        let path = holdNote
+        if (!path && boardDrawn) {
+            path = SURFACE_PATHS[String(grid.frameSurface)] || 'board:' + String(grid.frameSurface)
+            work.pathFallback = true
+        }
+        holdNote = null
+        boardDrawn = false
+        return path || 'no-board'
     }
     // TASK-1549 (diagnostic, only while a capture is active): canvases created and ImageBitmaps made per frame by creation
     // site ('fn file:line < caller', the first two client frames of the stack; work.canvasSites / work.bitmapSites), and
@@ -608,6 +760,35 @@
             return putImageData.apply(this, arguments)
         })(proto.putImageData)
     }
+    // TASK-1614: why a recorded still frame (Grid.stillFrameCandidate) was not held (Grid.makeLodFrame): not steady (the
+    // surface it drew, a job changing a buffer in place, the light not baked into the cache, fades, a path or loading image
+    // drawn), no frame before it to repeat, or its key or calls differ from that frame's (the first difference: key index,
+    // call count, or the first differing call's name and argument index / property).
+    const stillMissOf = (g, recorder, last) => {
+        if (g.frameSurface === true) {
+            if (g.fadesPending?.()) return 'fades'
+            for (const name of ['surfaceCacheBuild', 'surfacePatchJob', 'surfaceLayerJob', 'surfaceSplitJob']) if (g[name]) return 'job:' + name
+            if (g.litView?.layerJob) return 'job:litLayer'
+            if (otherSettings.atmosphericVisuals && !g.surfaceCacheLit) return 'cache-unlit'
+            if (recorder && !g.recordingSteady(recorder)) return 'unsteady-args'
+        }
+        else if (!g.stillFrameSteady(recorder)) return 'unsteady:' + String(g.frameSurface)
+        if (!last) return 'no-previous'
+        if (last.serial !== g.drawSerial - 1) return 'not-consecutive'
+        const a = recorder.key, b = last.key
+        if (a.length !== b.length) return 'key-length'
+        for (let k = 0; k < a.length; ++k) if (a[k] !== b[k]) return 'key:' + k
+        if (recorder.calls.length !== last.calls.length) return 'calls:' + recorder.calls.length + '/' + last.calls.length
+        for (let k = 0; k < recorder.calls.length; ++k) {
+            const x = recorder.calls[k], y = last.calls[k]
+            if (x.set !== y.set || x.name !== y.name) return 'call:' + (x.set !== undefined ? 'set ' : '') + x.name + '/' + y.name
+            if (x.set !== undefined) { if (x.value !== y.value) return 'call:' + x.name + '='; continue }
+            if (x.args.length !== y.args.length) return 'call:' + x.name + ' args'
+            for (let i = 0; i < x.args.length; ++i) if (x.args[i] !== y.args[i])
+                return 'call:' + x.name + '#' + i + (x.args[i] && typeof x.args[i] === 'object' ? ' ' + (x.args[i].constructor?.name || 'object') : '')
+        }
+        return 'other'
+    }
     // The board's render path: the surface cache or the direct draw, and the overlay layer.
     const wrapGrid = () => {
         const proto = typeof Grid !== 'undefined' && Grid.prototype
@@ -765,10 +946,26 @@
             const endLod = proto.endLodFrame
             proto.endLodFrame = function(...args) {
                 // TASK-1376: a still frame above the threshold held the same way.
-                const still = this.stillHolds
+                const still = this.stillHolds, recorded = this.stillRecording, last = this.lodFrame
                 const held = endLod.apply(this, args)
                 if (active && held) work.renderPath = this.stillHolds !== still ? 'still-held' : 'lod-held'
+                // TASK-1614: why a recorded still frame was made again instead of held (stillMissOf).
+                else if (active && recorded && this === grid) work.stillMiss = stillMissOf(this, args[1], last)
                 return held
+            }
+        }
+        // TASK-1614: a frame not recorded as a still frame (beginLodFrame null) though the camera is at rest: why
+        // (stillFrameCandidate's refusal).
+        if (proto.beginLodFrame) {
+            const beginLod = proto.beginLodFrame
+            proto.beginLodFrame = function(ctx, ...rest) {
+                const recorder = beginLod.call(this, ctx, ...rest)
+                if (active && !recorder && this === grid) {
+                    const screen = typeof gameEvent !== 'undefined' ? gameEvent.screen : undefined
+                    work.stillMiss = 'not-recorded:' + (!Grid.stillFrames ? 'off' : debug ? 'debug' : !screen ? 'no-screen' : screen.surfaceMoving ? 'moving' :
+                        screen.zoomGesture ? 'zoom' : zoomRasterTweens() ? 'tweens' : this.fadesPending?.() ? 'fades' : typeof mainCanvas === 'undefined' || ctx.canvas !== mainCanvas ? 'canvas' : 'other')
+                }
+                return recorder
             }
         }
         // TASK-1376: a held frame draws the board's snapshot (surface, buildings, units, texts) in one drawImage.
@@ -819,6 +1016,22 @@
             }
         }
         sectorCounters.wrap(proto)
+        // TASK-1614: the holds drawAll returns at before drawing (holdStartFrame: a new board's first frame kept while its lit
+        // tiles are built; holdZoomFrame: a zoom gesture's raster made in steps), and whether grid.draw ran (renderPathOf).
+        for (const [name, label] of [['holdStartFrame', 'start-held'], ['holdZoomFrame', 'zoom-held']]) {
+            const hold = proto[name]
+            if (!hold) continue
+            proto[name] = function(...args) {
+                const held = hold.apply(this, args)
+                if (active && held) holdNote = label
+                return held
+            }
+        }
+        const gridDraw = proto.draw
+        proto.draw = function(...args) {
+            if (active && this === grid) boardDrawn = true
+            return gridDraw.apply(this, args)
+        }
         proto.drawMapSurface.visualsPerf = true
     }
     // TASK-1557: full rebuilds of the board's kept layers, counted in the frame they are found in (the tasks since the previous
@@ -989,11 +1202,13 @@
         sourceIdentity.then(sources=>{target.sourceHashes=sources})
         // TASK-1574: Grid.frameView for the swap counters while sampling.
         if (typeof Grid !== 'undefined') Grid.noteFrameViews = true
+        taskSources.start(report)
         active = true
         return report
     }
     function stop() {
         active = false
+        taskSources.stop()
         if (typeof Grid !== 'undefined') Grid.noteFrameViews = false
         if (!report) return null
         swapFinish(report.samples)

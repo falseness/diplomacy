@@ -757,7 +757,11 @@ const atmosphericLighting = {
         this.lastMapRegion = {regions}
         const kept = ['map', 'gain'].map(name =>
             regions.map(({inner, outer}, k) => copyCanvasRing(this[name], outer, inner, this.regionScratch, name + k)))
+        // TASK-1614: the map and gain this update draws on; released or replaced between two steps (a new board's sky key,
+        // a new light map), the update is given up (its canvases are gone; resuming it threw on the released map).
+        const map = this.map, gain = this.gain, gone = () => this.map !== map || this.gain !== gain
         yield
+        if (gone()) return false
         ++this.mapEdits
         const g = this.map.getContext('2d'), k = this.gain.getContext('2d')
         for (const c of [g, k]) {
@@ -789,6 +793,7 @@ const atmosphericLighting = {
                 if (done)
                     break
                 yield
+                if (gone()) return false
             }
         } finally {
             this.clipWindow = clip
@@ -796,6 +801,7 @@ const atmosphericLighting = {
             k.restore()
         }
         yield
+        if (gone()) return false
         for (const ring of kept[0]) restoreCanvasRing(this.map, ring)
         for (const ring of kept[1]) restoreCanvasRing(this.gain, ring)
         ++this.mapEdits

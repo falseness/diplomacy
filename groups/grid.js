@@ -4317,10 +4317,13 @@ class Grid extends SpritesGroup {
     // What the scene layer drew from: the cache, its shown raster and revision, the cell layer's, the shadow and bounds,
     // and the cell texts (drawCellText: debug's coordinate texts, the logic texts on and their revision).
     // (TASK-1561: SCENE_LAYER_KEY_DEBUG is the index of debug in it.)
+    // TASK-1614: a board whose cache another board took over (adoptSurfaceCache: its bounds moved too) or not built yet has no
+    // bounds; its key then matches no layer or sector made from a cache (their keys hold that cache), and drawing that board
+    // again no longer throws (the exception stopped the game loop: no frame until the next game).
     sceneLayerKey() {
         const b = this.surfaceCacheBounds
         return [this.surfaceCache, this.surfaceCacheShown, this.surfaceCacheRevision, this.cellLayerRevision, mapDepth.atmosphericShadow,
-            b.left, b.top, b.width, b.height, debug, this.drawLogicText, Grid.logicTextRevision]
+            b?.left, b?.top, b?.width, b?.height, debug, this.drawLogicText, Grid.logicTextRevision]
     }
     sceneLayerKeyHolds(layer) {
         const key = this.sceneLayerKey()
