@@ -1,7 +1,7 @@
 {
   "format": 1,
   "algorithm": "sha256(path NUL bytes NUL ...)",
-  "rulesVersion": "40a9e6456826a353b34d57a3b44c5f61bfbf5f860a871f884de524663b98ee50",
+  "rulesVersion": "1e1a9da3123826b84c34a98bf715986e22e1d0ed4e796c27f98b5c5b6f333da0",
   "scripts": [
     {
       "path": "options/assert.js",
@@ -265,8 +265,8 @@
     },
     {
       "path": "sprites/border.js",
-      "sha256": "dd9698f87fada8ce2810cae975a021338d51b5a5bd16b9dad54eee1922ff7948",
-      "bytes": 79824
+      "sha256": "392d2f2902fc30d4edf097339663e11a6068536ebe3e354e067a8c5609a97193",
+      "bytes": 79647
     },
     {
       "path": "events/geteventpos.js",
