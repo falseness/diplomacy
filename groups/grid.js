@@ -3394,6 +3394,12 @@ class Grid extends SpritesGroup {
         }
         for (const name of SURFACE_STATE_FIELDS)
             from[name] = undefined
+        // TASK-1630: from keeps no picture drawn over the cache it gave away (its cache unit sectors' ground, its scene layer):
+        // shown again without a cache (a turn playback's end whose last board's cache did not come back at once:
+        // its split, patch or layer job under way), its level frames read them as its own (stretchable -> cacheSectorKey of
+        // a Grid without surfaceCacheBounds: the 'reading left' TypeError of the live client).
+        from.dropCacheUnitSectors('adopted')
+        from.dropSceneLayer()
         from.surfaceCacheDirty = true
         ++from.surfaceCacheRevision
         ++this.surfaceCacheRevision
@@ -6047,6 +6053,34 @@ class Grid extends SpritesGroup {
         this.unitSectorWanted = undefined
         this.unitSectorBuilding = undefined
     }
+    // TASK-1630: the unit sectors of kind 'cache' (drawn over the surface cache: their ground is the cache's) released, in
+    // both sets (unitSectorAlt's too), with the builds of that kind under way here or in the Worker: the surface cache left
+    // this Grid (adoptSurfaceCache's from), so no such entry is made for this Grid's cache any more.
+    dropCacheUnitSectors(reason) {
+        let dropped = 0
+        for (const cache of [this.unitSectors, this.unitSectorAlt?.cache]) {
+            if (!cache?.entries.size)
+                continue
+            for (const entry of [...cache.entries.values()])
+                if (entry.kind === 'cache' && cache.remove(entry.key))
+                    ++dropped
+        }
+        if (this.unitWorkerSectors)
+            for (const [key, rec] of [...this.unitWorkerSectors])
+                if (rec.kind === 'cache')
+                    this.unitWorkerSectors.delete(key)
+        if (this.unitSectorBuilding?.plan.kind === 'cache')
+            this.unitSectorBuilding = undefined
+        if (this.unitSectorWanted?.plan.kind === 'cache')
+            this.unitSectorWanted = undefined
+        if (dropped) {
+            this.unitSectorWork.cacheDropped = (this.unitSectorWork.cacheDropped || 0) + dropped
+            this.unitSectorClears.push('cache:' + reason)
+            if (this.unitSectorClears.length > 64)
+                this.unitSectorClears.splice(0, 32)
+        }
+        return dropped
+    }
     // TASK-1561: an empty unit sector cache (LIT_TILE squares, UNIT_SECTOR_BYTES, UNIT_SECTOR_PHONE_BYTES on a phone).
     newUnitSectorCache() {
         return new SectorCache({size: LIT_TILE, pad: 0, budget: this.unitSectorBudget()})
@@ -6482,8 +6516,11 @@ class Grid extends SpritesGroup {
     stretchable(entry) {
         if (entry.dirty || !entry.image)
             return false
+        // TASK-1630: a cache sector's ground is only this Grid's surface cache: without one (none built, or given away:
+        // adoptSurfaceCache) no key is made (cacheSectorKey reads the cache's bounds) and only an overlay (no ground) stands.
         if (entry.kind === 'cache')
-            return entry.ground === UNIT_OVERLAY || sameKeyArray(entry.tag, this.cacheSectorKey())
+            return entry.ground === UNIT_OVERLAY || !!this.surfaceCache && !!this.surfaceCacheBounds &&
+                sameKeyArray(entry.tag, this.cacheSectorKey())
         return entry.epoch === this.unitGroundEpoch && !(entry.ground?.parts && entry.ground.parts[4] !== this.cellLayerRevision)
     }
     // The levels of the kept sectors that can stand in at level (not level itself), best first: the finer ones (the next finer
@@ -9458,8 +9495,10 @@ class Grid extends SpritesGroup {
             this.litTilesQueued = true
             setTimeout(gridTask(() => {
                 this.litTilesQueued = false
+                // (TASK-1630: litSplitHolds drops a split made for another rest snapshot or layer and holds: view.splitJob
+                // read again, else cellSplitStep(undefined) threw 'reading prep'.)
                 if (view !== this.litView || !view.splitJob || view.patch || gameEvent.screen.surfaceZooming || this.litTaskDefers(snapshots, true) ||
-                        !this.litSplitHolds(view))
+                        !this.litSplitHolds(view) || !view.splitJob)
                     return
                 if (this.cellSplitStep(view.splitJob, SURFACE_STEP_MS))
                     view.splitJob = undefined
