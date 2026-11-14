@@ -47,6 +47,8 @@
             frame.motion = !previous ? 'still' : frame.camera.scale !== previous.camera.scale ? 'zoom' :
                 frame.camera.offset.x !== previous.camera.offset.x || frame.camera.offset.y !== previous.camera.offset.y ? 'pan' : 'still'
             if (!saved) frame.segment = frame.motion
+            // TASK-1624: the turn playback's window and step of the frame (playbackTrace).
+            frame.playback = playbackTrace.frame(frame)
             const round = v => Math.round(v * 1e4) / 1e4
             frame.work = {...work, blendedMegapixels: round(work.blendedMegapixels), blendedMainMegapixels: round(work.blendedMainMegapixels),
                 blendedByOp: Object.fromEntries(Object.entries(work.blendedByOp).map(([k, v]) => [k, round(v)])),
@@ -1151,6 +1153,284 @@
             reset() { seen = null; litCause = null; litDropReason = 'other'; viewDrop = null }
         }
     })()
+    // TASK-1624 (ENEMY TURN 1/6): what an AI turn's playback (turnPlaybackView) changes and rebuilds, step by step
+    // (report.playbackTrace; each sample's playback: {w, r, s, ph}, its window). A window is the time from one playback
+    // event to the next: 'pre' (the capture's start), 'begin' (turnPlaybackView.begin), 'r<R>:load' (an AI turn's snapshot
+    // loaded: a new Grid), 'r<R>:s<S>' (step S: its glide from pace(), then its apply and wait), 'end' (the computed board
+    // back). Per window: board (the Grid instance's number), the cells it changed (content: owner or unit; hp; buildings;
+    // lamps: a light kind shown, hidden or replaced; fog: the viewer's fog flipped), the tiles they touch at the camera's
+    // level (each changed cell's hex box, its sprites' height above it, an owner change's territory glow, a lamp change's
+    // light reach LAMP_REACH; grown as Grid.staleSectorsIn grows), the lit tiles and unit sectors stored (rebuilt) in it, each
+    // with its cause, the surface cache's builds and patches, the lit patches and the sector clears. A tile's cause:
+    // board-reload (its square was built on another Grid before: the board swap lost it), step / fog (on the same board,
+    // a step's changed cells / a fog flip since its last build reach it), clear:<reason> (Grid.clearSectors / clearUnitSectors
+    // since its last build), glide-new (its first build, the camera moving in the window or the one before: a square new in
+    // view), glide-again (built on this board before, no change reaches it, the camera moving: evicted or dropped), new (its
+    // first build, the camera still) or other. Also per window: the levels built at, the refusals of the surface cache's and the
+    // lit view's patches (with patchSurfaceCache's early returns: early-<why>).
+    const playbackTrace = (() => {
+        const LAMP_REACH = 4, boards = new WeakMap()
+        let lightRebuildsAt = null, boardSeq = 0, trace = null, win = null, wrapped = false, seq = 0, built = new Map(), marks = [], before = null
+        const boardId = g => { if (!g) return null; if (!boards.has(g)) boards.set(g, ++boardSeq); return boards.get(g) }
+        const tileSize = () => typeof LIT_TILE !== 'undefined' ? LIT_TILE : 256
+        const level = () => grid?.litView?.sectorLevel || grid?.litView?.a || (typeof mainCtx !== 'undefined' ? mainCtx.getTransform().a : canvas.scale)
+        const sig = e => !e || (e.isEmpty && e.isEmpty()) ? '' : e.name + '|' + JSON.stringify(e.playerColor ?? null)
+        const lampOf = b => { try { return b && !(b.isEmpty && b.isEmpty()) && atmosphericLighting.emitsLight(b) ? (b.isDemonPortal ? 'demonPortal' : b.name) : '' } catch (_) { return '' } }
+        // The board's cells now: per cell index (i x height + j) owner, unit, hp, building, lamp, the viewer's fog.
+        const snap = () => {
+            const g = grid, out = {board: g, w: g.arr.length, h: g.arr[0].length, owner: [], unit: [], hp: [], building: [], lamp: [], fog: []}
+            for (let i = 0; i < out.w; ++i)
+                for (let j = 0; j < out.h; ++j) {
+                    const cell = g.arr[i][j]
+                    out.owner.push(cell.hexagon.unknown ? '?' : JSON.stringify(cell.hexagon.playerColor ?? null))
+                    out.unit.push(sig(cell.unit))
+                    out.hp.push((cell.unit && !cell.unit.isEmpty?.() ? cell.unit.hp : '') + '|' + (cell.building && !cell.building.isEmpty?.() ? cell.building.hp : ''))
+                    out.building.push(sig(cell.building))
+                    out.lamp.push(lampOf(cell.building))
+                    out.fog.push(typeof isFogOfWar !== 'undefined' && isFogOfWar && g.fogOfWar ? (g.fogOfWar[i]?.[j] ? 1 : 0) : 1)
+                }
+            return out
+        }
+        // World boxes the changed cells reach; their tiles at the camera's level.
+        const changeRects = (cells) => {
+            const r = basis.r, hex = 1.1 * r, T = atmosphericLighting.TERRITORY, glow = Math.max(T.reach, T.cool?.reach || 0) * r
+            const rects = []
+            for (const [i, j, kinds] of cells) {
+                const c = grid.arr[i][j].hexagon.calcPos()
+                let reach = hex
+                if (kinds.includes('o')) reach = Math.max(reach, glow)
+                if (kinds.includes('l')) reach = Math.max(reach, LAMP_REACH * r)
+                // (a unit's or building's sprite stands up to a hex radius above its cell)
+                rects.push({x0: c.x - reach, y0: c.y - reach - (kinds.includes('l') ? 0 : r), x1: c.x + reach, y1: c.y + reach, fog: kinds === 'f'})
+            }
+            return rects
+        }
+        const tilesOf = (rects, a) => {
+            const L = tileSize(), grow = (3 + 4 * (typeof LIT_EDGE_BLOCK !== 'undefined' ? LIT_EDGE_BLOCK : 8)) / a, set = new Set()
+            for (const q of rects)
+                for (let u = Math.floor((q.x0 - grow) * a / L); u <= Math.floor((q.x1 + grow) * a / L); ++u)
+                    for (let v = Math.floor((q.y0 - grow) * a / L); v <= Math.floor((q.y1 + grow) * a / L); ++v)
+                        set.add(u + ',' + v)
+            return set
+        }
+        const diff = (was, now) => {
+            const cells = [], count = {content: 0, hp: 0, buildings: 0, lamps: 0, fog: 0}
+            if (!was || was.w !== now.w || was.h !== now.h) return {cells, count, sizeChanged: !!was}
+            for (let k = 0; k < now.owner.length; ++k) {
+                let kinds = ''
+                if (was.owner[k] !== now.owner[k]) kinds += 'o'
+                if (was.unit[k] !== now.unit[k]) kinds += 'u'
+                if (was.hp[k] !== now.hp[k]) kinds += 'h'
+                if (was.building[k] !== now.building[k]) kinds += 'b'
+                if (was.lamp[k] !== now.lamp[k]) kinds += 'l'
+                if (was.fog[k] !== now.fog[k]) kinds += 'f'
+                if (!kinds) continue
+                if (/[ou]/.test(kinds)) ++count.content
+                if (kinds.includes('h')) ++count.hp
+                if (kinds.includes('b')) ++count.buildings
+                if (kinds.includes('l')) ++count.lamps
+                if (kinds.includes('f')) ++count.fog
+                cells.push([Math.floor(k / now.h), k % now.h, kinds])
+            }
+            return {cells, count}
+        }
+        const open = (key, extra = {}) => {
+            if (!trace) return
+            win = {w: trace.windows.length, key, board: boardId(typeof grid !== 'undefined' ? grid : null), t0: Math.round(performance.now()), ...extra,
+                cells: null, touched: null, rebuilt: {lit: 0, unit: 0}, rebuiltTouched: {lit: 0, unit: 0},
+                causes: {lit: {}, unit: {}}, levels: {}, surface: {full: 0, patch: 0, litPatch: 0}, refusals: {}, clears: [], glideFrames: 0, motionFrames: 0, frames: 0,
+                keys: {lit: new Set(), unit: new Set()}}
+            trace.windows.push(win)
+        }
+        // The changes since before (the window's start) on the same board: the window's cells and touched tiles.
+        const record = (was) => {
+            if (!trace || !win || !grid) return
+            const now = snap(), d = diff(was, now)
+            const a = level(), rects = changeRects(d.cells)
+            win.board = boardId(now.board)
+            win.cells = d.count
+            if (d.sizeChanged) win.cells.sizeChanged = true
+            win.changed = d.cells.length <= 400 ? d.cells : d.cells.length
+            const touched = tilesOf(rects.filter(q => !q.fog), a), fogTiles = tilesOf(rects.filter(q => q.fog), a)
+            for (const k of fogTiles) touched.add(k)
+            win.touched = {a: Math.round(a * 1e4) / 1e4, tiles: touched.size, fogOnly: [...fogTiles].filter(k => !tilesOf(rects.filter(q => !q.fog), a).has(k)).length}
+            win.touchedKeys = touched
+            win.touchedRects = rects
+            const id = ++seq
+            for (const q of rects) marks.push({seq: id, board: now.board, rect: q, kind: q.fog ? 'fog' : 'step'})
+            if (marks.length > 20000) marks.splice(0, marks.length - 20000)
+            before = now
+        }
+        const inRect = (q, x0, y0, x1, y1) => q.x0 < x1 && q.x1 > x0 && q.y0 < y1 && q.y1 > y0
+        const tileBuilt = (kind, a, u, v, board) => {
+            if (!trace || !win) return
+            const L = tileSize(), x0 = u * L / a, y0 = v * L / a, x1 = (u + 1) * L / a, y1 = (v + 1) * L / a
+            const id = kind + ':' + Math.round(a * 1e4) + ':' + u + ':' + v, prev = built.get(id), b = boardId(board)
+            // (a glide's squares may arrive in the window after it: the window before counts too)
+            const last = trace.windows[win.w - 1], moving = !!(win.motionFrames || win.glideFrames || last && (last.motionFrames || last.glideFrames))
+            let cause
+            if (!prev) cause = moving ? 'glide-new' : 'new'
+            else if (prev.board !== b) cause = 'board-reload'
+            else {
+                const hit = marks.filter(m => m.seq > prev.seq && m.board === board && inRect(m.rect, x0, y0, x1, y1))
+                const clear = trace.clears.filter(c => c.seq > prev.seq && c.board === b && (kind === 'lit' ? c.what === 'sectors' : c.what === 'unitSectors')).at(-1)
+                cause = hit.some(m => m.kind === 'step') ? 'step' : hit.length ? 'fog' : clear ? 'clear:' + clear.reason :
+                    moving ? 'glide-again' : 'other'
+            }
+            built.set(id, {board: b, seq})
+            const key = Math.round(a * 1e4) + ':' + u + ',' + v, lv = kind + ':' + Math.round(a * 1e4) / 1e4
+            win.causes[kind][cause] = (win.causes[kind][cause] || 0) + 1
+            win.levels[lv] = (win.levels[lv] || 0) + 1
+            if (!win.keys[kind].has(key)) {
+                win.keys[kind].add(key)
+                ++win.rebuilt[kind]
+                // (the square meets the window's changed cells' boxes, grown as tilesOf grows them at its level)
+                const grow = (3 + 4 * (typeof LIT_EDGE_BLOCK !== 'undefined' ? LIT_EDGE_BLOCK : 8)) / a
+                if (win.touchedRects?.some(q => inRect(q, x0 - grow, y0 - grow, x1 + grow, y1 + grow))) ++win.rebuiltTouched[kind]
+            }
+        }
+        const wrap = () => {
+            if (wrapped || typeof Grid === 'undefined' || typeof turnPlaybackView === 'undefined') return
+            wrapped = true
+            const G = Grid.prototype, V = turnPlaybackView
+            const around = (object, name, fn) => {
+                const original = object[name]
+                if (typeof original !== 'function') return
+                object[name] = function(...args) { return fn.call(this, original, args) }
+            }
+            around(G, 'storeSector', function(original, args) {
+                const [view, u, v, tile] = args
+                if (active && this === grid && view && tile) tileBuilt('lit', view.sectorLevel || view.a, u, v, this)
+                return original.apply(this, args)
+            })
+            around(G, 'storeUnitSector', function(original, args) {
+                if (active && this === grid && args[3]) tileBuilt('unit', args[0], args[1], args[2], this)
+                return original.apply(this, args)
+            })
+            for (const [name, field] of [['finishSurfaceCacheBuild', 'full'], ['finishSurfacePatch', 'patch'], ['finishLitPatch', 'litPatch']])
+                around(G, name, function(original, args) {
+                    if (active && this === grid && win) ++win.surface[field]
+                    return original.apply(this, args)
+                })
+            // Why a surface cache / lit view patch was refused (Grid.surfacePatchRefusals / litPatchRefusals' new counts).
+            for (const [name, field, tag] of [['patchSurfaceCache', 'surfacePatchRefusals', 'surface'], ['startLitPatch', 'litPatchRefusals', 'lit']])
+                around(G, name, function(original, args) {
+                    const was = active && win && this === grid ? {...(this[field] || {})} : null
+                    // (patchSurfaceCache's own early returns, before its refusals: no patching, no lit cache, a build under way)
+                    const early = was && tag === 'surface' ? (!Grid.surfacePatching ? 'off' : !otherSettings.atmosphericVisuals ? 'visuals' :
+                        !this.surfaceCache ? 'none' : this.surfaceCacheBuild ? 'building' : !this.surfaceCacheLit ? 'unlit' : this.isObserving() ? 'observing' : null) : null
+                    const result = original.apply(this, args)
+                    let refused = false
+                    if (was) for (const [k, n] of Object.entries(this[field] || {}))
+                        if (n > (was[k] || 0)) { refused = true; win.refusals[tag + ':' + k] = (win.refusals[tag + ':' + k] || 0) + n - (was[k] || 0) }
+                    if (was && !result && !refused && early) win.refusals[tag + ':early-' + early] = (win.refusals[tag + ':early-' + early] || 0) + 1
+                    return result
+                })
+            // The surface cache dropped (a cell layer split whose cells changed under it, a cell layer follow that failed) and
+            // the builds started with or without a cache to patch (surface-build:after-cache / no-cache).
+            for (const [name, why] of [['surfaceSplitHolds', 'split-states'], ['followCellLayer', 'cell-layer-follow']])
+                around(G, name, function(original, args) {
+                    const had = !!this.surfaceCache
+                    const result = original.apply(this, args)
+                    if (active && win && this === grid && had && !this.surfaceCache) win.refusals['surface-drop:' + why] = (win.refusals['surface-drop:' + why] || 0) + 1
+                    return result
+                })
+            around(G, 'surfaceCacheBuildHolds', function(original, args) {
+                const result = original.apply(this, args)
+                if (active && win && this === grid && !result) win.refusals['surface-build:restart'] = (win.refusals['surface-build:restart'] || 0) + 1
+                return result
+            })
+            around(G, 'startSurfaceCacheBuild', function(original, args) {
+                const result = original.apply(this, args)
+                if (active && win && this === grid && result) {
+                    const k = 'surface-build:' + (args[0] ? 'after-cache' : 'no-cache')
+                    win.refusals[k] = (win.refusals[k] || 0) + 1
+                }
+                return result
+            })
+            for (const [name, what] of [['clearSectors', 'sectors'], ['clearUnitSectors', 'unitSectors']])
+                around(G, name, function(original, args) {
+                    const had = what === 'sectors' ? this.sectors?.entries.size : this.unitSectors?.entries.size
+                    if (active && trace && this === grid && had) {
+                        const reason = String(args[0])
+                        trace.clears.push({seq: ++seq, board: boardId(this), what, reason, w: win?.w})
+                        win?.clears.push(what + ':' + reason)
+                    }
+                    return original.apply(this, args)
+                })
+            around(V, 'begin', function(original, args) {
+                const was = active && grid ? snap() : null
+                const began = original.apply(this, args)
+                if (active && began) { open('begin', {steps: this.active?.steps}); before = was }
+                return began
+            })
+            around(V, 'load', function(original, args) {
+                const p = args[0], was = active && grid ? snap() : null
+                if (active) open('r' + p.recordingIndex + ':load', {r: p.recordingIndex, player: p.recordings[p.recordingIndex]?.player})
+                const result = original.apply(this, args)
+                if (active) record(was)
+                return result
+            })
+            // A step's window opens when it is chosen (pace: before its glide); rush applies steps without one.
+            around(V, 'pace', function(original, args) {
+                const p = args[0]
+                if (active) open('r' + p.recordingIndex + ':s' + p.stepIndex, {r: p.recordingIndex, s: p.stepIndex,
+                    t: p.recordings[p.recordingIndex]?.actions[p.stepIndex]?.action.t})
+                return original.apply(this, args)
+            })
+            around(V, 'apply', function(original, args) {
+                const p = args[0], key = 'r' + p.recordingIndex + ':s' + p.stepIndex
+                if (active && win?.key !== key) open(key, {r: p.recordingIndex, s: p.stepIndex, t: p.recordings[p.recordingIndex]?.actions[p.stepIndex]?.action.t, rushed: true})
+                const was = active && grid ? (before?.board === grid ? before : snap()) : null
+                const result = original.apply(this, args)
+                if (active && win) { win.seen = !!p.seen; record(was) }
+                return result
+            })
+            around(V, 'end', function(original, args) {
+                const p = args[0], mine = this.active === p, was = active && mine && grid ? snap() : null
+                if (active && mine) open('end', {result: args[1]})
+                const result = original.apply(this, args)
+                if (active && mine) record(was)
+                return result
+            })
+        }
+        return {
+            start(report) {
+                wrap()
+                built = new Map(); marks = []; seq = 0; before = null
+                // The squares the board holds already (its lit view's tiles, its lit and unit sectors): built before the capture.
+                const g = typeof grid !== 'undefined' ? grid : null, b = boardId(g)
+                const seed = (kind, a, u, v) => built.set(kind + ':' + Math.round(a * 1e4) + ':' + u + ':' + v, {board: b, seq: 0})
+                if (g?.litView) for (const key of g.litView.tiles.keys()) { const [u, v] = key.split(',').map(Number); seed('lit', g.litView.sectorLevel || g.litView.a, u, v) }
+                for (const [kind, cache] of [['lit', g?.sectors], ['unit', g?.unitSectors]])
+                    if (cache?.entries) for (const entry of cache.entries.values()) if (entry.level) seed(kind, entry.level, entry.u, entry.v)
+                trace = report.playbackTrace = {schema: 1, lampReachRadii: LAMP_REACH, tile: tileSize(), windows: [], clears: []}
+                open('pre')
+            },
+            // Each sample: its window and the playback's phase; the window's frames, glide and camera-move frames.
+            frame(frame) {
+                if (!trace || !win) return null
+                const p = typeof turnPlaybackView !== 'undefined' ? turnPlaybackView.active : null
+                ++win.frames
+                // (the light map's whole rebuilds, atmosphericLighting.rebuilds, since the window's last frame)
+                const rebuilds = typeof atmosphericLighting !== 'undefined' ? atmosphericLighting.rebuilds : 0
+                if (win.lightRebuilds0 === undefined) win.lightRebuilds0 = lightRebuildsAt ?? rebuilds
+                win.lightMapRebuilds = rebuilds - win.lightRebuilds0
+                lightRebuildsAt = rebuilds
+                const glide = !!(p && p.screen && p.screen.glide) || p?.phase === 'glide'
+                if (glide) ++win.glideFrames
+                if (frame.motion !== 'still') ++win.motionFrames
+                return {w: win.w, r: p ? p.recordingIndex : null, s: p ? p.stepIndex : null, ph: p ? p.phase : null, glide}
+            },
+            stop() {
+                if (!trace) return
+                for (const w of trace.windows) { delete w.keys; delete w.touchedKeys; delete w.touchedRects; delete w.lightRebuilds0 }
+                lightRebuildsAt = null
+                for (const c of trace.clears) delete c.board
+                trace = win = null; before = null; marks = []; built = new Map()
+            }
+        }
+    })()
     const originalLoad = loadSprites
     loadSprites = function(...args) { if (active) counters.spriteLoads++; return originalLoad.apply(this, args) }
     for (const type of ['visibilitychange', 'focus', 'blur']) window.addEventListener(type, () => {
@@ -1215,6 +1495,7 @@
         // TASK-1574: Grid.frameView for the swap counters while sampling.
         if (typeof Grid !== 'undefined') Grid.noteFrameViews = true
         taskSources.start(report)
+        playbackTrace.start(report)
         active = true
         return report
     }
@@ -1224,6 +1505,7 @@
         if (typeof Grid !== 'undefined') Grid.noteFrameViews = false
         if (!report) return null
         swapFinish(report.samples)
+        playbackTrace.stop()
         const gaps = report.samples.filter(s=>s.visible && s.gapMs>0).map(s=>s.gapMs).sort((a,b)=>a-b)
         report.refreshInterval.observedMedianMs = gaps[Math.floor(gaps.length/2)] ?? null
         report.valid = report.samples.length>1 && report.invalidReasons.length===0
