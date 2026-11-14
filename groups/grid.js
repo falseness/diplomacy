@@ -1293,8 +1293,13 @@ class Grid extends SpritesGroup {
         let mask = cellMaskCache.get(key)
         if (mask)
             ++Grid.cellMaskWork.hits
-        else
-            mask = this.buildCellMask(W, H, a, d, e, f, reach)
+        else {
+            // TASK-1616: a build of the key under way (cellMaskJob) finished here.
+            const steps = cellMaskJob(key, () => this.cellMaskSteps(W, H, a, d, e, f, reach))
+            let step
+            while (!(step = steps.next()).done);
+            mask = step.value
+        }
         rememberCellMask(key, mask)
         return {cells: mask.cells.map(c => ({...c})), box: mask.box, path: mask.path}
     }
@@ -1310,16 +1315,22 @@ class Grid extends SpritesGroup {
         const reach = CELL_LAYER_EDGE_REACH * basis.r + (mapDepth.sideDepth || 0) + (mapDepth.shadowOffset || 0) + 2 * (mapDepth.shadowBlur || 0)
         return {key: [W, H, a, d, e, f, basis.offset.x, basis.offset.y, basis.r, w, h, reach].join(), a, d, e, f, reach}
     }
-    // TASK-1455: the surface cache's cell mask of a board the menu can start (map: a GameMap; its size and shape, which
-    // cells are map edge, are all the mask and the cache's geometry take of it) built in steps while the menu is idle
-    // (menuPrebuild), as the game's first surface cache split would build it (cellMaskKey, cellMaskSteps), kept in
-    // cellMaskCache under its key, so that split finds it. A generator: each yield ends a step; nothing when kept already.
-    static *prebuildCellMaskSteps(map) {
+    // TASK-1455: a stand-in board of map (a GameMap) for the geometry of a board not yet made: its arr's cells have only
+    // hexagon.calcPos() and building.isMapEdge (TASK-1616: shared by prebuildCellMaskSteps and MapDepth.rockKeysOf).
+    static prebuildBoardOf(map) {
         const w = map.mapSize.x, h = map.mapSize.y, shape = map.mapShape
         const board = Object.create(Grid.prototype)
         board.arr = Array.from({length: w}, (_, x) => Array.from({length: h}, (_, y) => ({
             hexagon: {calcPos: () => Hexagon.prototype.calcPos.call({coord: {x, y}})},
             building: {isMapEdge: shape?.type == 'hexagonal' && getHexagonalLayer(x, y, shape.center) > shape.radius}})))
+        return board
+    }
+    // TASK-1455: the surface cache's cell mask of a board the menu can start (map: a GameMap; its size and shape, which
+    // cells are map edge, are all the mask and the cache's geometry take of it) built in steps while the menu is idle
+    // (menuPrebuild), as the game's first surface cache split would build it (cellMaskKey, cellMaskSteps), kept in
+    // cellMaskCache under its key, so that split finds it. A generator: each yield ends a step; nothing when kept already.
+    static *prebuildCellMaskSteps(map) {
+        const board = Grid.prebuildBoardOf(map)
         const {bounds} = mapDepth.boundsOf(board)
         const geometry = board.getSurfaceCacheGeometry(bounds)
         if (geometry.cacheWidth <= 0 || geometry.cacheHeight <= 0)
@@ -1329,9 +1340,7 @@ class Grid extends SpritesGroup {
         if (cellMaskCache.has(key))
             return
         yield
-        const mask = yield* board.cellMaskSteps(W, H, a, d, e, f, reach)
-        if (!cellMaskCache.has(key))
-            rememberCellMask(key, mask)
+        yield* cellMaskJob(key, () => board.cellMaskSteps(W, H, a, d, e, f, reach))
     }
     // cellLayerCells's mask built (x' = a x + e, y' = d y + f). Each row of a cell's box splits by the bisectors with the
     // cells round it: the run surely the cell's (every bisector at least CELL_MASK_MARGIN pixels away on the cell's side),
@@ -3266,6 +3275,9 @@ class Grid extends SpritesGroup {
     // copy of the board state, compared with the whole board before each stage (any change
     // starts it over), which becomes the cache's at its end.
     prepareSurfaceCache() {
+        // TASK-1616: none on a tutorial's result screen (resultPaused).
+        if (this.resultPaused())
+            return
         const screen = typeof gameEvent !== 'undefined' ? gameEvent.screen : undefined
         // A patch under way: its next step (patchSurfaceCache), and nothing queued.
         if (this.surfacePatchJob) {
@@ -3319,7 +3331,12 @@ class Grid extends SpritesGroup {
         // TASK-1544: also while the frames draw its stand-in (drawStandIn, drawStandInRect within STANDIN_WAIT_MS: coarse until
         // the cache is built), moving or not.
         // TASK-1571: so too while frames at the cache's scale draw the lit view for want of it (drawMapSurface, cacheWaitedAt).
-        const waiting = performance.now() - this.standInDrawnAt < STANDIN_WAIT_MS || performance.now() - this.cacheWaitedAt < STANDIN_WAIT_MS
+        // TASK-1616 (Grid.heldNoWait): but for the lit view's frames when the frame before was held (still-held: the lit view's
+        // exact tiles on screen, one drawImage a frame): those wait for nothing, and the waiting budget's tasks were the gaps
+        // between them (100-200 ms after the tutorial's Next tutorial click on the replay, artifacts/TASK-1616).
+        const held = Grid.heldNoWait && this.heldSerial === this.drawSerial - 1
+        const waiting = performance.now() - this.standInDrawnAt < STANDIN_WAIT_MS ||
+            performance.now() - this.cacheWaitedAt < STANDIN_WAIT_MS && !held
         const budget = moving && this.frameSurface === false || waiting ? Grid.donorTaskMs : SURFACE_STEP_MS
         // TASK-1372: the cache's split, a step a task (surfaceSplitStep).
         if (this.surfaceSplitJob) {
@@ -3435,11 +3452,13 @@ class Grid extends SpritesGroup {
             this.finishSurfaceCacheStep(build)
             return
         }
-        if (budget < Infinity && !SURFACE_CACHE_STAGE_STEPS[build.stage] && Grid.cameraBusy() && !this.cacheUrgent())
+        // (TASK-1616: the bake, now in steps, waits as the whole stage did.)
+        const steps = Grid.bakeSteps || build.stage !== BAKE_STAGE ? SURFACE_CACHE_STAGE_STEPS[build.stage] : undefined
+        if (budget < Infinity && (!steps || build.stage === BAKE_STAGE) && Grid.cameraBusy() && !this.cacheUrgent())
             return
         ++this.surfaceCacheStages
         // TASK-1518: between frames a stage with steps (SURFACE_CACHE_STAGE_STEPS) runs them.
-        const stepped = budget < Infinity && SURFACE_CACHE_STAGE_STEPS[build.stage]
+        const stepped = budget < Infinity && steps
         if (stepped) {
             build.stage++
             build.steps = stepped(this, build)
@@ -3483,9 +3502,7 @@ class Grid extends SpritesGroup {
             return undefined
         const board = this
         return (function* () {
-            const mask = yield* board.cellMaskSteps(W, H, a, d, e, f, reach)
-            if (!cellMaskCache.has(key))
-                rememberCellMask(key, mask)
+            yield* cellMaskJob(key, () => board.cellMaskSteps(W, H, a, d, e, f, reach))
         })()
     }
     // Whether build still draws this board: the same geometry, visuals and board state (its copy).
@@ -3808,7 +3825,7 @@ class Grid extends SpritesGroup {
             const job = this.surfaceLayerJob
             for (const part of job.parts ||= this.surfaceLayerParts(job))
                 this.drawPatchCells(ctx, part, 'cache')
-            if (main)
+            if (main && !this.resultPaused())
                 this.surfaceLayerStep()
         }
         return true
@@ -4104,8 +4121,14 @@ class Grid extends SpritesGroup {
             ctx.rect(b.x0, b.y0, b.x1 - b.x0, b.y1 - b.y0)
         ctx.clip()
         ctx.beginPath()
-        const clip = L.clipWindow
+        const clip = L.clipWindow, memo = L.pathMemo
         L.clipWindow = window
+        // TASK-1616: on a tutorial's result screen (resultPaused: the board no longer changes, the job no longer steps) the
+        // paths this redraw traces (atmosphericLighting.memoPath: the grout's, the fog's, the shadows' clip) are kept for the
+        // job, so every frame draws the same path objects (steady: Grid.recordingSteady) and the frame can be held; a path
+        // traced afresh each frame kept every such frame from being held (130-200 ms frames on the tutorial replay).
+        if (this.resultPaused())
+            L.pathMemo = job.resultMemo ||= new Map()
         // Only the sprites and shadows reaching the window are drawn (spriteInPatchCells, drawShadows).
         this.patchCellsWindow = window
         try {
@@ -4142,6 +4165,7 @@ class Grid extends SpritesGroup {
             }
         } finally {
             L.clipWindow = clip
+            L.pathMemo = memo
             this.patchCellsWindow = null
             ctx.restore()
         }
@@ -10722,16 +10746,33 @@ class Grid extends SpritesGroup {
     // camera move or zoom gesture, move tween, surface cache job
     // or lit layer job (they draw from buffers changed in place), and the light baked into the cache (else the light map,
     // patched in place, is drawn over it).
+    // TASK-1616: the surface cache jobs (a build, patch, layer job or split) paused on a tutorial's result screen (resultPaused)
+    // change no buffer the frames draw from, so they do not keep a frame from being held there.
     lodFrameSteady(recorder) {
         const screen = typeof gameEvent !== 'undefined' ? gameEvent.screen : undefined
-        if (this.frameSurface !== true || !screen || screen.surfaceMoving || screen.zoomGesture || zoomRasterTweens() || this.fadesPending() || this.surfaceCacheBuild || this.surfacePatchJob ||
-                this.surfaceLayerJob || this.surfaceSplitJob || this.litView?.layerJob || otherSettings.atmosphericVisuals && !this.surfaceCacheLit)
+        if (this.frameSurface !== true || !screen || screen.surfaceMoving || screen.zoomGesture || zoomRasterTweens() || this.fadesPending() ||
+                (this.surfaceCacheBuild || this.surfacePatchJob || this.surfaceLayerJob || this.surfaceSplitJob) && !this.resultPaused() ||
+                this.litView?.layerJob || otherSettings.atmosphericVisuals && !this.surfaceCacheLit)
             return false
         return this.recordingSteady(recorder)
     }
+    // TASK-1616 (TUTORIAL PERF 3/7, Grid.resultPauses): whether the board's surface cache work is paused: the board on screen
+    // with a tutorial's result screen over it (or Next tutorial's switch under way, TutorialManager.switching), where it no
+    // longer changes (the game is over, gameEvent.waitingMode) and is let go of at the next board. The cache's build, patch,
+    // layer job and split (prepareSurfaceCache, surfaceLayerStep) stop there: their steps kept the frames from being held
+    // (lodFrameSteady; each such still frame replayed its recording, 130-200 ms on the tutorial replay) while the next
+    // tutorial's board is made ahead (TutorialManager.prebuildNext), the click's freeze (artifacts/TASK-1616). The frames draw
+    // the same board meanwhile (from the buffers as the jobs left them, uncut or with the layer job's cells drawn over).
+    // Only with a cache to draw (a board whose cache the game's end dropped, a split finding the states changed, builds it
+    // first: else its frames drew the lit view with tiles missing, never held, 0.6-1.1 s of the click's window there).
+    resultPaused() {
+        return Grid.resultPauses && this === grid && !!this.surfaceCache && !this.surfaceCacheBuild &&
+            typeof tutorialResultInterface !== 'undefined' &&
+            (tutorialResultInterface.visible || typeof TutorialManager !== 'undefined' && TutorialManager.switching)
+    }
     // Whether a recording's calls draw from nothing that can change unseen: a path object can change after it is
-    // drawn (but the board's outline and rim, made once per geometry: the key holds them), an image still loading
-    // draws nothing now and its pixels later.
+    // drawn (but the board's outline and rim, made once per geometry: the key holds them; TASK-1616: and a path marked
+    // steady), an image still loading draws nothing now and its pixels later.
     recordingSteady(recorder) {
         for (const c of recorder.calls) {
             if (!c.args)
@@ -10739,7 +10780,8 @@ class Grid extends SpritesGroup {
             for (const a of c.args) {
                 if (!a || typeof a !== 'object')
                     continue
-                if (typeof Path2D !== 'undefined' && a instanceof Path2D && a !== mapDepth.outline && a !== mapDepth.rim)
+                // (TASK-1616: nor a path marked steady: atmosphericLighting.memoPath's, traced once and never changed after)
+                if (typeof Path2D !== 'undefined' && a instanceof Path2D && a !== mapDepth.outline && a !== mapDepth.rim && a.steady !== true)
                     return false
                 if (typeof HTMLImageElement !== 'undefined' && a instanceof HTMLImageElement && !(a.complete && a.naturalWidth > 0))
                     return false
@@ -10800,6 +10842,9 @@ class Grid extends SpritesGroup {
     // the frame) the frames repeating it are made again; they are not new held frames (stillRefreshes).
     endLodFrame(ctx, recorder) {
         const held = this.makeLodFrame(ctx, recorder)
+        // TASK-1616: the last frame held (prepareSurfaceCache's waiting budget).
+        if (held)
+            this.heldSerial = this.drawSerial
         // TASK-1517: a board snapshot for a zoom raster when the frame is not held and has none of its own (captureHeldFrame).
         if (!held && this.lodFrame?.serial !== this.drawSerial)
             this.keepZoomBitmap(ctx)
@@ -12052,7 +12097,15 @@ const SURFACE_CACHE_STAGE_STEPS = {
         }
         grid.flushSurfaceBuild(build)
     },
+    // TASK-1616 (Grid.bakeSteps): the bake a draw a step (atmosphericLighting.bakeSteps: the same pixels as the whole stage);
+    // through bake (which tests replace: a stand-in giving no steps is the whole stage).
+    4: function* (grid, build) {
+        const bake = atmosphericLighting.bake(build.ctx, grid, build.geometry.scale, () => grid.flushSurfaceBuild(build))
+        build.lit = bake && typeof bake.next === 'function' ? yield* bake : bake
+        grid.flushSurfaceBuild(build)
+    },
 }
+const BAKE_STAGE = 4
 // TASK-1544: the stand-in preview's raster (Grid.startStandInPreview), the surface cache's stages' calls at its scale in fewer
 // steps (a quarter of the pixels): the underlay and sides, the grout and the cells' tiles in STANDIN_HEX_STEPS runs (an
 // owner's tiles not built yet drawn flat in its colour: building them was ~950 ms of a 1270 ms preview at a game's
@@ -12151,6 +12204,12 @@ Grid.standInFollows = true
 // (Grid.stepSurfaceDonor) instead of starting its own.
 Grid.donorBuilds = true
 Grid.donorTaskMs = 40
+// TASK-1616: the surface cache's tasks between held lit view frames at the step budget, not the waiting one (prepareSurfaceCache).
+Grid.heldNoWait = true
+// TASK-1616: the surface cache's work paused on a tutorial's result screen (Grid.resultPaused).
+Grid.resultPauses = true
+// TASK-1616: the surface cache's bake between frames in steps (SURFACE_CACHE_STAGE_STEPS[BAKE_STAGE]); false: one stage.
+Grid.bakeSteps = true
 // TASK-1543: the surface cache's build (and split) under way goes on while the camera moves or the lit view waits for it
 // (Grid.prepareSurfaceCache); false: only with the camera at rest and the lit view's tiles built, as before.
 Grid.movingCacheBuilds = true
@@ -12258,6 +12317,36 @@ function rememberCellMask(key, mask) {
         cellMaskCache.delete(cellMaskCache.keys().next().value)
 }
 const cellMaskCache = new Map()
+// TASK-1616: CELL MASK BUILDS SHARED. The builds under way by key (at most CELL_MASK_JOBS, the oldest dropped): the surface
+// cache's build (surfaceMaskSteps), the rest's reserve (Grid.reserveCellSprites), a prebuild (Grid.prebuildCellMaskSteps,
+// the menu's or a tutorial result screen's for the next board) and a direct build (cellLayerCells) of the same key advance
+// one build (cellMaskSteps) instead of each its own (the cache's and the rest's built the same mask side by side after a
+// board's start: ~150 of ~650 ms on the tutorial replay, artifacts/TASK-1616). cellMaskJob(key, make): a generator that
+// steps the key's build (made by make() when there is none) and returns its mask, kept in cellMaskCache (at once when kept).
+const cellMaskJobs = new Map()
+const CELL_MASK_JOBS = 2
+function* cellMaskJob(key, make) {
+    for (;;) {
+        const kept = cellMaskCache.get(key)
+        if (kept)
+            return kept
+        let job = cellMaskJobs.get(key)
+        if (!job) {
+            cellMaskJobs.set(key, job = make())
+            while (cellMaskJobs.size > CELL_MASK_JOBS)
+                cellMaskJobs.delete(cellMaskJobs.keys().next().value)
+        }
+        const step = job.next()
+        if (step.done) {
+            if (cellMaskJobs.get(key) === job)
+                cellMaskJobs.delete(key)
+            if (!cellMaskCache.has(key))
+                rememberCellMask(key, step.value)
+            return step.value
+        }
+        yield step.value
+    }
+}
 // TASK-1373: a mask's pixels (alpha: w x h, non-zero at them) as a path of whole-pixel rectangles (each row's runs, rows
 // with the same runs as one rectangle). Filled black (fillCellMask) on a cleared canvas with the identity
 // transform, it is the mask to the bit (opaque there, transparent elsewhere: whole pixels, no partial coverage), with no
@@ -13163,7 +13252,7 @@ Grid.reserveCellSprites = limit => {
             // here in steps of the rest's frames, CELL_MASK_REST_MS a frame.
             let job = Grid.cellMaskRestJob
             if (job?.key !== key || job.board !== g)
-                job = Grid.cellMaskRestJob = {key, board: g, steps: g.cellMaskSteps(W, H, a, d, e, f, reach)}
+                job = Grid.cellMaskRestJob = {key, board: g, steps: cellMaskJob(key, () => g.cellMaskSteps(W, H, a, d, e, f, reach))}
             const start = performance.now()
             let step
             do

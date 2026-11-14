@@ -1,7 +1,7 @@
 {
   "format": 1,
   "algorithm": "sha256(path NUL bytes NUL ...)",
-  "rulesVersion": "c15ffbc1481a314924bdc8a32753a277891ba87e9694b2d92e867310fab81ba0",
+  "rulesVersion": "6f33b655abbb35900dae295dcc0e04b1071028b6f406fd4d017d26a0553b06f4",
   "scripts": [
     {
       "path": "options/assert.js",
@@ -45,8 +45,8 @@
     },
     {
       "path": "options/tutorialManager.js",
-      "sha256": "7d9a3979f006bddee9bcc352657ebceae43c167ffa2df18fdebf4a31da366702",
-      "bytes": 7365
+      "sha256": "b937c22214a5901a5c5f497bf9cf8a3457b7f13f643ced005bdada8530c2d3e0",
+      "bytes": 10621
     },
     {
       "path": "options/save.js",
@@ -265,8 +265,8 @@
     },
     {
       "path": "sprites/border.js",
-      "sha256": "38dceadb0e107ab6f4694da8cc19fc6e01a12c93d063acda5cd7de53255a7b9d",
-      "bytes": 95643
+      "sha256": "4806093c99cba36ac53385cca0a0c8cee08e8161adbfb0324ec487caa6f4aeea",
+      "bytes": 96437
     },
     {
       "path": "events/geteventpos.js",
@@ -310,8 +310,8 @@
     },
     {
       "path": "groups/grid.js",
-      "sha256": "a8a2667eac3f4519d09938dda97541f6af0553884bd937de9deb361c4443542d",
-      "bytes": 780181
+      "sha256": "e583f795cb829651e082fb7df8f2792472e1f430a9755c3a09520c95d8ce2f9c",
+      "bytes": 786503
     },
     {
       "path": "sprites/entities/hpBar.js",

@@ -767,7 +767,9 @@
     const stillMissOf = (g, recorder, last) => {
         if (g.frameSurface === true) {
             if (g.fadesPending?.()) return 'fades'
-            for (const name of ['surfaceCacheBuild', 'surfacePatchJob', 'surfaceLayerJob', 'surfaceSplitJob']) if (g[name]) return 'job:' + name
+            // (TASK-1616: not while the jobs are paused on a tutorial's result screen, Grid.resultPaused: they keep no hold off)
+            const paused = !!g.resultPaused?.()
+            for (const name of ['surfaceCacheBuild', 'surfacePatchJob', 'surfaceLayerJob', 'surfaceSplitJob']) if (g[name] && !paused) return 'job:' + name
             if (g.litView?.layerJob) return 'job:litLayer'
             if (otherSettings.atmosphericVisuals && !g.surfaceCacheLit) return 'cache-unlit'
             if (recorder && !g.recordingSteady(recorder)) return 'unsteady-args'

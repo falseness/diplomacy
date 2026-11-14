@@ -1823,6 +1823,8 @@ const atmosphericLighting = {
         // TASK-1563: a SectorPath, so a lit tile's sector snapshot (SectorRecorder) keeps it.
         const path = new SectorPath()
         add(path)
+        // TASK-1616: traced once here and never changed after, so a recorded frame drawing it can be held (Grid.recordingSteady).
+        path.steady = true
         list.unshift({cells, path})
         if (list.length > this.PATH_MEMO_PATHS) list.pop()
         return path
@@ -2358,7 +2360,9 @@ const atmosphericLighting = {
     // neutral and the gain empty everywhere else), then the lamp bloom, so cached frames
     // skip the full-screen composite and the per-lamp overlays (units still come after).
     // The light map resolution follows the cache scale, not the zoom.
-    bake(ctx, board, scale) {
+    // TASK-1616: steps (true: Grid's surface cache build between frames, SURFACE_CACHE_STAGE_STEPS) returns bakeSteps instead.
+    bake(ctx, board, scale, steps = false) {
+        if (steps) return this.bakeSteps(ctx, board, scale, steps)
         if (!otherSettings.atmosphericVisuals) return false
         const map = this.lightMap(board, scale)
         if (!map) return false
@@ -2372,6 +2376,40 @@ const atmosphericLighting = {
         ctx.globalCompositeOperation = 'color-dodge'
         ctx.drawImage(this.gain, bounds.left, bounds.top, w, h)
         ctx.restore()
+        this.bloom(ctx, board)
+        return true
+    },
+    // TASK-1616 (TUTORIAL PERF 3/7): bake's drawing in steps (a generator; each yield ends a step heavy to rasterize,
+    // RASTER_STEP; its return bake's): the multiply, the color-dodge and the bloom a step each (a whole-raster bake was one
+    // ~190 ms stage + ~70 ms raster after a new board's start on the tutorial replay, artifacts/TASK-1616). Each draw is under
+    // the cells' clip made again (the same path: the same pixels as one bake to the bit, artifacts/TASK-1616/tools/
+    // bandexact.js byOp; bands of pixel rows each clipped are not: their clip's antialiasing differs near a band's edge), and
+    // takes the light map at the cache's scale again (lightMap: a frame between the steps may have made the camera's; the
+    // board's light state is the build's, Grid.surfaceCacheBuildHolds, so it is the same map, kept aside: MAP_STASH). A step
+    // waits (yields, drawing nothing) while the camera is busy (Grid.cameraBusy), as the whole stage did before it began.
+    // flush (optional, or true): run after each draw, so its raster comes in its step (Grid.flushSurfaceBuild).
+    *bakeSteps(ctx, board, scale, flush) {
+        if (!otherSettings.atmosphericVisuals) return false
+        const wait = function* () {
+            while (typeof Grid !== 'undefined' && Grid.cameraBusy?.() && !board.cacheUrgent?.())
+                yield RASTER_STEP
+        }
+        for (const op of ['multiply', 'color-dodge']) {
+            yield* wait()
+            const map = this.lightMap(board, scale)
+            if (!map) return false
+            const bounds = mapDepth.surfaceBounds
+            const w = bounds.right - bounds.left, h = bounds.bottom - bounds.top
+            ctx.save()
+            this.hexPath(ctx, this.inClipWindow(this.collect(board, false).cells))
+            ctx.clip()
+            ctx.globalCompositeOperation = op
+            ctx.drawImage(op === 'multiply' ? map : this.gain, bounds.left, bounds.top, w, h)
+            ctx.restore()
+            if (typeof flush === 'function') flush()
+            yield RASTER_STEP
+        }
+        yield* wait()
         this.bloom(ctx, board)
         return true
     },
@@ -2580,7 +2618,13 @@ const atmosphericLighting = {
         let set = this.edgeTileSet
         if (!set || set.map !== map || set.gain !== this.gain || set.edits !== this.mapEdits || set.W !== map.width || set.H !== map.height ||
                 set.T !== T || set.M !== M) {
-            if (set) for (const tile of set.tiles.values()) tile.map.width = tile.map.height = tile.gain.width = tile.gain.height = 0
+            // TASK-1616: the old set's canvases kept for the new one's copies of their size (edgeTileCopy), the rest let go of.
+            const free = this.edgeTileFree = new Map()
+            if (set) for (const tile of set.tiles.values()) for (const canvas of [tile.map, tile.gain]) {
+                const size = canvas.width + 'x' + canvas.height
+                if (!free.has(size)) free.set(size, [])
+                free.get(size).push(canvas)
+            }
             set = this.edgeTileSet = {map, gain: this.gain, edits: this.mapEdits, W: map.width, H: map.height, T, M, tiles: new Map()}
         }
         const cols = Math.ceil(map.width / T), rows = Math.ceil(map.height / T), cw = ctx.canvas.width, ch = ctx.canvas.height
@@ -2629,13 +2673,26 @@ const atmosphericLighting = {
             }
         }
         ctx.globalCompositeOperation = operation
+        // (the old set's canvases no copy took)
+        if (this.edgeTileFree?.size) {
+            for (const list of this.edgeTileFree.values()) for (const canvas of list) canvas.width = canvas.height = 0
+            this.edgeTileFree.clear()
+        }
         return true
     },
-    // A tile of an edge tile set (drawEdgeTiles): source's pixels tx0..tx1 x ty0..ty1, copied.
+    // Canvases of the edge tile set before (drawEdgeTiles) by size 'w x h', for its copies to reuse (TASK-1616: a new board's
+    // or light map's first lit frames made two new canvases per tile, ~75 ms of such a frame on the tutorial replay).
+    edgeTileFree: null,
+    // A tile of an edge tile set (drawEdgeTiles): source's pixels tx0..tx1 x ty0..ty1, copied (into a canvas of that size the
+    // set before had, else a new one: the 'copy' of the whole canvas replaces every pixel either way).
     edgeTileCopy(source, {tx0, ty0, tx1, ty1}) {
-        const canvas = document.createElement('canvas')
-        canvas.width = tx1 - tx0
-        canvas.height = ty1 - ty0
+        const w = tx1 - tx0, h = ty1 - ty0, kept = this.edgeTileFree?.get(w + 'x' + h)
+        let canvas = kept?.pop()
+        if (!canvas) {
+            canvas = document.createElement('canvas')
+            canvas.width = w
+            canvas.height = h
+        }
         const g = canvas.getContext('2d')
         g.globalCompositeOperation = 'copy'
         g.drawImage(source, tx0, ty0, tx1 - tx0, ty1 - ty0, 0, 0, tx1 - tx0, ty1 - ty0)

@@ -341,6 +341,20 @@ class MapDepth {
         return ribbons
     }
     rebuild(_grid) {
+        this.buildFaces(_grid)
+        this.createOutline()
+        this.markOpenFaces()
+        this.releaseAtmosphericShadow()
+        // TASK-1615: the board's rock sprites asked of the workers now, before its first lit tiles draw them.
+        if (typeof otherSettings !== 'undefined' && otherSettings.atmosphericVisuals)
+            MapDepth.requestRockSprites(this.rockKeys())
+
+        Object.assign(this, this.boundsOf(_grid))
+        this.createUnderlayCache()
+    }
+    // TASK-1616: the slab's faces and edges of a board (rebuild's first part; _grid needs only arr[x][y].hexagon.calcPos()
+    // and .building.isMapEdge, as boundsOf: MapDepth.rockKeysOf takes them for a board not yet made).
+    buildFaces(_grid) {
         this.faces = []
         this.edges = []
         this.gridWidth = _grid.arr.length
@@ -396,15 +410,6 @@ class MapDepth {
         }
 
         this.faces.sort((a, b) => a.sortY - b.sortY)
-        this.createOutline()
-        this.markOpenFaces()
-        this.releaseAtmosphericShadow()
-        // TASK-1615: the board's rock sprites asked of the workers now, before its first lit tiles draw them.
-        if (typeof otherSettings !== 'undefined' && otherSettings.atmosphericVisuals)
-            MapDepth.requestRockSprites(this.rockKeys())
-
-        Object.assign(this, this.boundsOf(_grid))
-        this.createUnderlayCache()
     }
     // The slab's bounds (shadow included) and its top face's (surfaceBounds) on a board: the vertices of its cells but the
     // map edge. _grid needs only arr[x][y].hexagon.calcPos() and .building.isMapEdge (TASK-1455: the menu's prebuild
@@ -683,6 +688,15 @@ class MapDepth {
         if (!MapDepth.rockSprites || MapDepth.rockSprites.radius !== basis.r)
             MapDepth.rockSprites = {radius: basis.r, sprites: new Map()}
         return MapDepth.rockSprites.sprites
+    }
+    // TASK-1616: rockKeys of a board not yet made (_grid as buildFaces takes it: Grid.prebuildBoardOf), for its sprites to be
+    // asked of the workers ahead (a tutorial's result screen, for the next tutorial: TutorialManager.prebuildNext).
+    static rockKeysOf(_grid) {
+        const depth = Object.create(MapDepth.prototype)
+        depth.depth = typeof mapDepth !== 'undefined' ? mapDepth.depth : 0
+        depth.buildFaces(_grid)
+        depth.markOpenFaces()
+        return depth.rockKeys()
     }
     // TASK-1615: the rock sprites the board's faces draw (renderAtmosphericSides), once each: [{key, side, kx, ky, open}].
     rockKeys() {
