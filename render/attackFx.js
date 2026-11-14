@@ -28,7 +28,8 @@
 // wait for an effect. Such an effect plays only for what the screen's player sees (grid.fogOfWar): both cells -> the
 // whole effect; only the target -> the shot enters from the fog edge on the line from the attacker (melee: only the hit
 // on the target); only the attacker -> the shot leaves toward the target and ends at the fog edge with no result (the
-// effect keeps no target data); neither -> nothing. It starts once the pass-device screen is gone, and a new viewer (hot
+// effect keeps no target data); neither -> nothing. A melee move-attack from the fog whose walk ends in sight plays from
+// the first cell of the walk in sight, walk then hit (emerge, TASK-1622). It starts once the pass-device screen is gone, and a new viewer (hot
 // seat with fog: the next human's view) drops the effects queued for the last one. The AI turn itself only stores
 // the hooks' events (queue); they become effects on the first frame drawn (flush).
 // Replay (TASK-1428): others' attacks (AI, demons, online opponents) play one by one in the order the hooks recorded
@@ -795,6 +796,7 @@ class AttackFx {
             return null
         if (event.image === undefined)
             event.image = event.attacker ? this.imageOf(event.attacker) : null
+        this.emerge(event)
         const mode = this.visibility(event), from = event.from && {x: event.from.x, y: event.from.y}
         const cut = mode && this.cut(event, mode)
         const r = this.replay ??= {steps: [], index: 0, phase: null, until: 0, home: null, moved: false, log: []}
@@ -964,6 +966,8 @@ class AttackFx {
         if (event.image === undefined)
             event.image = event.attacker ? this.imageOf(event.attacker) : null
         // (mode given: the replay judged and cut the event already, TASK-1428)
+        if (mode === undefined)
+            this.emerge(event)
         mode ??= this.visibility(event)
         if (!mode) {
             ++this.stats.unseen
@@ -1046,6 +1050,46 @@ class AttackFx {
         e.strikePos = this.cellPos(e.attacker, strike)
         e.walkMs = (walk.length - 1) * (typeof moveTween !== 'undefined' ? moveTween.msPerCell : 120)
     }
+    // TASK-1622: another player's melee move-attack that starts in the viewer's fog but walks into sight: it plays as
+    // a seen attack from the first cell of its walk from which the rest of the walk (to the strike hex) is seen (event.from,
+    // fromPos and path moved there, event.emerged set), so its walk shows only on seen cells, then the attack from the
+    // strike hex; nothing of the fogged part (the camera, a waiting pose) is shown. Unchanged when the strike hex is not
+    // seen (the fog-edge hit on the target, cut), for own, ranged and siege attacks and attacks with a seen 'from'.
+    emerge(event) {
+        const same = (a, b) => !!a && !!b && a.x === b.x && a.y === b.y
+        if (!event || event.own || event.emerged || event.edge || event.fog || !event.from || !event.to || !event.target ||
+                !event.attacker || this.ranged[event.kind] || this.siege[event.kind] || typeof grid === 'undefined' || !grid?.arr)
+            return
+        const seenFrom = event.seen ? event.seen.from : this.seen(event.from)
+        const seenTo = event.seen ? event.seen.to : this.seen(event.target)
+        if (seenFrom || !seenTo)
+            return
+        const movedIn = !!event.killed && same(event.to, event.target) && !same(event.to, event.from)
+        const end = movedIn ? event.target : event.to
+        if (same(end, event.from))
+            return
+        let full = null
+        if (Array.isArray(event.path) && same(event.path[0], event.from)) {
+            const i = event.path.findIndex(c => same(c, end))
+            if (i > 0)
+                full = event.path.slice(0, i + 1).map(c => ({x: c.x, y: c.y}))
+        }
+        full ??= this.walkRoute(event.from, end, event.attacker)
+        if (!full || full.length < 2)
+            return
+        const walk = movedIn ? full.slice(0, -1) : full
+        let k = walk.length
+        while (k > 0 && this.seen(walk[k - 1]))
+            --k
+        if (k >= walk.length)
+            return
+        event.from = {x: walk[k].x, y: walk[k].y}
+        event.fromPos = this.cellPos(event.attacker, walk[k])
+        event.path = full.slice(k)
+        if (event.seen)
+            event.seen = {...event.seen, from: true}
+        event.emerged = true
+    }
     // A unit's top-left pos on coord (as unit.pos there).
     cellPos(unit, coord) {
         if (typeof unit.calcPos === 'function')
@@ -1100,8 +1144,8 @@ class AttackFx {
         }
         return null
     }
-    // The walk of a move-attack (elapsed < e.walkMs): the attacker slides from cell to cell (drawn where the screen's player
-    // sees a cell of the step, as a move tween); a killed target is still drawn (its snapshot), as a ranged hit's target.
+    // The walk of a move-attack (elapsed < e.walkMs): the attacker slides from cell to cell (others' drawn only where the
+    // screen's player sees the cell nearer to it); a killed target is still drawn (its snapshot), as a ranged hit's target.
     drawWalk(ctx, e, elapsed, lod) {
         if (e.killed && !e.edge && e.targetImage)
             ctx.drawImage(e.targetImage, e.targetPos.x, e.targetPos.y)
@@ -1111,7 +1155,8 @@ class AttackFx {
         const segment = Math.min(e.walk.length - 2, Math.floor(Math.max(0, elapsed) / ms))
         const t = Math.min(1, Math.max(0, elapsed) / ms - segment)
         const a = e.walk[segment], b = e.walk[segment + 1]
-        if (!e.own && !this.seen(a) && !this.seen(b))
+        // (others' walks: drawn only while the cell nearer to the drawn position is seen, TASK-1622)
+        if (!e.own && !this.seen(t < 0.5 ? a : b))
             return
         const pa = this.cellPos(e.attacker, a), pb = this.cellPos(e.attacker, b)
         this.drawUnitAt(ctx, e.attacker, e.image, pa.x + (pb.x - pa.x) * t, pa.y + (pb.y - pa.y) * t, lod)
