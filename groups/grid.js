@@ -471,6 +471,8 @@ class Grid extends SpritesGroup {
         this.surfacePatchBuffer = undefined
         // Frames that drew a patch's changed cells over its old picture (drawPatchCells), and its window while it draws.
         this.patchCellFrames = 0
+        // TASK-1627 (Grid.patchFades): the patch fades started, the frames drawing one, those dropped unfinished.
+        this.patchFadeWork = {started: 0, frames: 0, dropped: 0, droppedBy: {}}
         this.patchCellsWindow = null
         // TASK-1625: boards taken (takeBoard) and the references re-pointed by the last one.
         this.boardTakeCount = 0
@@ -4055,6 +4057,8 @@ class Grid extends SpritesGroup {
         this.carryCacheSectors(rects, () => this.finishSurfacePatchNow(job))
     }
     finishSurfacePatchNow(job) {
+        // TASK-1627: what the frames showed of the region kept for the fade (startPatchFade).
+        this.startPatchFade(job)
         // The region copied (with the cell layer, as its cells' variants are taken again: prepareSurfaceCellLayer).
         this.prepareSurfaceCellLayer(job.canvas, job.geometry, job.left, job.top, job.inner,
             () => copyCanvasRect(job.buffer, job.canvas, job.inner))
@@ -4216,6 +4220,14 @@ class Grid extends SpritesGroup {
             }
         return {cells, light}
     }
+    // TASK-1627 (Grid.movingPatches): whether a frame while the camera moves may start the patch of a cache that does not
+    // match the board (drawSurfaceCache): outside a zoom gesture. Since the stand-ins' removal (TASK-1571) such a frame drew
+    // the ground fill instead (a turn playback's step changing lamps or fog just after its glide: Screen.SURFACE_LAYER_HOLD
+    // keeps surfaceMoving 600 ms past the camera's last move; tutorial-6 ~30 frames, ~1 MP each).
+    surfacePatchesMoving() {
+        return Grid.movingPatches && this === grid && typeof gameEvent !== 'undefined' && !gameEvent.screen?.surfaceZooming &&
+            !Grid.zoomGestureNow()
+    }
     canUseSurfaceCache() {
         mapDepth.ensureGeometry(this)
         const cacheScale = this.surfaceCache ? this.surfaceCacheScale :
@@ -4233,7 +4245,9 @@ class Grid extends SpritesGroup {
             // rest starts the patch of a cache that differs in a few cells (patchSurfaceCache), and the frames
             // until it is done draw the cache as it was (surfacePatchShows).
             if (otherSettings.atmosphericVisuals) {
-                if (!this.surfaceCache || typeof gameEvent === 'undefined' || gameEvent.screen?.surfaceMoving && !this.surfacePatchJob ||
+                // TASK-1627 (Grid.movingPatches): while the camera moves too, outside a zoom gesture (surfacePatchesMoving).
+                if (!this.surfaceCache || typeof gameEvent === 'undefined' || gameEvent.screen?.surfaceMoving && !this.surfacePatchJob &&
+                        !this.surfacePatchesMoving() ||
                         !this.patchSurfaceCache() || !this.surfacePatchShows(ctx)) {
                     this.surfaceCacheDirty = true
                     return false
@@ -4251,6 +4265,9 @@ class Grid extends SpritesGroup {
 
         if (!this.drawSurfaceCacheRect(ctx, canvas.offset.x, canvas.offset.y, canvas.offset.x + width, canvas.offset.y + height))
             return true
+        // TASK-1627: a finished patch's region fading in (drawPatchFade).
+        if (main)
+            this.drawPatchFade(ctx)
         if (this.surfacePatchJob)
             this.drawPatchCells(ctx, this.surfacePatchJob, 'cache')
         else if (this.surfaceLayerJob) {
@@ -6643,7 +6660,101 @@ class Grid extends SpritesGroup {
     // (render/visualsPerf.js work.fades). False: as 55df4426 (the swap at once).
     fadesPending() {
         const p = this.fadePrev
-        return !!(Grid.settleFades && (this.fades?.map.size || p && (p.stretch.length || p.held.length)))
+        // TASK-1627: and a finished surface cache patch fading in (patchFadeOn).
+        return !!(Grid.settleFades && (this.fades?.map.size || p && (p.stretch.length || p.held.length))) || this.patchFadeOn()
+    }
+    // TASK-1627 (Grid.patchFades): PATCH FADES. A surface cache patch's frames draw the cache as it was with the changed cells
+    // over it in their new state (drawPatchCells: their hexagons, changed sprites and shadows); its last step copies the
+    // region into the cache, so the rest of the region (a lamp's spill and the shadows it turns, a territory glow outside the
+    // hexagons) changed in one frame. Instead, as a settle's square fades in (SETTLE FADES above), what the frames showed
+    // there is kept (patchFade.canvas: the region of the cache as shown before the copy, the part drawPatchCells drew new
+    // erased: the new cache shows the same there) and drawn over the new cache at globalAlpha 1 - a, a = the share of
+    // SETTLE_FADE_MS gone since the first frame drawing it (drawPatchFade: under the units, on the frame's cache and on a
+    // cache sector frame's live ground). Frames go on being drawn until it ends (fadesPending). Another patch's end, a new
+    // cache or one rebuilt drop it. Only for a patch finished while a turn playback runs (turnPlaybackView.active: its steps'
+    // lamp and fog changes, in the viewer's eye).
+    startPatchFade(job) {
+        const prev = this.patchFade
+        if (prev) {
+            this.patchFadeDrop('replaced')
+            this.patchFade = undefined
+        }
+        // (only while a turn playback runs: a patch after the player's own action, at rest, swaps at once as before; TASK-1288's
+        // tolerance check compares that frame with a whole rebuild right after it)
+        if (!Grid.patchFades || this !== grid || typeof document === 'undefined' || typeof turnPlaybackView === 'undefined' ||
+                !turnPlaybackView.active || !job.inner || !job.inner.w || !job.inner.h)
+            return
+        const {inner, scale, left, top} = job
+        const shown = this.surfaceCache.cellLayered && !this.surfaceSplitJob && this.surfaceCacheShown || this.surfaceCache
+        let c = prev?.canvas || this.patchFadeCanvas
+        if (!c)
+            c = this.patchFadeCanvas = document.createElement('canvas')
+        if (c.width < inner.w || c.height < inner.h) {
+            c.width = Math.max(c.width, inner.w)
+            c.height = Math.max(c.height, inner.h)
+        }
+        const g = c.getContext('2d')
+        g.save()
+        g.setTransform(1, 0, 0, 1, 0, 0)
+        g.globalCompositeOperation = 'copy'
+        g.drawImage(shown, inner.x, inner.y, inner.w, inner.h, 0, 0, inner.w, inner.h)
+        g.globalCompositeOperation = 'destination-out'
+        g.setTransform(scale, 0, 0, scale, -left * scale - inner.x, -top * scale - inner.y)
+        g.beginPath()
+        for (const b of this.patchCellsAreas(job))
+            g.rect(b.x0, b.y0, b.x1 - b.x0, b.y1 - b.y0)
+        g.clip()
+        const h = this.arr[0].length
+        g.beginPath()
+        for (const index of job.changed) {
+            const p = this.arr[Math.floor(index / h)][index % h].hexagon.calcPos()
+            atmosphericLighting.hexagonPath(g, p.x, p.y, 1.02 * basis.r)
+        }
+        g.fill()
+        for (const b of job.sprites)
+            g.fillRect(b.x0, b.y0, b.x1 - b.x0, b.y1 - b.y0)
+        g.restore()
+        this.patchFade = {canvas: c, cache: this.surfaceCache, w: inner.w, h: inner.h, x: left + inner.x / scale, y: top + inner.y / scale,
+            scale, start: null, madeSerial: this.drawSerial}
+        ++this.patchFadeWork.started
+    }
+    // Whether a patch fade is under way (its cache still the one drawn, SETTLE_FADE_MS not gone since its first frame).
+    patchFadeOn() {
+        const f = this.patchFade
+        if (!f)
+            return false
+        // (one the next PATCH_FADE_FRAMES frames did not draw, the frames off the cache, ends too)
+        const now = performance.now()
+        if (f.cache !== this.surfaceCache || this.surfaceCacheBuild || (f.start === null ? this.drawSerial - f.madeSerial > PATCH_FADE_FRAMES :
+                now - f.start >= SETTLE_FADE_MS)) {
+            if (f.start === null || now - f.start < SETTLE_FADE_MS)
+                this.patchFadeDrop(f.cache !== this.surfaceCache ? 'cache' : this.surfaceCacheBuild ? 'build' : 'undrawn')
+            this.patchFade = undefined
+            return false
+        }
+        return true
+    }
+    patchFadeDrop(why) {
+        ++this.patchFadeWork.dropped
+        this.patchFadeWork.droppedBy[why] = (this.patchFadeWork.droppedBy[why] || 0) + 1
+    }
+    // The patch fade's picture over the cache just drawn on ctx (world transform; ctx's clip the squares drawn from it).
+    drawPatchFade(ctx) {
+        if (!this.patchFadeOn())
+            return
+        const f = this.patchFade, now = performance.now()
+        if (f.start === null || this.patchFadeSerial !== this.drawSerial) {
+            f.start ??= now
+            ++this.patchFadeWork.frames
+            this.patchFadeSerial = this.drawSerial
+        }
+        const a = Math.min(1, (now - f.start) / SETTLE_FADE_MS)
+        if (a >= 1)
+            return
+        const alpha = ctx.globalAlpha
+        ctx.globalAlpha = alpha * (1 - a)
+        ctx.drawImage(f.canvas, 0, 0, f.w, f.h, f.x, f.y, f.w / f.scale, f.h / f.scale)
+        ctx.globalAlpha = alpha
     }
     dropFades() {
         if (this.fades) {
@@ -6832,7 +6943,9 @@ class Grid extends SpritesGroup {
         // board while the camera moves: drawSurfaceCache), outside a zoom gesture, the frame draws the lit view (drawMapSurface,
         // TASK-1571): while that view is not made its ground fill is drawn here as the lit path's (the sectors of the camera's
         // level on an exact ground, else overlay sectors), not with every unit and text live.
-        const noCache = !this.surfaceCache || !!screen?.surfaceMoving && !this.surfacePatchJob && !this.surfaceStateMatches(ctx)
+        // TASK-1627 (Grid.movingPatches): one a patch can bring up (surfacePatchesMoving) is drawn (drawMapSurface).
+        const noCache = !this.surfaceCache || !!screen?.surfaceMoving && !this.surfacePatchJob && !this.surfaceStateMatches(ctx) &&
+            !(this.surfacePatchesMoving() && this.patchSurfaceCache() && this.surfacePatchShows(ctx))
         const litFill = Grid.litFillOverlays && Grid.litGroundFill && noCache && this === grid && otherSettings.atmosphericVisuals &&
             !(Grid.standInsInGesture && Grid.zoomGestureNow()) && this.canUseSurfaceCache()
         const pan = !levels && this.levelsOn() && ctx.canvas === mainCanvas && !!screen?.surfaceMoving && !screen.zoomGesture &&
@@ -7265,6 +7378,8 @@ class Grid extends SpritesGroup {
             ctx.setTransform(t.a, t.b, t.c, t.d, t.e, t.f)
             const left = -t.e / t.a, top = -t.f / t.d
             this.drawSurfaceCacheRect(ctx, left, top, left + cw / t.a, top + ch / t.d)
+            // TASK-1627: a finished patch's region fading in there (drawPatchFade).
+            this.drawPatchFade(ctx)
             ctx.restore()
         }
         if (lv) {
@@ -11386,7 +11501,7 @@ class Grid extends SpritesGroup {
     lodFrameSteady(recorder, base = false) {
         const screen = typeof gameEvent !== 'undefined' ? gameEvent.screen : undefined
         if (this.frameSurface !== true || !screen || screen.surfaceMoving && !(base && this.restingInHold(screen)) || screen.zoomGesture ||
-                zoomRasterTweens() || !base && this.fadesPending() ||
+                zoomRasterTweens() || !base && this.fadesPending() || base && this.patchFadeOn() ||
                 (this.surfaceCacheBuild || this.surfacePatchJob || !this.surfaceJobHolds()) && !this.resultPaused() ||
                 this.litView?.layerJob || otherSettings.atmosphericVisuals && !this.surfaceCacheLit && !Grid.stillUnlitFrames)
             return false
@@ -13613,6 +13728,12 @@ Grid.heldStashMaps = true
 Grid.patchBoxCarry = true
 // TASK-1626: a surface cache whose layer cannot follow the board waits up to FOLLOW_WAIT_MS before it is dropped.
 Grid.followWaits = true
+// TASK-1627: a surface cache not matching the board is patched while the camera moves (outside a zoom gesture) too, its frames
+// drawing it as it was with the changed cells over it (drawPatchCells), not the ground fill (surfacePatchesMoving).
+Grid.movingPatches = true
+// TASK-1627: a surface cache patch finished during a turn playback fades its region in over SETTLE_FADE_MS (startPatchFade),
+// not at once.
+Grid.patchFades = true
 const FOLLOW_WAIT_MS = 1000
 const UNIT_SECTOR_BURST_CALLS = 10000
 const UNIT_SECTOR_BURST_MS = 100
@@ -13690,6 +13811,8 @@ const LEVEL_SETTLE_MS = 6000
 // TASK-1575 (ZOOMFADE 2/5): a square replacing its stretched (or held) picture by its exact one fades in over this many ms
 // of frame time (Grid.fadeFrame).
 const SETTLE_FADE_MS = 150
+// TASK-1627: a patch fade no frame drew in the frames after the patch's end (drawSerial) ends (patchFadeOn).
+const PATCH_FADE_FRAMES = 2
 // After a zoom gesture (and while its settle lasts) the background builds that do not draw the frame run a piece a frame
 // (the surface cache's build steps: Grid.oncePerFrame) or wait (its split, finish and bake, the owned tiles' prewarm, the
 // sky raster, the canvas pools' reserves, cache holds) for this long after its last zoom frame (Grid.zoomQuiet), so they do not crowd the frames the
