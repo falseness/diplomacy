@@ -92,6 +92,9 @@
             frame.work.swapRaw = swapRaw()
             // TASK-1614: the main thread's JS time since the previous frame by source (exclusive ms, taskSources below).
             frame.work.taskMs = taskSources.frameEnd()
+            // TASK-1631: level-load phases since the previous frame and the builds still pending (phaseTimers, loadPendingOf).
+            frame.work.phaseMs = phaseTimers.frameEnd()
+            frame.loadPending = loadPendingOf()
             work = freshWork()
             if (frame.gapMs > 50) report.longGaps.push({timestamp, gapMs: frame.gapMs})
             report.samples.push(frame)
@@ -346,6 +349,132 @@
             }
         }
     })()
+    // TASK-1631 (LEVEL LOAD 1/5): main-thread ms per level-load phase, exclusive (a nested phase's time is its own), on a stack
+    // of its own (taskSources' sources unchanged). Phases: rules (the game set up: GameManager.start / load, a save's
+    // unpacking, TutorialManager.start, co-op map generation; Grid's constructor and the phases below excluded), grid-build
+    // (Grid's constructor), tile-variants (the atmospheric neutral / fog / owned tile variants: atmosphericLighting.tileVariant,
+    // fogVariant, tileDetail, ownedTile, prewarmOwnedTiles), underlay (MapDepth: geometry, underlay cache, atmospheric sides,
+    // rim, shadow, rock sprites), lit-tiles (the lit view's tiles and the start hold: taskSources' lit-tiles methods), sectors
+    // (unit sectors and lit tile sectors built / stored / received from the Worker), sprites (SpriteCache, supersampled
+    // images, spill / lift sprites, an <img> drawn), surface-cache, light-map and sky (named apart: not phases of the
+    // ticket's list; the tool counts them under other with their own figures). Time no wrapper sees (the frame's other
+    // drawing, update, browser raster / GC / layout) is other: the tool takes it from the main thread's busy time.
+    // work.phaseMs: ms per phase since the previous frame; visualsPerf.phases(): the segments [phase, start, end] (merged
+    // when adjacent) since the capture started, for cutting at a load's click and sharp frame.
+    const phaseTimers = (() => {
+        const stack = [], segments = [], perFrame = {}
+        let mark = 0, wrapped = false
+        const charge = now => {
+            const top = stack[stack.length - 1]
+            if (top !== undefined && now > mark) {
+                perFrame[top] = (perFrame[top] || 0) + now - mark
+                const last = segments[segments.length - 1]
+                if (last && last[0] === top && mark - last[2] < 1) last[2] = now
+                else segments.push([top, mark, now])
+            }
+            mark = now
+        }
+        const enter = phase => { charge(performance.now()); stack.push(phase) }
+        const exit = () => { if (!stack.length) return; charge(performance.now()); stack.pop() }
+        const wrap = (obj, name, phase) => {
+            const fn = obj && obj[name]
+            if (typeof fn !== 'function' || fn.loadPhase || fn.constructor?.name === 'GeneratorFunction')
+                return false
+            const w = function(...args) {
+                if (!active) return fn.apply(this, args)
+                enter(phase)
+                try { return fn.apply(this, args) }
+                finally { exit() }
+            }
+            w.loadPhase = phase
+            if (fn.taskSource) w.taskSource = fn.taskSource
+            obj[name] = w
+            return true
+        }
+        const wrapAll = () => {
+            if (wrapped) return
+            wrapped = true
+            const G = typeof Grid !== 'undefined' ? Grid.prototype : null
+            const L = typeof atmosphericLighting !== 'undefined' ? atmosphericLighting : null
+            if (typeof GameManager !== 'undefined') for (const n of ['start', 'load', 'setUpBoard']) wrap(GameManager, n, 'rules')
+            if (typeof TutorialManager !== 'undefined') wrap(TutorialManager, 'start', 'rules')
+            if (typeof saveManager !== 'undefined') wrap(saveManager, 'load', 'rules')
+            for (const n of ['loadFromObject', 'generateCoopGame', 'startTurn']) wrap(window, n, 'rules')
+            if (typeof Grid !== 'undefined' && !Grid.loadPhase) {
+                // (a class binding: the global name Grid is replaced by a Proxy whose construct is timed; prototype, statics
+                // and instanceof are the class's own)
+                const target = Grid
+                const proxy = new Proxy(target, {construct(t, args, newTarget) {
+                    if (!active) return Reflect.construct(t, args, newTarget === proxy ? t : newTarget)
+                    enter('grid-build')
+                    try { return Reflect.construct(t, args, newTarget === proxy ? t : newTarget) }
+                    finally { exit() }
+                }})
+                Grid = proxy
+                target.loadPhase = 'grid-build'
+            }
+            if (L) {
+                for (const n of ['tileVariant', 'fogVariant', 'tileDetail', 'ownedTile', 'prewarmOwnedTiles']) wrap(L, n, 'tile-variants')
+                for (const n of ['spillSprite', 'liftSprite']) wrap(L, n, 'sprites')
+                for (const n of ['stepLightMap', 'lightMap', 'build', 'updateMapRegion', 'prewarmGlows', 'finishLightMap', 'unstashMap']) wrap(L, n, 'light-map')
+            }
+            if (typeof MapDepth !== 'undefined') {
+                for (const n of ['rebuild', 'buildFaces', 'ensureGeometry', 'renderUnderlay', 'createUnderlayCache', 'drawCacheRegion', 'drawUnderlay',
+                        'renderAtmosphericSides', 'createAtmosphericShadow', 'drawAtmosphericShadow', 'renderRim', 'drawRim'])
+                    wrap(MapDepth.prototype, n, 'underlay')
+                for (const n of ['buildRockSprite', 'rockSpriteOf', 'rockWorkerDone', 'requestRockSprites']) wrap(MapDepth, n, 'underlay')
+            }
+            if (G) {
+                for (const n of ['litTile', 'holdStartFrame', 'stepLitView', 'queueLitTiles', 'setLitView', 'litLayerStep', 'drawLitLayerRaster', 'renderLitCellSprites'])
+                    wrap(G, n, 'lit-tiles')
+                for (const n of ['surfaceCacheBuildStep', 'surfaceSplitStep', 'surfacePatchStep', 'standInPreviewStep', 'patchSurfaceCache', 'startSurfaceCacheBuild'])
+                    wrap(G, n, 'surface-cache')
+                for (const n of ['unitSectorTask', 'buildUnitSector', 'composeUnitSector', 'unitSectorGround', 'storeUnitSector', 'unitSectorArrived',
+                        'queueUnitSectors', 'sectorSubmit', 'storeSector', 'closeSectorTile', 'sectorSnapshot'])
+                    wrap(G, n, 'sectors')
+            }
+            if (typeof SectorWorker !== 'undefined') wrap(SectorWorker, 'receive', 'sectors')
+            if (typeof SpriteCache !== 'undefined') for (const n of ['build', 'restockAtRest', 'beginFrame', 'makeRoom']) wrap(SpriteCache, n, 'sprites')
+            for (const n of ['drawSupersampledImage', 'loadSprites']) wrap(window, n, 'sprites')
+            if (typeof atmosphericBackground !== 'undefined') for (const n of ['rasterSteps', 'decorateSteps', 'syncKey']) wrap(atmosphericBackground, n, 'sky')
+            for (const proto of [CanvasRenderingContext2D.prototype, typeof OffscreenCanvasRenderingContext2D !== 'undefined' && OffscreenCanvasRenderingContext2D.prototype]) {
+                if (!proto) continue
+                const drawImage = proto.drawImage
+                proto.drawImage = function(image) {
+                    if (!active || !(image instanceof HTMLImageElement)) return drawImage.apply(this, arguments)
+                    enter('sprites')
+                    try { return drawImage.apply(this, arguments) }
+                    finally { exit() }
+                }
+            }
+        }
+        return {
+            enter, exit,
+            frameEnd() {
+                const out = {}
+                for (const k in perFrame) { out[k] = Math.round(perFrame[k] * 10) / 10; delete perFrame[k] }
+                return out
+            },
+            start() { wrapAll(); stack.length = 0; segments.length = 0; for (const k in perFrame) delete perFrame[k] },
+            stop() { stack.length = 0 },
+            segments: () => segments.map(([p, a, b]) => [p, Math.round(a * 10) / 10, Math.round(b * 10) / 10])
+        }
+    })()
+    // TASK-1631: the board's builds still under way at a frame's end (frame.loadPending): surface (the surface cache queued,
+    // building, split, patched, layered or dirty), lit (lit tiles queued, the lit view unbuilt / patched / its layer job),
+    // litRest (the lit view's rest snapshot not done), rock (MapDepth rock sprites asked of the workers).
+    const loadPendingOf = () => {
+        const g = typeof grid !== 'undefined' ? grid : null
+        if (!g) return null
+        const out = []
+        if (g.surfaceCacheQueued || g.surfaceCacheBuild || g.surfaceSplitJob || g.surfacePatchJob || g.surfaceLayerJob || g.surfaceCacheDirty) out.push('surface')
+        if (g.surfaceCache && !g.surfaceCacheLit) out.push('surfaceUnlit')
+        const v = g.litView
+        if (g.litTilesQueued || v && (v.unbuilt || v.patch || v.layerJob)) out.push('lit')
+        if (v && v.rest && typeof LIT_REST_BANDS !== 'undefined' && v.rest.done !== LIT_REST_BANDS) out.push('litRest')
+        if (typeof MapDepth !== 'undefined' && MapDepth.rockWorker?.pending?.size) out.push('rock')
+        return out
+    }
     drawAll = function(...args) {
         if (!frame) return originalDraw.apply(this, args)
         frame.camera = camera() // Camera after the existing update, actually used by this draw.
@@ -1583,6 +1712,7 @@
         // TASK-1574: Grid.frameView for the swap counters while sampling.
         if (typeof Grid !== 'undefined') Grid.noteFrameViews = true
         taskSources.start(report)
+        phaseTimers.start()
         playbackTrace.start(report)
         active = true
         return report
@@ -1590,6 +1720,7 @@
     function stop() {
         active = false
         taskSources.stop()
+        phaseTimers.stop()
         if (typeof Grid !== 'undefined') Grid.noteFrameViews = false
         if (!report) return null
         swapFinish(report.samples)
@@ -1652,7 +1783,7 @@
     }
     // TASK-1568: devicePx board pixels of the main canvas drawn as the plain ground fill for squares without a tile.
     const groundFill=devicePx=>{if(active&&devicePx>0)work.groundFillPx+=devicePx}
-    const api=window.visualsPerf={start,stop,groundFill,paired,compare,diagnostics,setSegment:value=>{segment=value},cancel:()=>{cancelled=true;stop()},export:()=>api.lastExport||stop()}
+    const api=window.visualsPerf={phases:phaseTimers.segments,start,stop,groundFill,paired,compare,diagnostics,setSegment:value=>{segment=value},cancel:()=>{cancelled=true;stop()},export:()=>api.lastExport||stop()}
     window.addEventListener('load',()=>{
         const panel=create('section');panel.id='visuals-perf-controls'
         panel.style.cssText='position:fixed;left:8px;bottom:8px;z-index:99999;background:#182333;color:white;padding:8px;font:12px sans-serif;max-width:calc(100vw - 32px)'
