@@ -173,6 +173,9 @@ class CanvasPool {
     static REST_BURST = 60
     static restTokens = CanvasPool.REST_BURST
     static restTokensAt = 0
+    // TASK-1618: the rest hooks run in a task after the frame (restTick); restQueued: one is queued.
+    static restTasks = true
+    static restQueued = false
     static TRIM_SHARE = 0.75
     static seq = 0
     static pools = []
@@ -338,6 +341,25 @@ class CanvasPool {
         // TASK-1562: not after a zoom (Grid.zoomQuiet).
         if (typeof Grid !== 'undefined' && Grid.zoomQuiet?.())
             return
+        // TASK-1618 (CanvasPool.restTasks): the hooks run in a task after the frame (one queued at a time; nothing if the
+        // camera moved or a zoom began meanwhile), not inside it: their planning (the sprite stock's wants, the cell sprites'
+        // plan, the lit pieces') was ~0.1-0.25 ms of each held still frame.
+        if (CanvasPool.restTasks && typeof setTimeout === 'function') {
+            if (!CanvasPool.restQueued) {
+                CanvasPool.restQueued = true
+                setTimeout(() => {
+                    CanvasPool.restQueued = false
+                    if (CanvasPool.resting && !(typeof Grid !== 'undefined' && Grid.zoomQuiet?.()))
+                        CanvasPool.runRestHooks()
+                }, 0)
+            }
+            return
+        }
+        CanvasPool.runRestHooks()
+    }
+    // The rest hooks (restTick), within the token bucket.
+    static runRestHooks() {
+        const now = performance.now()
         // TASK-1617: each hook given at most RESERVE_PER_FRAME and what the bucket holds; what it made (its return) taken out.
         CanvasPool.restTokens = Math.min(CanvasPool.REST_BURST,
             CanvasPool.restTokens + Math.max(0, now - CanvasPool.restTokensAt) * CanvasPool.REST_RATE / 1000)

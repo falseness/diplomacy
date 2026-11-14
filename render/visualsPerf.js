@@ -765,13 +765,18 @@
     // drawn), no frame before it to repeat, or its key or calls differ from that frame's (the first difference: key index,
     // call count, or the first differing call's name and argument index / property).
     const stillMissOf = (g, recorder, last) => {
+        // TASK-1618: a frame of a pan's hold with the camera at rest (Grid.restingInHold: recorded for its base, never held).
+        if (typeof gameEvent !== 'undefined' && gameEvent.screen?.surfaceMoving) return 'hold'
         if (g.frameSurface === true) {
             if (g.fadesPending?.()) return 'fades'
             // (TASK-1616: not while the jobs are paused on a tutorial's result screen, Grid.resultPaused: they keep no hold off)
             const paused = !!g.resultPaused?.()
-            for (const name of ['surfaceCacheBuild', 'surfacePatchJob', 'surfaceLayerJob', 'surfaceSplitJob']) if (g[name] && !paused) return 'job:' + name
+            // (TASK-1618: the split and layer job only when they keep a still frame from being held, Grid.surfaceJobHolds)
+            const holds = g.surfaceJobHolds ? g.surfaceJobHolds() : false
+            for (const name of ['surfaceCacheBuild', 'surfacePatchJob', 'surfaceLayerJob', 'surfaceSplitJob'])
+                if (g[name] && !paused && !(holds && (name === 'surfaceLayerJob' || name === 'surfaceSplitJob'))) return 'job:' + name
             if (g.litView?.layerJob) return 'job:litLayer'
-            if (otherSettings.atmosphericVisuals && !g.surfaceCacheLit) return 'cache-unlit'
+            if (otherSettings.atmosphericVisuals && !g.surfaceCacheLit && !Grid.stillUnlitFrames) return 'cache-unlit'
             if (recorder && !g.recordingSteady(recorder)) return 'unsteady-args'
         }
         else if (!g.stillFrameSteady(recorder)) return 'unsteady:' + String(g.frameSurface)
@@ -948,11 +953,16 @@
             const endLod = proto.endLodFrame
             proto.endLodFrame = function(...args) {
                 // TASK-1376: a still frame above the threshold held the same way.
-                const still = this.stillHolds, recorded = this.stillRecording, last = this.lodFrame
+                const still = this.stillHolds, recorded = this.stillRecording, last = this.lodFrame, based = this.stillBaseHolds
                 const held = endLod.apply(this, args)
                 if (active && held) work.renderPath = this.stillHolds !== still ? 'still-held' : 'lod-held'
                 // TASK-1614: why a recorded still frame was made again instead of held (stillMissOf).
-                else if (active && recorded && this === grid) work.stillMiss = stillMissOf(this, args[1], last)
+                else if (active && recorded && this === grid) {
+                    work.stillMiss = stillMissOf(this, args[1], last)
+                    // TASK-1618: made on the board's held base (Grid.drawBaseFrame: its copy drawn back, then the calls
+                    // after it), not from the surface cache.
+                    if (this.stillBaseHolds !== based) work.renderPath = 'still-base'
+                }
                 return held
             }
         }

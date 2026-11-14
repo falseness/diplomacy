@@ -193,6 +193,11 @@ class Grid extends SpritesGroup {
         this.stillRecording = false
         this.stillHolds = 0
         this.stillRefreshes = 0
+        // TASK-1618 (Grid.stillBaseFrames): the still frames' base, the board under its units and overlays as a steady
+        // frame drawn from the surface cache left the canvas ({canvas: Grid.lodBaseCanvas, end: the calls under it, calls, key,
+        // serial}), and the frames drawn on it (the board's base drawn back, the calls after it made: drawBaseFrame).
+        this.lodBase = undefined
+        this.stillBaseHolds = 0
         // Lit tiles and the rest snapshot above the surface cache's scale (drawLitView): the view,
         // the snapshot's canvas, spare tile canvases and what the frame drew.
         this.litView = undefined
@@ -228,7 +233,7 @@ class Grid extends SpritesGroup {
         this.unitSectorWanted = undefined
         this.unitFrame = undefined
         this.unitSectorWork = {built: 0, drawn: 0, live: 0, frames: 0, clears: 0, dirtied: 0, checks: 0, evicted: 0, cut: 0,
-            restarts: 0, overlays: 0, overlaysDrawn: 0, bursts: 0, stepCalls: 0, stepCells: 0, swaps: 0}
+            restarts: 0, overlays: 0, overlaysDrawn: 0, bursts: 0, stepCalls: 0, stepCells: 0, swaps: 0, restSkips: 0}
         // TASK-1562 (Grid.zoomLevels): zoom frames drawn from the unit sectors of the levels kept (drawZoomSectors); the
         // frames after a zoom (levelSettle) until every square on the canvas is drawn at the camera's level, then the frames
         // at rest drawn from the sectors (sectorRest) until the camera pans; the coverage of the last frame drawn
@@ -352,6 +357,8 @@ class Grid extends SpritesGroup {
         // TASK-1570: surface split steps that waited for the camera at rest (Grid.splitCutAtRest)
         this.splitCutWaits = 0
         this.cellLayerComposites = 0
+        // TASK-1618: the composites into a canvas the frames draw (not a layer job's stage): the still frames' key (lodFrameKey).
+        this.shownComposites = 0
         this.cellSpriteRenders = 0
         this.cellSpriteDraws = 0
         this.cellLayerRefreshes = 0
@@ -372,6 +379,8 @@ class Grid extends SpritesGroup {
         this.surfaceLayerSteps = 0
         this.surfaceLayerJobs = 0
         this.surfaceLayerJobsDone = 0
+        // TASK-1618: the surface layer job's steps that changed what its frames draw from in place (lodFrameKey).
+        this.surfaceJobDraws = 0
         this.lastSurfaceLayerJob = undefined
         this.surfaceLayerStage = undefined
         // The surface cache built between frames (prepareSurfaceCache): the build in progress,
@@ -1240,8 +1249,30 @@ class Grid extends SpritesGroup {
                 return
             }
         }
-        if (this.cellSplitStep(job, SURFACE_STEP_MS))
+        if (this.cellSplitStep(job, SURFACE_STEP_MS)) {
             this.surfaceSplitJob = undefined
+            this.splitShown(job)
+        }
+    }
+    // TASK-1618 (Grid.stillJobFrames): the split's end (cellSplitStep: the cache cut, its shown canvas composed whole) changed
+    // the canvas the frames draw (the uncut cache, then the shown canvas: the cut cache and the layer added, the cache as drawn
+    // to the bit, splitCellLayer) and the key (lodFrameKey: the shown canvas, shownComposites) but not their pixels: each still
+    // frame after it was made again whole, the frames before it held. The held frame and its base (lodFrame, lodBase) drawn
+    // from the uncut cache are taken to draw the shown canvas instead (their drawImage calls of the cache and their key), so
+    // the next frame, drawing the shown canvas, repeats them.
+    splitShown(job) {
+        const cache = job.canvas, shown = this.surfaceCacheShown
+        if (!Grid.stillJobFrames || !shown || cache !== this.surfaceCache || !cache.cellLayered || shown.width !== cache.width ||
+                shown.height !== cache.height)
+            return
+        for (const held of [this.lodFrame, this.lodBase]) {
+            if (!held || held.key[LOD_KEY_CACHE] !== cache)
+                continue
+            held.calls = held.calls.map(c => c.name === 'drawImage' && c.args?.[0] === cache ? {...c, args: [shown, ...c.args.slice(1)]} : c)
+            held.key = held.key.slice()
+            held.key[LOD_KEY_SHOWN] = shown
+            held.key[LOD_KEY_COMPOSITES] = this.shownComposites
+        }
     }
     surfaceSplitHolds(job) {
         if (job.canvas !== this.surfaceCache || job.layer !== this.surfaceCellLayer || this.surfaceCacheBuild) {
@@ -2021,7 +2052,7 @@ class Grid extends SpritesGroup {
                     return fail()
                 for (const cell of chunk.cells)
                     cell.key = keys.get(cell)
-                this.composeCellSprites(stage, layer, rect, area.x, area.y)
+                this.composeCellSprites(stage, layer, rect, area.x, area.y, true)
             })
         }
         job.steps.push(() => {
@@ -2165,12 +2196,23 @@ class Grid extends SpritesGroup {
                 const L = atmosphericLighting
                 if (job.sync && L.regionStaged !== job.sync)
                     return fail()
+                // TASK-1618: the light map's owners changed in place: the frames' key (lodFrameKey) when a frame lights the
+                // job's cells from the map (drawPatchCells: a part without a region light of its own and no light changed;
+                // the parts are found by the job's first frame, so before it, a step counts) or the cache from it (an unlit
+                // cache, drawsLightMap): each such frame is made again whole (80-110 ms on the tutorial replay, 4-5 frames a
+                // sync), so the sync's own steps go on within SURFACE_LAYER_SYNC_MS of the step (at least
+                // SURFACE_LAYER_SYNC_STEPS), the same steps in fewer frames.
+                const mapLit = this.surfaceLayerMapLit(job)
+                const start = performance.now()
                 const step = this.withHeldLightMap(scale, () => {
                     job.sync ||= L.startOwnerSync(this, scale)
                     let step
-                    for (let k = 0; k < SURFACE_LAYER_SYNC_STEPS && !(step = job.sync.next()).done; ++k);
+                    for (let k = 0; (k < SURFACE_LAYER_SYNC_STEPS || mapLit && Grid.stillJobFrames &&
+                            performance.now() - start < SURFACE_LAYER_SYNC_MS) && !(step = job.sync.next()).done; ++k);
                     return step
                 })
+                if (mapLit)
+                    ++this.surfaceJobDraws
                 if (!step || step.done && !step.value)
                     return fail()
                 if (!step.done)
@@ -2229,7 +2271,7 @@ class Grid extends SpritesGroup {
                 const y0 = region.y + Math.floor(k * region.h / n), y1 = region.y + Math.floor((k + 1) * region.h / n)
                 if (y1 > y0)
                     job.steps.push(() => atKeys(() => this.composeCellSprites(stage, layer, {x: region.x, y: y0, w: region.w, h: y1 - y0},
-                        region.x, region.y)))
+                        region.x, region.y, true)))
             }
             job.steps.push(() => {
                 const g = shown.getContext('2d')
@@ -2259,8 +2301,13 @@ class Grid extends SpritesGroup {
     // frame, none in the frame that started it. A job whose cache, layer or board state is no longer its own, a layer being
     // split again (no cells: TASK-1504, prepareSurfaceCellLayer drops it there too), or a patch or build under way, is
     // dropped; a step that fails drops it too, and the change is then drawn at once (refreshCellLayer).
+    // TASK-1618 (Grid.stillJobFrames): the first step (the light map's owner sync) runs in the frame that started the job when
+    // the frames light the job's cells from the map (surfaceLayerMapLit): that frame is made again anyway (its calls changed),
+    // where the sync in the next frame changed the key there (surfaceJobDraws) and made that frame again too (80-110 ms).
     surfaceLayerStep() {
         const job = this.surfaceLayerJob
+        if (job.ran === null && Grid.stillJobFrames && job.step === 0 && this.surfaceLayerMapLit(job))
+            job.ran = this.drawSerial - 1
         if (job.ran === null || job.ran === this.drawSerial) {
             job.ran ??= this.drawSerial
             return
@@ -2275,6 +2322,13 @@ class Grid extends SpritesGroup {
             this.dropSurfaceLayerJob()
             this.surfaceLayerJobFailed = true
         }
+    }
+    // TASK-1618: whether frames light the surface layer job's cells from the light map (drawPatchCells: a part without a region
+    // light of its own and no light changed; before the job's first frame found its parts, assumed) or the cache from it (no
+    // light baked in).
+    surfaceLayerMapLit(job) {
+        return !job.parts || job.parts.some(part => !part.regionLight && !part.light.length) ||
+            !!otherSettings.atmosphericVisuals && !this.surfaceCacheLit
     }
     // The surface layer job ended before its last step: the layer canvas, if its step drew the new sprites, drawn again from
     // the cells' variants when next read.
@@ -2431,7 +2485,8 @@ class Grid extends SpritesGroup {
     // the sprites added there, as composeCellLayer adds the layer (its pixels there are the sums of those sprites,
     // drawCellSprites), but drawn from the sprites, not from the layer canvas changed in the frame.
     // ox, oy: target's pixel (0, 0) at the layer's (ox, oy) (a canvas of a region of it).
-    composeCellSprites(target, layer, rect, ox = 0, oy = 0) {
+    // TASK-1618: staged: target is a layer job's stage canvas, which no frame draws (not counted in shownComposites).
+    composeCellSprites(target, layer, rect, ox = 0, oy = 0, staged = false) {
         const g = target.getContext('2d'), {x, y, w, h} = rect
         g.save()
         g.setTransform(1, 0, 0, 1, -ox, -oy)
@@ -2448,6 +2503,8 @@ class Grid extends SpritesGroup {
         }
         g.restore()
         ++this.cellLayerComposites
+        if (!staged)
+            ++this.shownComposites
     }
     // The surface cache's cell layer (splitCellLayer) after a build, or after a patch of rect (copy: the patch's region
     // copied into the cache, resplitCellLayer), or none (no cell layer). The frames draw the cache scaled: its layer is added
@@ -2503,6 +2560,7 @@ class Grid extends SpritesGroup {
         }
         this.composeCellLayer(shown, canvas, layer, rect)
         ++this.cellLayerComposites
+        ++this.shownComposites
     }
     // The lit view's rest snapshot's cell layer (splitCellLayer) when finished, or after a patch of rect (copy, as
     // prepareSurfaceCellLayer's), or none.
@@ -2549,6 +2607,7 @@ class Grid extends SpritesGroup {
         this.composeCellLayer(shown, rest.canvas, layer, rect)
         rest.shown = shown
         ++this.cellLayerComposites
+        ++this.shownComposites
     }
     // A board change seen by the cell layers (Grid.liveCellLayer): each split cell whose variant (cellLayerKey) is no longer
     // its sprite's gets the sprite of its variant now drawn into the layer (drawCellSprites, the region its box and its
@@ -3823,11 +3882,24 @@ class Grid extends SpritesGroup {
         if (this.surfacePatchJob)
             this.drawPatchCells(ctx, this.surfacePatchJob, 'cache')
         else if (this.surfaceLayerJob) {
-            const job = this.surfaceLayerJob
-            for (const part of job.parts ||= this.surfaceLayerParts(job))
-                this.drawPatchCells(ctx, part, 'cache')
-            if (main && !this.resultPaused())
+            let job = this.surfaceLayerJob
+            // TASK-1618 (Grid.stillJobFrames): the job's last step (the stage copied into the shown canvas) before the frame
+            // draws the changed cells over it: the frame then draws the shown canvas alone (made again once: its calls
+            // changed), where after them it changed the key (cellLayerRevision) of a frame that drew the cells (made again)
+            // and the next frame's calls (made again too).
+            // (Only when the step will run: the job still the cache's, surfaceLayerStep's checks.)
+            if (main && !this.resultPaused() && Grid.stillJobFrames && job.ran !== null && job.ran !== this.drawSerial &&
+                    job.step === job.steps.length - 1 && job.cache === this.surfaceCache && job.layer === this.surfaceCellLayer &&
+                    job.layer?.cells && !this.surfacePatchJob && !this.surfaceCacheBuild && this.cellLayerStatesAre(job.states)) {
                 this.surfaceLayerStep()
+                job = this.surfaceLayerJob
+            }
+            if (job) {
+                for (const part of job.parts ||= this.surfaceLayerParts(job))
+                    this.drawPatchCells(ctx, part, 'cache')
+                if (main && !this.resultPaused())
+                    this.surfaceLayerStep()
+            }
         }
         return true
     }
@@ -4128,7 +4200,10 @@ class Grid extends SpritesGroup {
         // paths this redraw traces (atmosphericLighting.memoPath: the grout's, the fog's, the shadows' clip) are kept for the
         // job, so every frame draws the same path objects (steady: Grid.recordingSteady) and the frame can be held; a path
         // traced afresh each frame kept every such frame from being held (130-200 ms frames on the tutorial replay).
-        if (this.resultPaused())
+        // TASK-1618: so do the surface layer job's frames (surfaceJobHolds), the paths kept for the job (its part): memoPath
+        // finds a kept path by its cells (the same hexagons in order, the shadows' at the same places), so a changed board
+        // traces its own.
+        if (this.resultPaused() || Grid.stillJobFrames && path === 'cache' && this.surfaceLayerJob && !this.surfacePatchJob)
             L.pathMemo = job.resultMemo ||= new Map()
         // Only the sprites and shadows reaching the window are drawn (spriteInPatchCells, drawShadows).
         this.patchCellsWindow = window
@@ -5491,7 +5566,10 @@ class Grid extends SpritesGroup {
         const screen = typeof gameEvent !== 'undefined' ? gameEvent.screen : undefined
         const t = ctx.getTransform()
         const refused = !Grid.unitSectors || !this.unitSectors || !otherSettings.atmosphericVisuals || !screen ? 'off' :
-            !screen.surfaceMoving && !rest ? 'rest' : (screen.zoomGesture || screen.surfaceZooming) && !(zoomBuild && Grid.zoomBuildOpen()) ? 'zoom' :
+            // (TASK-1618: so is a frame of a pan's hold with the camera at rest, Grid.restingHoldFrames: drawn as at rest, its
+            // board's base kept and drawn back, drawBaseFrame, where every frame of the hold drew the cache and unit sectors)
+            (!screen.surfaceMoving || Grid.restingHoldFrames && this.restingInHold(screen)) && !rest ? 'rest' :
+            (screen.zoomGesture || screen.surfaceZooming) && !(zoomBuild && Grid.zoomBuildOpen()) ? 'zoom' :
             typeof mainCanvas === 'undefined' || ctx.canvas !== mainCanvas || this !== grid || !this.arr.length ? 'canvas' :
             t.b !== 0 || t.c !== 0 || !(t.a > 0) || t.a !== t.d ? 'transform' : this.lod ? 'lod' :
             this.drawLogicText ? 'texts' : this.stillUnitsHidden() ? 'hidden' : this.isObserving() ? 'observing' : null
@@ -6603,6 +6681,19 @@ class Grid extends SpritesGroup {
         if (kind === 'cache' && (this.cacheSectorUnsteady() || !this.surfaceStateMatches(ctx) || !this.surfaceCellLayerHolds()))
             return
         const cw = ctx.canvas.width, ch = ctx.canvas.height
+        // TASK-1618 (Grid.restSectorSkips): right after a held frame (the units drawn as in the frame before), at the camera,
+        // canvas and surface cache of a rest pass that left nothing wanted or building, within REST_SECTOR_SKIP_MS of it: the
+        // pass is not made again (the board's state compared, the plan, the cells' unit check and the squares' fit: ~0.3 ms
+        // of each held frame on the tutorial replay). Any other frame makes it (a pan's frames check the units themselves).
+        const idle = this.restSectorsIdle, now = performance.now(), c = ctx.getTransform()
+        if (Grid.restSectorSkips && idle && this.heldSerial === this.drawSerial - 1 && idle.kind === kind && idle.a === c.a &&
+                idle.d === c.d && idle.e === c.e && idle.f === c.f && idle.cw === cw && idle.ch === ch && idle.cache === this.surfaceCache &&
+                idle.revision === this.surfaceCacheRevision && now - idle.at < REST_SECTOR_SKIP_MS && !this.unitSectorWanted &&
+                !this.unitSectorBuilding) {
+            ++this.unitSectorWork.restSkips
+            return
+        }
+        this.restSectorsIdle = undefined
         const plan = this.unitSectorPlan(ctx, kind, true)
         if (!plan)
             return
@@ -6617,6 +6708,8 @@ class Grid extends SpritesGroup {
                     wanted.push({u, v})
             }
         this.queueUnitSectors(plan, wanted, range, board, cw, ch, ox, oy)
+        if (!this.unitSectorWanted && !this.unitSectorBuilding)
+            this.restSectorsIdle = {kind, a: c.a, d: c.d, e: c.e, f: c.f, cw, ch, cache: this.surfaceCache, revision: this.surfaceCacheRevision, at: now}
     }
     // TASK-1560: a pan frame far out on the surface cache's path (drawn whole at or below its scale, the light baked in) draws
     // the cache and the units from the unit sectors (live squares as before, clipped). Returns whether it drew the surface
@@ -9911,6 +10004,9 @@ class Grid extends SpritesGroup {
                 atmosphericLighting.lightTile(ctx, this, pass.outline)
             else if (!standIn)
                 atmosphericLighting.draw(ctx, this, cachedScene && this.surfaceCacheLit)
+            // TASK-1618: a recorded still frame's base ends here (the board under the units and overlays: drawBaseFrame).
+            if (cachedScene && this.stillRecording && this.lodRecorder && ctx === this.lodRecorder.context)
+                this.lodRecorder.baseEnd = this.lodRecorder.calls.length
             layered = cachedScene && this.drawOverlayLayer(ctx)
             if (!cachedScene) {
                 if (!pass)
@@ -10761,11 +10857,13 @@ class Grid extends SpritesGroup {
         }
         const recorder = this.lodRecorder ||= new CanvasCallRecorder()
         recorder.begin(ctx, null)
+        recorder.baseEnd = -1
         // Bounds are kept for an overlay snapshot only; none is made from this recording.
         recorder.endOverlays()
         return recorder
     }
     // The rasters a level-of-detail frame's calls draw from that change in place, by identity and revision.
+    // (TASK-1618: the surface cache, its shown canvas and shownComposites at LOD_KEY_CACHE, LOD_KEY_SHOWN, LOD_KEY_COMPOSITES.)
     lodFrameKey(ctx) {
         const t = ctx.getTransform(), b = this.surfaceCacheBounds
         return [t.a, t.d, t.e, t.f, ctx.canvas.width, ctx.canvas.height, otherSettings.atmosphericVisuals, atmosphericBackground.raster,
@@ -10773,9 +10871,19 @@ class Grid extends SpritesGroup {
             b?.left, b?.top, b?.width, b?.height,
             // TASK-1376: a still frame on the lit view's rest snapshot (changed in place by patches, layer jobs and splits).
             this.litView, this.litView?.rest, this.litView?.rest?.canvas, this.litView?.rest?.shown, this.litView?.rest?.cellLayer,
-            this.cellLayerComposites, this.cellLayerRefreshes, this.litPatches, mapDepth.outline, mapDepth.rim,
+            this.shownComposites, this.cellLayerRefreshes, this.litPatches, mapDepth.outline, mapDepth.rim,
+            // TASK-1618: a surface layer job's steps that change what its frames draw from in place (surfaceJobHolds).
+            this.surfaceJobDraws,
             // TASK-1516: a still frame on the lit tiles (their light and the lit edges' from the light map).
-            atmosphericLighting.rebuilds, atmosphericLighting.mapScale]
+            atmosphericLighting.rebuilds, atmosphericLighting.mapScale,
+            // TASK-1618 (Grid.stillUnlitFrames): a frame drawing the light map and gain over a surface cache without its light
+            // baked in (atmosphericLighting.draw): their content version (every drawing on or reset of them, mapEdits and
+            // the staged steps since, mapSteps; an owner sync keeps rebuilds).
+            ...this.drawsLightMap() ? [atmosphericLighting.mapEdits, atmosphericLighting.mapSteps] : [null, null]]
+    }
+    // TASK-1618: whether the frame drawn from the surface cache drew the light map over it (lodFrameKey).
+    drawsLightMap() {
+        return this.frameSurface === true && !!otherSettings.atmosphericVisuals && !this.surfaceCacheLit
     }
     // Whether a frame's calls can stand for the next frame's: drawn from the surface cache (not lit tiles or directly), no
     // camera move or zoom gesture, move tween, surface cache job
@@ -10783,13 +10891,36 @@ class Grid extends SpritesGroup {
     // patched in place, is drawn over it).
     // TASK-1616: the surface cache jobs (a build, patch, layer job or split) paused on a tutorial's result screen (resultPaused)
     // change no buffer the frames draw from, so they do not keep a frame from being held there.
-    lodFrameSteady(recorder) {
+    // TASK-1618 (Grid.stillUnlitFrames): a cache without its light is let be, the light map's content version in the key.
+    // TASK-1618 (TUTORIAL PERF 5/7, Grid.stillJobFrames): nor do the cache's split and its layer job (surfaceJobHolds): the
+    // frames draw what those jobs do not change until their last step, which changes the frame's key or calls; each still
+    // frame while one ran was made again from its recording (618 such frames on the user's tutorial capture, 40-200 ms on
+    // the replay, artifacts/TASK-1614/causes.md problem 4).
+    // TASK-1618: base: steady as the frame's base (drawBaseFrame) is: squares fading in (fadesPending) and the hold after a
+    // pan with the camera at rest (restingInHold) let be.
+    lodFrameSteady(recorder, base = false) {
         const screen = typeof gameEvent !== 'undefined' ? gameEvent.screen : undefined
-        if (this.frameSurface !== true || !screen || screen.surfaceMoving || screen.zoomGesture || zoomRasterTweens() || this.fadesPending() ||
-                (this.surfaceCacheBuild || this.surfacePatchJob || this.surfaceLayerJob || this.surfaceSplitJob) && !this.resultPaused() ||
-                this.litView?.layerJob || otherSettings.atmosphericVisuals && !this.surfaceCacheLit)
+        if (this.frameSurface !== true || !screen || screen.surfaceMoving && !(base && this.restingInHold(screen)) || screen.zoomGesture ||
+                zoomRasterTweens() || !base && this.fadesPending() ||
+                (this.surfaceCacheBuild || this.surfacePatchJob || !this.surfaceJobHolds()) && !this.resultPaused() ||
+                this.litView?.layerJob || otherSettings.atmosphericVisuals && !this.surfaceCacheLit && !Grid.stillUnlitFrames)
             return false
         return this.recordingSteady(recorder)
+    }
+    // TASK-1618: whether the surface cache's split (surfaceSplitJob) and layer job (surfaceLayerJob) under way, if any, keep
+    // a still frame drawn from the cache what it was. The split's steps draw only into the cell layer and its sprites; the
+    // frames draw the cache uncut (drawSurfaceCacheRect) until its last step cuts the cache and composes the shown canvas
+    // (shownComposites, in the key) and the frames draw that one (other calls). The layer job's steps draw into the
+    // patch buffer, the layer's sprites, the layer and its stage canvas, none of which the frames draw; the frames draw the
+    // shown canvas and the changed cells over it (drawPatchCells: with the job's path memo, the same path objects each
+    // frame) until the last step copies the stage into the shown canvas (cellLayerRevision, in the key); its first steps
+    // sync the light map's owners in place, which those cells may be lit from (surfaceJobDraws, in the key).
+    surfaceJobHolds() {
+        if (!Grid.stillJobFrames)
+            return !this.surfaceLayerJob && !this.surfaceSplitJob
+        const split = this.surfaceSplitJob, layer = this.surfaceLayerJob
+        return (!split || split.canvas === this.surfaceCache && split.layer === this.surfaceCellLayer) &&
+            (!layer || layer.cache === this.surfaceCache && layer.layer === this.surfaceCellLayer && !layer.failed)
     }
     // TASK-1616 (TUTORIAL PERF 3/7, Grid.resultPauses): whether the board's surface cache work is paused: the board on screen
     // with a tutorial's result screen over it (or Next tutorial's switch under way, TutorialManager.switching), where it no
@@ -10837,8 +10968,11 @@ class Grid extends SpritesGroup {
             return false
         const screen = typeof gameEvent !== 'undefined' ? gameEvent.screen : undefined
         const t = ctx.getTransform()
-        // TASK-1575: nor while squares fade in (fadesPending).
-        return !!screen && !screen.surfaceMoving && !screen.zoomGesture && !zoomRasterTweens() && !this.fadesPending() &&
+        // TASK-1575: nor while squares fade in (fadesPending). TASK-1618: recorded all the same with Grid.stillBaseFrames (never
+        // held: stillFrameSteady), so their base can be drawn back (drawBaseFrame) under the fades drawn after it; so are the
+        // frames of a pan's hold with the camera at rest (restingInHold).
+        return !!screen && (!screen.surfaceMoving || Grid.stillBaseFrames && this.restingInHold(screen)) && !screen.zoomGesture &&
+            !zoomRasterTweens() && (!this.fadesPending() || Grid.stillBaseFrames) &&
             t.b === 0 && t.c === 0 && t.a > 0 && t.d > 0
     }
     // Whether a recorded still frame (stillFrameCandidate) can stand for the next: the camera still at rest, and drawn from
@@ -10852,12 +10986,15 @@ class Grid extends SpritesGroup {
     // rebuilds are in the key (lodFrameKey). And while the snapshot's split job runs (view.splitJob): its steps draw only
     // into the cell layer, the snapshot is drawn uncut until the last step cuts it and the frames draw the composed one
     // (rest.shown, other calls).
-    stillFrameSteady(recorder) {
+    stillFrameSteady(recorder, base = false) {
         const screen = typeof gameEvent !== 'undefined' ? gameEvent.screen : undefined
-        if (!screen || screen.surfaceMoving || screen.zoomGesture || zoomRasterTweens())
+        if (!screen || screen.surfaceMoving && !(base && this.restingInHold(screen)) || screen.zoomGesture || zoomRasterTweens())
             return false
         if (this.frameSurface === true)
-            return this.lodFrameSteady(recorder)
+            return this.lodFrameSteady(recorder, base)
+        // (TASK-1618: a fading frame or one in a pan's hold is not held)
+        if (this.fadesPending() || screen.surfaceMoving)
+            return false
         if (otherSettings.atmosphericVisuals) {
             const frame = this.litFrame, view = this.litView, tiles = Grid.stillLitTiles
             if (this.frameSurface !== 'lit' || !frame || frame.view !== view || !view || view.patch || view.layerJob ||
@@ -10899,8 +11036,16 @@ class Grid extends SpritesGroup {
             return false
         }
         const last = this.lodFrame, steady = still ? this.stillFrameSteady(recorder) : this.lodFrameSteady(recorder)
+        // TASK-1618: a frame drawn from the surface cache while squares fade in (their pictures drawn after the base) is
+        // never held, but its base is as a steady frame's (baseSteady).
+        const baseSteady = steady || still && Grid.stillBaseFrames && this.frameSurface === true &&
+            (this.fadesPending() || gameEvent.screen.surfaceMoving) && this.stillFrameSteady(recorder, true)
+        const base = this.lodBase, based = baseSteady && still && base?.serial === this.drawSerial - 1
         if (steady && last && last.serial === this.drawSerial - 1 && recorder.repeats(last)) {
             last.serial = this.drawSerial
+            // (TASK-1618: the base under it too: the same calls as the frame before, whose own were on it)
+            if (based)
+                base.serial = this.drawSerial
             if (this.drawHeldFrame(ctx, last)) {
                 if (still) ++this.stillHolds
                 else ++this.lodHolds
@@ -10909,8 +11054,27 @@ class Grid extends SpritesGroup {
             recorder.replay(ctx, true)
             return false
         }
-        recorder.replay(ctx, true)
+        // TASK-1618: the board's base drawn back and only the calls after it made (drawBaseFrame); the frame is then held as
+        // any steady frame made on the canvas (its snapshot taken), on the same base.
+        if (based && this.drawBaseFrame(ctx, recorder, base)) {
+            this.dropHeldFrame(true)
+            if (steady) {
+                this.lodFrame = {key: recorder.key, calls: recorder.calls, serial: this.drawSerial, state: canvasStateOf(ctx), bitmap: null}
+                this.captureHeldFrame(ctx, this.lodFrame)
+            }
+            ++this.stillBaseHolds
+            return false
+        }
+        // TASK-1618: a steady still frame drawn from the surface cache leaves its base snapshot (keepBaseFrame) on the way.
+        const end = baseSteady && still && Grid.stillBaseFrames && this.frameSurface === true ? recorder.baseEnd : -1
         this.dropHeldFrame()
+        if (end >= 0) {
+            recorder.replay(ctx, true, 0, end)
+            this.keepBaseFrame(ctx, recorder, end)
+            recorder.replay(ctx, true, end)
+        }
+        else
+            recorder.replay(ctx, true)
         this.lodFrame = steady ? {key: recorder.key, calls: recorder.calls, serial: this.drawSerial, state: canvasStateOf(ctx), bitmap: null} : undefined
         if (this.lodFrame) {
             this.captureHeldFrame(ctx, this.lodFrame)
@@ -10919,10 +11083,84 @@ class Grid extends SpritesGroup {
         }
         return false
     }
+    // TASK-1618: the hold after a pan (Screen.surfaceMoving: 160 ms and two frames after a move of the view, then
+    // SURFACE_LAYER_HOLD) with the camera where it was in the frame before (SpriteCache.moving: the main canvas's transform
+    // compared at each frame's start), no zoom: frames that draw the board as at rest (the overlays from their layer) and
+    // were each made again whole (15-20 frames of 30-40 ms after each pan on the tutorial replay).
+    // (A pan input or glide that did not move the camera this frame, its first eased step or an edge it is held against,
+    // counts as at rest: the frame draws what a frame at rest there draws.)
+    restingInHold(screen) {
+        return !!screen && !screen.zoomGesture && !screen.surfaceZooming && typeof SpriteCache !== 'undefined' && !!SpriteCache.camera &&
+            !SpriteCache.moving
+    }
+    // TASK-1618 (TUTORIAL PERF 5/7, Grid.stillBaseFrames): a still frame whose calls differ from the frame before only after
+    // its base (CanvasCallRecorder.baseEnd: the sky, the slab's shadow, the surface cache with the changed cells over it and
+    // the light, the calls before the units, overlays, cell texts and borders: Grid.draw) was made again whole (40-100 ms on
+    // the tutorial replay: a unit selected or let go of, its bars and moves drawn or not). Instead the canvas as those calls
+    // left it in a steady frame (keepBaseFrame: a snapshot taken between them and the rest as the frame was made) is drawn
+    // back, the state and path calls before the base's end made (no drawing), then the calls after it: the same calls on the
+    // same pixels as the frame made whole. Only when the frame's key (lodFrameKey: the rasters drawn from, the camera, the
+    // canvas) and its calls up to the base's end (with the same arguments) are the base's, and the base was on the canvas
+    // in the frame before (base.serial: every frame since it was made steady with the same base). False: not drawn.
+    drawBaseFrame(ctx, recorder, base) {
+        const copy = base.canvas, n = base.end, a = recorder.key, b = base.key, calls = recorder.calls
+        if (Grid.lodBaseCanvas !== copy || copy.width !== ctx.canvas.width || copy.height !== ctx.canvas.height || recorder.baseEnd !== n ||
+                calls.length < n || a.length !== b.length)
+            return false
+        for (let k = 0; k < a.length; ++k) if (a[k] !== b[k]) return false
+        for (let k = 0; k < n; ++k) {
+            const x = calls[k], y = base.calls[k]
+            if (x.set !== y.set || x.name !== y.name)
+                return false
+            if (x.set !== undefined) {
+                if (x.value !== y.value) return false
+                continue
+            }
+            const p = x.args, q = y.args
+            if (p.length !== q.length) return false
+            for (let i = 0; i < p.length; ++i) if (p[i] !== q[i]) return false
+        }
+        ctx.save()
+        ctx.setTransform(1, 0, 0, 1, 0, 0)
+        ctx.globalCompositeOperation = 'copy'
+        ctx.drawImage(copy, 0, 0)
+        ctx.restore()
+        replayCanvasCalls(ctx, calls, recorder.labels, n, false, 0, calls.length)
+        base.serial = this.drawSerial
+        return true
+    }
+    // TASK-1618: the base of a steady still frame being made on ctx (its calls up to end made): the canvas's pixels now copied
+    // into Grid.lodBaseCanvas (one canvas for all boards: only the board on screen keeps a base; a copy, not an image bitmap,
+    // so the next frame can draw it: a selection's bars drawn, then taken away), with the calls and key it was made of.
+    keepBaseFrame(ctx, recorder, end) {
+        this.dropBaseFrame()
+        const W = ctx.canvas.width, H = ctx.canvas.height
+        const copy = Grid.lodBaseCanvas ||= document.createElement('canvas')
+        if (copy.width !== W || copy.height !== H) {
+            copy.width = W
+            copy.height = H
+        }
+        const g = copy.getContext('2d')
+        g.save()
+        g.setTransform(1, 0, 0, 1, 0, 0)
+        g.globalCompositeOperation = 'copy'
+        g.drawImage(ctx.canvas, 0, 0)
+        g.restore()
+        if (Grid.lodBaseOwner && Grid.lodBaseOwner !== this)
+            Grid.lodBaseOwner.lodBase = undefined
+        Grid.lodBaseOwner = this
+        this.lodBase = {canvas: copy, end, calls: recorder.calls, key: recorder.key, serial: this.drawSerial}
+    }
+    dropBaseFrame() {
+        this.lodBase = undefined
+    }
     // No held frame (its snapshot let go of).
-    dropHeldFrame() {
+    // TASK-1618: and its base (keepBaseFrame) unless keepBase.
+    dropHeldFrame(keepBase = false) {
         this.lodFrame?.bitmap?.close?.()
         this.lodFrame = undefined
+        if (!keepBase)
+            this.dropBaseFrame()
     }
     // Snapshots ctx's canvas (the board as drawMain left it, before the interface) for frame: an image bitmap of its
     // pixels now, no drawing (none without createImageBitmap: the frames are then made, never held).
@@ -11065,6 +11303,8 @@ const CANVAS_STATE = ['globalAlpha', 'globalCompositeOperation', 'fillStyle', 's
     'lineCap', 'miterLimit', 'lineDashOffset', 'font', 'textAlign', 'textBaseline', 'direction', 'filter',
     'imageSmoothingEnabled', 'imageSmoothingQuality', 'shadowBlur', 'shadowColor', 'shadowOffsetX', 'shadowOffsetY']
 // Drawing calls of a 2D context; the others change its state or path, or only read it.
+// TASK-1618: positions in Grid.lodFrameKey's key (Grid.splitShown).
+const LOD_KEY_CACHE = 9, LOD_KEY_SHOWN = 10, LOD_KEY_COMPOSITES = 22
 const CANVAS_DRAW_CALLS = new Set(['fill', 'stroke', 'drawImage', 'fillRect', 'strokeRect', 'clearRect', 'fillText',
     'strokeText', 'putImageData', 'drawFocusIfNeeded'])
 // TASK-1561: the drawing calls made on g counted in holder.calls.n while holder.calls is set (own methods of the context: a
@@ -11100,7 +11340,14 @@ const CANVAS_OPAQUE_BLENDS = new Set(['source-over', 'source-atop', 'destination
 class CanvasCallRecorder {
     constructor() {
         this.scratchCanvas = document.createElement('canvas')
+        // TASK-1618: 1 x 1 (its state, path and text metrics are used, never its pixels): reset() clears it each frame.
+        this.scratchCanvas.width = this.scratchCanvas.height = 1
         this.scratch = this.scratchCanvas.getContext('2d')
+        // TASK-1618: a reset context's state (begin sets only the values that differ: parsing a colour or font each frame).
+        this.scratch.reset?.()
+        this.defaults = {}
+        for (const name of CANVAS_STATE)
+            if (name in this.scratch) this.defaults[name] = this.scratch[name]
         this.methods = new Map()
         const recorder = this
         this.context = new Proxy({}, {
@@ -11141,10 +11388,13 @@ class CanvasCallRecorder {
         const g = this.scratch
         if (typeof g.reset === 'function') g.reset()
         else this.scratchCanvas.width = 1
-        const t = ctx.getTransform(), state = this.state = {transform: t}
+        const t = ctx.getTransform(), state = this.state = {transform: t}, defaults = this.defaults
         g.setTransform(t.a, t.b, t.c, t.d, t.e, t.f)
         for (const name of CANVAS_STATE)
-            if (name in ctx) g[name] = state[name] = ctx[name]
+            if (name in ctx) {
+                const value = state[name] = ctx[name]
+                if (value !== defaults[name] || typeof g.reset !== 'function') g[name] = value
+            }
         if (typeof ctx.getLineDash === 'function') g.setLineDash(state.lineDash = ctx.getLineDash())
         this.matrix = t
         this.matrixStale = false
@@ -11982,6 +12232,22 @@ class InterfaceRecorder extends CanvasCallRecorder {
         }
         return 'transform'
     }
+    // TASK-1618: text's metrics on g (measureText), kept by the text and the state they depend on (the interface's texts were
+    // measured again each frame for their bounds); forgotten when a font finishes loading.
+    static metrics(g, text) {
+        const key = [g.font, g.textAlign, g.textBaseline, g.direction, g.letterSpacing, g.wordSpacing, g.fontKerning, g.fontStretch,
+            g.fontVariantCaps, g.textRendering, text].join('\u0001')
+        const memo = InterfaceRecorder.metricMemo
+        let m = memo.get(key)
+        if (!m) {
+            if (memo.size >= InterfaceRecorder.METRIC_MEMO_SIZE)
+                memo.clear()
+            memo.set(key, m = g.measureText(text))
+        }
+        return m
+    }
+    static METRIC_MEMO_SIZE = 512
+    static metricMemo = new Map()
     // A drawing call's device bounds (CanvasCallRecorder.bound), texts and shadows included.
     bound(name, a) {
         const g = this.scratch
@@ -11991,7 +12257,7 @@ class InterfaceRecorder extends CanvasCallRecorder {
         }
         let box = [Infinity, Infinity, -Infinity, -Infinity], grow = 0
         if (name === 'fillText' || name === 'strokeText') {
-            const m = g.measureText(String(a[0]))
+            const m = InterfaceRecorder.metrics(g, String(a[0]))
             const ascent = m.actualBoundingBoxAscent, descent = m.actualBoundingBoxDescent
             if (![m.actualBoundingBoxLeft, m.actualBoundingBoxRight, ascent, descent].every(Number.isFinite)) {
                 this.unbounded = true
@@ -12243,6 +12509,22 @@ Grid.donorTaskMs = 40
 Grid.heldNoWait = true
 // TASK-1616: the surface cache's work paused on a tutorial's result screen (Grid.resultPaused).
 Grid.resultPauses = true
+// TASK-1618: still frames drawn from the surface cache are held while its split or layer job runs (Grid.surfaceJobHolds).
+Grid.stillJobFrames = true
+// TASK-1618: still frames drawn from the surface cache whose calls differ only after the board's base draw it back (drawBaseFrame).
+Grid.stillBaseFrames = true
+// TASK-1618: still frames drawing the light map over a surface cache without its light are held too (the map's content
+// version in their key, Grid.lodFrameKey).
+Grid.stillUnlitFrames = true
+// TASK-1618: a pan's hold with the camera at rest plans no unit sector frame (Grid.unitSectorPlan): the frames draw the board as
+// at rest (on the board's base, Grid.drawBaseFrame) instead of from the sectors, as they did until the hold's end.
+Grid.restingHoldFrames = true
+// TASK-1618: InterfaceRecorder.metrics' memo forgotten when a font finishes loading (its metrics may change).
+if (typeof document !== 'undefined' && document.fonts?.addEventListener)
+    document.fonts.addEventListener('loadingdone', () => InterfaceRecorder.metricMemo.clear())
+// TASK-1618: the base's copy (Grid.keepBaseFrame) and the board whose base it holds.
+Grid.lodBaseCanvas = undefined
+Grid.lodBaseOwner = undefined
 // TASK-1616: the surface cache's bake between frames in steps (SURFACE_CACHE_STAGE_STEPS[BAKE_STAGE]); false: one stage.
 Grid.bakeSteps = true
 // TASK-1543: the surface cache's build (and split) under way goes on while the camera moves or the lit view waits for it
@@ -12333,6 +12615,8 @@ const SURFACE_LAYER_SPRITES = 8
 // Light map owner sync steps (atmosphericLighting.startOwnerSync: the rings kept or put back, a build step) a surface layer
 // job's step runs (Grid.startSurfaceLayerJob).
 const SURFACE_LAYER_SYNC_STEPS = 4
+// TASK-1618: a surface layer job's sync step whose frames light cells from the light map goes on this long (ms).
+const SURFACE_LAYER_SYNC_MS = 24
 // The largest part of the cache's pixels a surface layer job's step composes (Grid.startSurfaceLayerJob: bands of rows).
 const SURFACE_LAYER_COMPOSE = 0.15
 // TASK-1315: how far off the board (hex radii, plus the slab's depth and shadow) the cells at its side hold the pixels
@@ -12614,6 +12898,9 @@ const UNIT_SECTOR_BURST_CALLS = 10000
 const UNIT_SECTOR_BURST_MS = 100
 // TASK-1561: frames at rest have their unit sectors built between frames (Grid.restUnitSectors); false: only pans build.
 Grid.unitSectorsAtRest = true
+// TASK-1618: a held frame's rest pass skipped when nothing it reads changed (Grid.restUnitSectors), at most this long after one.
+Grid.restSectorSkips = true
+const REST_SECTOR_SKIP_MS = 1000
 // TASK-1562 (SECTORS 6/11): zoom levels (Grid.drawZoomSectors, levelSettle, sectorRest). False: the zoom raster as before.
 Grid.zoomLevels = true
 // TASK-1566: a surface cache build without a cache during a zoom gesture bounded by its real draw calls (prepareSurfaceCache).

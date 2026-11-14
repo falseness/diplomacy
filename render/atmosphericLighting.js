@@ -1664,7 +1664,13 @@ const atmosphericLighting = {
                 this.hexagonPath(g, c.x, c.y, 1.02 * r)
             }
         }
-        const path = this.memoPath('fog', cells, add)
+        // TASK-1618: the fogged cells are new FogOfWarHexagon objects each frame (Grid.drawFogOfWar): a kept path is found
+        // by the hexagons' places (the path traces nothing else), so a recorded frame drawing it can be held.
+        const path = this.memoPath('fog', cells, add, (a, b) => {
+            if (a === b) return true
+            const p = a.calcPos(), q = b.calcPos()
+            return p.x === q.x && p.y === q.y
+        })
         ctx.fillStyle = this.FOG.grout
         if (path)
             ctx.fill(path)
