@@ -228,12 +228,16 @@ class Grid extends SpritesGroup {
         this.unitSectorSerial = -1
         this.unitCellVals = new Map()
         this.unitCellScratch = []
+        // TASK-1626: per cell (board index) the world box its units pass and texts drew in when its values were kept
+        // (unitCellReachBox), the box its change dirties.
+        this.unitCellReaches = new Map()
         this.unitStandIn = undefined
         this.unitSectorQueued = false
         this.unitSectorWanted = undefined
         this.unitFrame = undefined
         this.unitSectorWork = {built: 0, drawn: 0, live: 0, frames: 0, clears: 0, dirtied: 0, checks: 0, evicted: 0, cut: 0,
-            restarts: 0, overlays: 0, overlaysDrawn: 0, bursts: 0, stepCalls: 0, stepCells: 0, swaps: 0, restSkips: 0}
+            restarts: 0, overlays: 0, overlaysDrawn: 0, bursts: 0, stepCalls: 0, stepCells: 0, swaps: 0, restSkips: 0, tagCarried: 0,
+            tagDropped: 0, reaches: 0, reachMs: 0, reachFailures: 0}
         // TASK-1562 (Grid.zoomLevels): zoom frames drawn from the unit sectors of the levels kept (drawZoomSectors); the
         // frames after a zoom (levelSettle) until every square on the canvas is drawn at the camera's level, then the frames
         // at rest drawn from the sectors (sectorRest) until the camera pans; the coverage of the last frame drawn
@@ -354,6 +358,13 @@ class Grid extends SpritesGroup {
         // TASK-1316: the lit view's rest snapshot with its cell layer composed (prepareLitCellLayer), drawn in one drawImage.
         this.litCellShown = undefined
         this.cellLayerSplits = 0
+        // TASK-1626: splits finished at once when the board changed under them (settleSplit).
+        this.splitSettles = 0
+        // TASK-1626: cell layer variants drawn with the light map kept aside at their resolution (withHeldLightMap).
+        this.heldStashUses = 0
+        this.heldStashKept = 0
+        // TASK-1626: frames the surface cache waited for its layer to follow (followCellLayer, Grid.followWaits).
+        this.cellLayerFollowWaits = 0
         // TASK-1570: surface split steps that waited for the camera at rest (Grid.splitCutAtRest)
         this.splitCutWaits = 0
         this.cellLayerComposites = 0
@@ -864,6 +875,9 @@ class Grid extends SpritesGroup {
     // healing (healFx draws it).
     // (attackFx.hidden is read here, not through a method call: this runs for every unit of every pass, TASK-1425)
     getStillUnit(cell) {
+        // TASK-1626: a cell's reach measured (unitCellReachBox) holds its unit as drawn still, whatever hides it now.
+        if (this.reachMeasuring)
+            return cell.unit.notEmpty() ? cell.unit : undefined
         if (typeof onlineObservation !== 'undefined' && onlineObservation.hidesUnit(cell)) return undefined
         return cell.unit.notEmpty() && !moveTween.isActive(cell.unit) &&
             !(typeof attackFx !== 'undefined' && attackFx.hidden.size > 0 && attackFx.hidden.has(cell.unit)) &&
@@ -871,6 +885,8 @@ class Grid extends SpritesGroup {
     }
     // A building being repaired: healFx draws its bars (TASK-1446).
     healBarHidden(building) {
+        if (this.reachMeasuring)
+            return false
         return typeof healFx !== 'undefined' && healFx.hidden.size > 0 && healFx.hidden.has(building)
     }
     // TASK-1518: part {k, n}: only the k-th of n runs of the rows (the calls the whole draw makes there, in its order).
@@ -1150,6 +1166,10 @@ class Grid extends SpritesGroup {
             Object.assign(layer, {cells: undefined, cellBox: undefined, sprites: new Map(), stale: null, byIndex: undefined, place,
                 states: undefined})
             const job = {canvas, layer, place, cells: null, box: null, states: this.cellLayerStates(), next: 0, finish, order: null}
+            // TASK-1626: the keys made from the board as now (cellLayerFrozen), so a board change during the preparation
+            // leaves the split whole (settleSplit) instead of dropping it.
+            if (Grid.splitSettles)
+                job.frozen = this.cellLayerFrozen(job.states)
             // TASK-1518: the rest of the start (the cells and their mask, their sprite keys, their order) in steps, the split
             // job's first (cellSplitStep, Grid.cellSplitPreps); the keys of the board the states were taken of (a step that
             // finds the board's states changed ends the job, as before).
@@ -1176,7 +1196,7 @@ class Grid extends SpritesGroup {
             this.cellReachPass = reach
             try {
                 for (const cell of cells.slice(k, k + CELL_SPLIT_KEYS))
-                    cell.key = this.cellLayerKey(cell.i, cell.j)
+                    cell.key = job.frozen ? this.cellLayerKeyFrozen(cell.i, cell.j, job.frozen) : this.cellLayerKey(cell.i, cell.j)
             } finally {
                 this.cellReachPass = outer
             }
@@ -1253,10 +1273,13 @@ class Grid extends SpritesGroup {
                 return
             }
         }
-        if (this.cellSplitStep(job, SURFACE_STEP_MS)) {
-            this.surfaceSplitJob = undefined
-            this.splitShown(job)
-        }
+        // TASK-1626: the cache cut and its layer added draw the cache's pixels to the bit: the cache unit sectors keep theirs.
+        this.carryCacheSectors([], () => {
+            if (this.cellSplitStep(job, SURFACE_STEP_MS)) {
+                this.surfaceSplitJob = undefined
+                this.splitShown(job)
+            }
+        })
     }
     // TASK-1618 (Grid.stillJobFrames): the split's end (cellSplitStep: the cache cut, its shown canvas composed whole) changed
     // the canvas the frames draw (the uncut cache, then the shown canvas: the cut cache and the layer added, the cache as drawn
@@ -1285,10 +1308,34 @@ class Grid extends SpritesGroup {
         }
         if (this.cellLayerStatesAre(job.states))
             return true
+        // TASK-1626: past its preparation the split is finished now and its layer follows the board (settleSplit).
+        if (this.settleSplit())
+            return false
         this.surfaceSplitJob = undefined
         this.surfaceCache = undefined
         this.surfaceCacheDirty = true
         return false
+    }
+    // TASK-1626 (Grid.splitSettles): the surface cache's split job (startCellSplit) found the board's cell states changed (an
+    // AI turn's playback: a step's captures and fog, while the split waited for the camera's glide) after its preparation:
+    // its cells' keys and order are those of the states the cache was drawn for, and its steps only cut the cache's own
+    // pixels, so it is finished now (its remaining steps at once) and its layer, holding those states, is brought up to the
+    // board as after any change (followCellLayer: a surface layer job, the changed cells drawn over meanwhile). Was: the
+    // cache dropped and built again whole (8 times in tutorial-6's AI turn, the frames on lit tiles or the stand-in
+    // meanwhile). A split still in its preparation (keys read from the board) is dropped as before. Returns whether it
+    // finished one.
+    settleSplit() {
+        const job = this.surfaceSplitJob
+        if (!Grid.splitSettles || !job || (job.prep || !job.order) && !job.frozen || this.surfacePatchJob || this.surfaceCacheBuild ||
+                job.canvas !== this.surfaceCache || job.layer !== this.surfaceCellLayer || this.cellLayerStatesAre(job.states))
+            return false
+        this.carryCacheSectors([], () => {
+            while (!this.cellSplitStep(job));
+            this.surfaceSplitJob = undefined
+            this.splitShown(job)
+        })
+        ++this.splitSettles
+        return true
     }
     // A patch of canvas's pixel rectangle rect (copy draws it, from the patch buffer) with the canvas split (splitCellLayer):
     // the rectangle grown to the boxes of the cells meeting it (region) put back whole (the cut canvas with its layer added),
@@ -1611,6 +1658,43 @@ class Grid extends SpritesGroup {
         }
         return key
     }
+    // TASK-1626: what cellLayerKey reads of the board, taken now (states: cellLayerStates', the cells' surface state values;
+    // names: the cacheable building's image name or ''; owners: the territory owner values, ownerValue), so a split's keys
+    // (cellSplitPrep, made in steps) are the keys of the board as the split was started, whatever changes between its steps.
+    cellLayerFrozen(states) {
+        const L = atmosphericLighting, h = this.arr[0].length, n = this.arr.length * h
+        const names = new Array(n), owners = new Uint16Array(n)
+        for (let i = 0, index = 0; i < this.arr.length; ++i)
+            for (let j = 0; j < h; ++j, ++index) {
+                const cell = this.arr[i][j]
+                names[index] = this.isCacheableBuilding(cell.building) ? this.getEntityBodyImageName(cell.building) : ''
+                owners[index] = L.ownerValue(this, cell) || 0
+            }
+        return {states, names, owners}
+    }
+    // cellLayerKey of cell (i, j) from frozen (cellLayerFrozen) instead of the board: the same string for the same board.
+    cellLayerKeyFrozen(i, j, frozen) {
+        const h = this.arr[0].length, index = i * h + j, states = frozen.states
+        let key = states[index] + ':' + frozen.names[index]
+        for (const [di, dj] of neighborhood[i & 1]) {
+            const row = this.arr[i + di], other = row && row[j + dj]
+            key += ',' + (other ? states[(i + di) * h + j + dj] : '-')
+        }
+        const L = atmosphericLighting, near = this.cellGlowCells()
+        key += '|'
+        // (a cell's state's fog bit: in view, or no fog of war, as cellLayerKey reads the fog)
+        for (const k of (this.cellReachPass || this.cellBuildingReach())[index])
+            key += states[k] & 1
+        key += '|'
+        for (const [list, cool] of [[near.warm[index], false], [near.cool[index], true]]) {
+            for (const k of list) {
+                const owner = frozen.owners[k]
+                if (owner && (!cool || L.glowReach(owner) > near.warmReach))
+                    key += k + ':' + owner + ';'
+            }
+        }
+        return key
+    }
     // Per cell (board index) the cells whose territory glow can reach its hexagon (centres within the glow's reach plus a
     // hexagon and CELL_GLOW_MARGIN radii, for the light map's sampling): warm, within TERRITORY's reach; cool, beyond it within
     // the cool spill's. Kept for the board's size and hex radius.
@@ -1784,6 +1868,13 @@ class Grid extends SpritesGroup {
         }
         const {failed} = this.refreshCellLayer(which)
         if (failed.length) {
+            // TASK-1626 (Grid.followWaits): the surface cache is kept while its layer cannot follow for FOLLOW_WAIT_MS (the
+            // light map at its resolution being made again for the lit view, withMapAt): the frames draw without it meanwhile.
+            if (which === 'surface' && Grid.followWaits && performance.now() - (this.followFailedAt ??= performance.now()) < FOLLOW_WAIT_MS) {
+                ++this.cellLayerFollowWaits
+                return false
+            }
+            this.followFailedAt = undefined
             if (which === 'surface') {
                 this.surfaceCache = undefined
                 this.surfaceCacheDirty = true
@@ -1793,6 +1884,8 @@ class Grid extends SpritesGroup {
             ++this.cellLayerFollowDrops
             return false
         }
+        if (which === 'surface')
+            this.followFailedAt = undefined
         this.followedCellLayer(which, layer, states)
         this.surfaceLayerJobFailed = false
         return true
@@ -2018,7 +2111,7 @@ class Grid extends SpritesGroup {
         const area = region && pixelRect(Math.max(region.x, inner.x), Math.max(region.y, inner.y),
             Math.min(region.x + region.w, inner.x + inner.w), Math.min(region.y + region.h, inner.y + inner.h), cw, ch)
         const stage = this.litLayerStage ||= document.createElement('canvas')
-        const finish = () => {
+        const finish = () => this.carryCacheSectors([], () => {
             for (const cell of cells)
                 cell.key = keys.get(cell)
             if (area)
@@ -2028,7 +2121,7 @@ class Grid extends SpritesGroup {
             ++this.cellLayerJobsDone
             view.layerJob = undefined
             this.followedCellLayer('lit', layer, states, area || inner)
-        }
+        })
         if (!area) {
             job.steps.push(finish)
             this.lastLitLayerJob = {cells: cells.length, missing: missing.length, changes: job.changed.length, inner, region, bands: 0,
@@ -2277,7 +2370,8 @@ class Grid extends SpritesGroup {
                     job.steps.push(() => atKeys(() => this.composeCellSprites(stage, layer, {x: region.x, y: y0, w: region.w, h: y1 - y0},
                         region.x, region.y, true)))
             }
-            job.steps.push(() => {
+            // (TASK-1626: the region's pixels away from the changed cells' boxes are copied back as they were)
+            job.steps.push(() => this.carryCacheSectors((Grid.patchBoxCarry ? this.cacheWorldRects(cells.map(c => c.box), false) : this.cacheWorldRects([region])), () => {
                 const g = shown.getContext('2d')
                 g.save()
                 g.setTransform(1, 0, 0, 1, 0, 0)
@@ -2294,7 +2388,7 @@ class Grid extends SpritesGroup {
                 ++this.cellLayerRevision
                 ++this.surfaceLayerJobsDone
                 this.followedCellLayer('surface', layer, states)
-            })
+            }))
             ++this.surfaceLayerJobs
             this.lastSurfaceLayerJob = {cells: cells.length, missing: missing.length, changes: changes.length, region, rendered: outer,
                 bands: n, steps: job.steps.length}
@@ -2321,7 +2415,8 @@ class Grid extends SpritesGroup {
                 this.surfaceCacheBuild || !this.cellLayerStatesAre(job.states))
             return this.dropSurfaceLayerJob()
         ++this.surfaceLayerSteps
-        job.steps[job.step++]()
+        // (TASK-1626: with the light map at the cache's resolution, withMapAt)
+        this.withMapAt(this.surfaceCacheScale, () => job.steps[job.step++]())
         if (job.failed) {
             this.dropSurfaceLayerJob()
             this.surfaceLayerJobFailed = true
@@ -2625,9 +2720,11 @@ class Grid extends SpritesGroup {
     // cell (cellBuildingReach).
     // which: only that layer ('surface' or 'lit'), else both.
     refreshCellLayer(which) {
-        return this.withCellReach(() => this.refreshCellLayerNow(which))
+        // TASK-1626: the cache unit sectors away from the surface layer's redrawn regions keep their ground (carryCacheSectors).
+        const regions = []
+        return this.carryCacheSectors(() => this.cacheWorldRects(regions, !Grid.patchBoxCarry), () => this.withCellReach(() => this.refreshCellLayerNow(which, regions)))
     }
-    refreshCellLayerNow(which) {
+    refreshCellLayerNow(which, regions = []) {
         const result = {cells: 0, rendered: 0, failed: []}
         const layers = []
         const surface = this.surfaceCellLayer
@@ -2663,6 +2760,8 @@ class Grid extends SpritesGroup {
             this.composeCellSprites(name === 'surface' ? this.surfaceCacheShown : view.rest.shown, layer, region)
             result.cells += changed.length
             ++this.cellLayerRefreshes
+            if (name === 'surface')
+                regions.push(...(Grid.patchBoxCarry ? changed.map(c => c.box) : [region]))
             // What the frames draw under the overlays changed (overlayCompositeKey).
             ++this.cellLayerRevision
         }
@@ -2671,17 +2770,55 @@ class Grid extends SpritesGroup {
     // The light map as it is (the raster's; with the cell layer its light state holds no owner, and lightMap brings its
     // territory glow up to the owners now, syncOwners) for fn's drawing of the board now, when it is the map
     // lightMap(board, cap) gives at this resolution; else null.
-    withHeldLightMap(cap, fn) {
+    // TASK-1626 (Grid.heldStashMaps): THE LIGHT MAP AT A CACHE'S RESOLUTION. The lit view (the camera's scale) and the
+    // surface cache (its own) each make the light map at their resolution (atmosphericLighting.resolution); the map replaced
+    // is kept aside (mapStash, TASK-1572). A turn playback's frames going between the two left the cache's work without its
+    // map: a patch refused ('light map', the cache rebuilt whole), a cell layer variant not drawn (renderSurfaceCellSprites:
+    // null, the cache dropped and rebuilt whole). withMapAt(cap, fn): fn with the map at cap's resolution the current one:
+    // the one kept aside swapped in for fn (and back after), when it is at that resolution and the current one is not (none
+    // while a build of the map is staged); else fn as it is.
+    withMapAt(cap, fn) {
         const L = atmosphericLighting, bounds = mapDepth.surfaceBounds
-        if (!L.map || !bounds || L.mapKey !== JSON.stringify(bounds) || L.mapScale !== L.resolution(bounds, cap))
-            return null
-        const kept = L.mapState
-        L.mapState = L.lightState(this).slice()
+        if (!Grid.heldStashMaps || !bounds)
+            return fn()
+        const key = JSON.stringify(bounds), scale = L.resolution(bounds, cap), stash = L.mapStash
+        // (a staged build of the camera's map, mapKey '' meanwhile, is left as it is: its canvases kept aside for fn)
+        if (L.map && L.mapKey === key && L.mapScale === scale || !stash || stash.key !== key || stash.scale !== scale || !stash.map ||
+                !stash.gain || L.mapKey !== key && !L.staged)
+            return fn()
+        const saved = {map: L.map, gain: L.gain, key: L.mapKey, scale: L.mapScale, state: L.mapState, owners: L.mapOwners}
+        L.mapStash = saved
+        Object.assign(L, {map: stash.map, gain: stash.gain, mapKey: stash.key, mapScale: stash.scale, mapState: stash.state,
+            mapOwners: stash.owners})
+        ++this.heldStashUses
         try {
             return fn()
         } finally {
-            L.mapState = kept
+            // Put back unless fn replaced either map (then left as fn left them).
+            if (L.map === stash.map && L.gain === stash.gain && L.mapStash === saved && L.mapKey === stash.key && L.mapScale === stash.scale) {
+                stash.state = L.mapState
+                stash.owners = L.mapOwners
+                L.mapStash = stash
+                Object.assign(L, {map: saved.map, gain: saved.gain, mapKey: saved.key, mapScale: saved.scale, mapState: saved.state,
+                    mapOwners: saved.owners})
+            }
+            else
+                ++this.heldStashKept
         }
+    }
+    withHeldLightMap(cap, fn) {
+        return this.withMapAt(cap, () => {
+            const L = atmosphericLighting, bounds = mapDepth.surfaceBounds
+            if (!L.map || !bounds || L.mapKey !== JSON.stringify(bounds) || L.mapScale !== L.resolution(bounds, cap))
+                return null
+            const kept = L.mapState
+            L.mapState = L.lightState(this).slice()
+            try {
+                return fn()
+            } finally {
+                L.mapState = kept
+            }
+        })
     }
     // The board now drawn on the surface cache's patch buffer within the pixel rectangle rect (grown by CELL_RENDER_MARGIN
     // patch margins), as a patch draws it (drawSurfacePatchStage: SURFACE_CACHE_STAGES clipped, at the cache's transform)
@@ -3552,6 +3689,9 @@ class Grid extends SpritesGroup {
         const waiting = performance.now() - this.standInDrawnAt < STANDIN_WAIT_MS ||
             performance.now() - this.cacheWaitedAt < STANDIN_WAIT_MS && !held
         const budget = moving && this.frameSurface === false || waiting ? Grid.donorTaskMs : SURFACE_STEP_MS
+        // TASK-1626: a split the board changed under finished first (settleSplit).
+        if (this.surfaceSplitJob)
+            this.settleSplit()
         // TASK-1372: the cache's split, a step a task (surfaceSplitStep).
         if (this.surfaceSplitJob) {
             this.surfaceCacheQueued = true
@@ -3758,7 +3898,8 @@ class Grid extends SpritesGroup {
     // change and cumulatively). The whole cache is rebuilt instead (refusals counted by reason) for: no cache or one being
     // built, an observed board, another cache size or scale, a whole-board difference (visuals, hex radius, size), a lamp
     // or demon portal shown, hidden or replaced (its light and shadows reach far off; a captured lamp keeps them), a region
-    // over SURFACE_PATCH_MAX_AREA of the cache, or a light map no longer that of the cache's state; a board change during a
+    // over SURFACE_PATCH_MAX_AREA of the cache (TASK-1626: and over SURFACE_PATCH_SMALL_PIXELS), or a light map no longer that
+    // of the cache's state; a board change during a
     // patch starts it over. Grid.surfacePatching false turns patches off. Returns whether the cache is patched to the
     // board (a patch under way, surfacePatchJob, or nothing to patch).
     patchSurfaceCache() {
@@ -3806,9 +3947,11 @@ class Grid extends SpritesGroup {
         if (!found)
             return refuse('lamp or portal')
         const inner = this.patchRegion(found, atmosphericLighting.mapPixel(scale), (x, y) => ({x: (x - b.left) * scale, y: (y - b.top) * scale}), W, H)
-        if (!inner || inner.w * inner.h > SURFACE_PATCH_MAX_AREA * W * H)
+        // TASK-1626: a region within SURFACE_PATCH_SMALL_PIXELS is patched whatever its share of the cache (a small board's
+        // cache: one changed cell's hexagon, sprites, shadows and glow were a fifth of tutorial-6's, a step's few a half).
+        if (!inner || inner.w * inner.h > SURFACE_PATCH_MAX_AREA * W * H && inner.w * inner.h > SURFACE_PATCH_SMALL_PIXELS)
             return refuse('area')
-        if (found.light.length && !atmosphericLighting.canUpdateMapRegion(this, scale, this.surfaceCacheLighting))
+        if (found.light.length && !this.withMapAt(scale, () => atmosphericLighting.canUpdateMapRegion(this, scale, this.surfaceCacheLighting)))
             return refuse('light map')
         const m = Math.max(SURFACE_PATCH_MARGIN_MIN, Math.ceil(SURFACE_PATCH_MARGIN * scale))
         const outer = pixelRect(inner.x - m, inner.y - m, inner.x + inner.w + m, inner.y + inner.h + m, W, H)
@@ -3872,7 +4015,8 @@ class Grid extends SpritesGroup {
             this.surfaceCacheDirty = true
             return
         }
-        SURFACE_PATCH_STEPS[job.step++](this, job)
+        // (TASK-1626: with the light map at the cache's resolution, withMapAt)
+        this.withMapAt(job.scale, () => SURFACE_PATCH_STEPS[job.step++](this, job))
         if (job.failed) {
             this.surfacePatchJob = undefined
             this.surfaceCacheDirty = true
@@ -3902,6 +4046,15 @@ class Grid extends SpritesGroup {
     }
     // The patch's last step: its region copied from the buffer into the cache, which now holds the patch's board state.
     finishSurfacePatch(job) {
+        // TASK-1626: only the cache unit sectors meeting the region copied (and the cells re-split round it) lose their ground.
+        // (The region's pixels away from the changed cells' rectangles, job.boxes and the light's, are drawn as they were:
+        // patchSurfaceCache.)
+        const texel = atmosphericLighting.mapPixel(job.scale), m = 2 / job.scale
+        const rects = Grid.patchBoxCarry ? [...job.boxes, ...job.light.map(q => ({x0: q.x0 - texel, y0: q.y0 - texel, x1: q.x1 + texel, y1: q.y1 + texel}))]
+            .map(q => ({x: q.x0 - m, y: q.y0 - m, w: q.x1 - q.x0 + 2 * m, h: q.y1 - q.y0 + 2 * m})) : this.cacheWorldRects([job.inner])
+        this.carryCacheSectors(rects, () => this.finishSurfacePatchNow(job))
+    }
+    finishSurfacePatchNow(job) {
         // The region copied (with the cell layer, as its cells' variants are taken again: prepareSurfaceCellLayer).
         this.prepareSurfaceCellLayer(job.canvas, job.geometry, job.left, job.top, job.inner,
             () => copyCanvasRect(job.buffer, job.canvas, job.inner))
@@ -3950,6 +4103,7 @@ class Grid extends SpritesGroup {
         const ownerFree = atmosphericLighting.ownerFree(this), states = this.surfaceCacheState
         const ownerOf = v => (v & 1) && (v >> 2) > 1 ? (v >> 2) - 1 : 0
         const cells = [], light = [], sprites = []
+        let lampCells = null
         for (const index of changes) {
             const i = Math.floor(index / h), j = index - i * h, cell = this.arr[i][j], c = cell.hexagon.calcPos()
             const box = {x0: c.x - hex, y0: c.y - hex, x1: c.x + hex, y1: c.y + hex}
@@ -3960,15 +4114,21 @@ class Grid extends SpritesGroup {
             }
             // A lamp in view before and after with only its owner changed (a capture) keeps every source (collect's sources
             // have no owner: spills, shadows and blooms stay); a lamp shown, hidden or replaced does not.
+            // TASK-1626 (Grid.lampPatches): one shown, hidden or replaced (a demon portal a move uncovers or hides, a lamp
+            // built or razed) adds its light reach (lampReachRects: its spill and the shadows it turns) to the region instead
+            // of the whole cache rebuilt; a portal or lamp whose light stayed the same is patched as any building.
             const was = lighting[index + 1], now = atmosphericLighting.lightValue(this, cell), keptLamp = lampKind(was)
-            if (keptLamp !== lampKind(now))
-                return null
+            if (keptLamp !== lampKind(now)) {
+                if (!Grid.lampPatches)
+                    return null
+                (lampCells ||= []).push({i, j, c, was, now})
+            }
             const before = buildings[index] || inertBuildings[index]
             for (const [building, shown] of [[before, [images[index], natureNames[index] && cachedImages[natureNames[index]]]],
                     [cell.building, []]]) {
                 if (!building || !building.notEmpty())
                     continue
-                if (building.isDemonPortal || atmosphericLighting.emitsLight(building) && !keptLamp)
+                if (!Grid.lampPatches && (building.isDemonPortal || atmosphericLighting.emitsLight(building) && !keptLamp))
                     return null
                 // Its sprite as cached, as a fog landmark and as drawn now, with its shadow.
                 for (const image of new Set([...shown, cachedImages[this.getEntityBodyImageName(building)], cachedImages[building.bodyImageName]])) {
@@ -3999,7 +4159,62 @@ class Grid extends SpritesGroup {
             const reach = Math.max(hex, glow(was), glow(now))
             light.push({x0: c.x - reach, y0: c.y - reach, x1: c.x + reach, y1: c.y + reach})
         }
+        if (lampCells) {
+            const reach = this.lampReachRects(lampCells, lampKind, sources)
+            cells.push(...reach.cells)
+            light.push(...reach.light)
+        }
         return {cells, light, sprites}
+    }
+    // TASK-1626: the world rectangles a lamp (or demon portal) shown, hidden or replaced on lamps' cells ({i, j, c: centre,
+    // was / now: its light values then and now}) reaches in the surface cache: light, its spill on the light map (the
+    // SPILL layers' extent, scaled as the kind's pool) round each; cells, that and the shadows of every caster within the
+    // shadow lamps' reach (SHADOW.reachRadii) of it whose strongest lamp or its strength differs then and now (its shadow's
+    // direction and alpha: drawShadowSteps), as drawn with the sources then (the light values captured: lampKind) and now
+    // (sources, collect's), each turned away from its strongest lamp (shadowBounds), so a patch of them redraws every pixel
+    // the change of light reaches.
+    lampReachRects(lampCells, lampKind, sources) {
+        const L = atmosphericLighting, r = basis.r, h = this.arr[0].length, lighting = this.surfaceCacheLighting
+        const spill = Math.max(...L.SPILL.map(l => Math.max(Math.abs(l.dx || 0) + l.rx, Math.abs(l.dy || 0) + l.ry))) * r + r
+        const cells = [], light = []
+        for (const {c} of lampCells) {
+            const q = {x0: c.x - spill, y0: c.y - spill, x1: c.x + spill, y1: c.y + spill}
+            light.push(q)
+            cells.push({...q})
+        }
+        // The sources as the cache drew them: every cell whose captured light value holds a lamp kind.
+        const then = []
+        for (let index = 0; index + 1 < lighting.length; ++index) {
+            const kind = lampKind(lighting[index + 1])
+            if (!kind)
+                continue
+            const i = Math.floor(index / h), j = index - i * h
+            then.push({x: i, y: j, pos: this.arr[i][j].hexagon.calcPos(), name: L.LAMP_KINDS[kind]})
+        }
+        const reach = (L.SHADOW.reachRadii + 1) * r, near = q => lampCells.some(({c}) => Math.hypot(q.x - c.x, q.y - c.y) <= reach)
+        const buildings = this.surfaceCacheBuildings, images = this.surfaceCacheBuildingImages, inert = this.surfaceCacheInertBuildings
+        for (let i = 0; i < this.arr.length; ++i)
+            for (let j = 0; j < h; ++j) {
+                const cell = this.arr[i][j], c = cell.hexagon.calcPos()
+                if (!near(c))
+                    continue
+                // (a caster whose strongest lamp, the light its shadow turns from, and that lamp's strength stay the same casts
+                // the same shadow: drawShadowSteps)
+                const was = L.strongestLamp(c, then, L.SHADOW.reachRadii), is = L.strongestLamp(c, sources, L.SHADOW.reachRadii)
+                if (was.strength === is.strength && (was.best === is.best || was.best && is.best && was.best.x === is.best.x && was.best.y === is.best.y))
+                    continue
+                const index = i * h + j, before = buildings[index] || inert[index]
+                for (const [building, cached, image] of [[before, true, images[index]], [cell.building, false, null]]) {
+                    if (!building || !building.notEmpty?.() || !L.castsShadow(this, i, j, building, cached))
+                        continue
+                    for (const sprite of new Set([image, cachedImages[this.getEntityBodyImageName(building)], cachedImages[building.bodyImageName]])) {
+                        if (!sprite || !sprite.width)
+                            continue
+                        cells.push(L.shadowBounds(building, sprite, c, then), L.shadowBounds(building, sprite, c, sources))
+                    }
+                }
+            }
+        return {cells, light}
     }
     canUseSurfaceCache() {
         mapDepth.ensureGeometry(this)
@@ -4010,6 +4225,9 @@ class Grid extends SpritesGroup {
     }
     // main: the frame's surface (drawMapSurface), which runs the surface layer job's steps (TASK-1360).
     drawSurfaceCache(ctx, main = false) {
+        // TASK-1626: a split the board changed under is finished first (its layer then follows the board).
+        if (this.surfaceSplitJob)
+            this.settleSplit()
         if (!this.surfaceCache || !this.surfaceStateMatches(ctx)) {
             // With atmospheric visuals no frame builds it (prepareSurfaceCache); a frame with the camera at
             // rest starts the patch of a cache that differs in a few cells (patchSurfaceCache), and the frames
@@ -4577,7 +4795,13 @@ class Grid extends SpritesGroup {
     sceneLayerKey() {
         const b = this.surfaceCacheBounds
         return [this.surfaceCache, this.surfaceCacheShown, this.surfaceCacheRevision, this.cellLayerRevision, mapDepth.atmosphericShadow,
-            b?.left, b?.top, b?.width, b?.height, debug, this.drawLogicText, Grid.logicTextRevision]
+            b?.left, b?.top, b?.width, b?.height, debug, this.drawLogicText, this.logicTextKey()]
+    }
+    // TASK-1626: the logic texts' revision as the layers' keys hold it: only while the logic texts are drawn (drawCellText draws
+    // none otherwise). The rules bump it on every unit search (an AI turn's playback: each step), which made every cache unit
+    // sector (cacheSectorKey) and the scene and lit layers stale though nothing they draw changed.
+    logicTextKey() {
+        return this.drawLogicText || !Grid.logicTextKeyDrawnOnly ? Grid.logicTextRevision : -1
     }
     sceneLayerKeyHolds(layer) {
         const key = this.sceneLayerKey()
@@ -4795,7 +5019,7 @@ class Grid extends SpritesGroup {
     // What the lit layer drew from besides its cells: debug, the logic texts on and their revision, the hex radius, the bar
     // settings and fog of war.
     litLayerKey() {
-        return [debug, this.drawLogicText, Grid.logicTextRevision, basis.r, otherSettings.alwaysDisplayHPBar,
+        return [debug, this.drawLogicText, this.logicTextKey(), basis.r, otherSettings.alwaysDisplayHPBar,
             otherSettings.alwaysDisplayMovesBar, isFogOfWar, this.arr.length, this.arr[0]?.length]
     }
     litLayerKeyHolds(layer) {
@@ -5802,6 +6026,7 @@ class Grid extends SpritesGroup {
             this.unitSectorAlt = undefined
         }
         this.unitCellVals.clear()
+        this.unitCellReaches?.clear()
         this.unitSectorWanted = undefined
         this.unitSectorBuilding = undefined
     }
@@ -5850,9 +6075,15 @@ class Grid extends SpritesGroup {
     // now dirties the unit sectors it reaches (its centre's box grown by drawRange's margin and a column) and keeps its new
     // values. Kept values change only here, and a sector is built only after its range was compared (buildUnitSector), so a
     // clean sector was drawn from the values kept for its cells.
+    // TASK-1626 (Grid.unitCellReach): a changed cell dirties only the sectors its drawing reached and reaches now: the box it
+    // drew in when its values were kept last (unitCellReaches; none: no drawing kept in any sector) and the box it draws in
+    // now (unitCellReachBox, measured), each grown by UNIT_REACH_PAD device pixels at the sector's level. Was: every sector
+    // within drawRange's culling margin (4 hexagon radii and a sprite) round its centre, ~16 squares a changed cell, most of
+    // them showing nothing of it.
     unitSectorCheck(range) {
         const h = this.arr[0].length, kept = this.unitCellVals, out = this.unitCellScratch ||= []
-        const reach = 4 * basis.r + assets.size + basis.offset.x
+        const reach = 4 * basis.r + assets.size + basis.offset.x, exact = !!Grid.unitCellReach
+        const reaches = this.unitCellReaches ||= new Map()
         let boxes = null
         for (let i = range.i0; i < range.i1; ++i) {
             for (let j = range.j0; j < range.j1; ++j) {
@@ -5871,16 +6102,71 @@ class Grid extends SpritesGroup {
                 else
                     kept.delete(index)
                 const x = i * basis.offset.x, y = (2 * j + (i & 1)) * basis.offset.y
-                ;(boxes ||= []).push({x: x - reach, y: y - reach, w: 2 * reach, h: 2 * reach})
+                const broad = {x: x - reach, y: y - reach, w: 2 * reach, h: 2 * reach}
+                if (!exact) {
+                    reaches.delete(index)
+                    ;(boxes ||= []).push(broad)
+                    continue
+                }
+                const was = reaches.get(index), now = n ? this.unitCellReachBox(i, j) || broad : null
+                if (now)
+                    reaches.set(index, now)
+                else
+                    reaches.delete(index)
+                if (old)
+                    (boxes ||= []).push(was || broad)
+                if (now && now !== was)
+                    (boxes ||= []).push(now)
             }
         }
         ++this.unitSectorWork.checks
         if (boxes)
             ++this.unitCellChanges
+        const pad = exact ? level => UNIT_REACH_PAD / level : undefined
         if (boxes && this.unitSectors.entries.size)
-            this.unitSectorWork.dirtied += this.unitSectors.dirtyCells(boxes).length
+            this.unitSectorWork.dirtied += this.unitSectors.dirtyCells(boxes, pad).length
         if (boxes && this.unitSectorAlt?.cache.entries.size)
-            this.unitSectorWork.dirtied += this.unitSectorAlt.cache.dirtyCells(boxes).length
+            this.unitSectorWork.dirtied += this.unitSectorAlt.cache.dirtyCells(boxes, pad).length
+    }
+    // TASK-1626: the world box {x, y, w, h} cell (i, j)'s units pass (drawOther 'units': its unit as drawn still, its bars,
+    // production silhouette or portal preview) and its cell texts (the info text that pass sets, debug's coordinate text)
+    // draw in now, measured by drawing them on a bounds context (ReachMeter: no pixels, the boxes of the calls); null when
+    // they draw nothing, undefined when a call's box is unknown (a Path2D, a filter: the caller keeps drawRange's margin).
+    // The cell's texts are left as they were (a frame's own pass sets and draws them).
+    unitCellReachBox(i, j) {
+        const meter = Grid.reachMeter ||= new ReachMeter()
+        const cell = this.arr[i][j], index = i * this.arr[0].length + j
+        const hadText = this.infoTextCells.has(index), info = cell._infoText, text = info?.text
+        const lod = this.lod, t0 = performance.now()
+        meter.begin()
+        this.reachMeasuring = true
+        this.lod = false
+        let failed = false
+        try {
+            this.drawOther(meter.context, 'units', {i0: i, i1: i + 1, j0: j, j1: j + 1})
+            const shown = cell._infoText
+            if (debug && !cell.building.isMapEdge)
+                cell.coordText.draw(meter.context)
+            else if (shown && shown.text !== '' && shown.text !== undefined && shown.text !== null &&
+                    !(isFogOfWar && !this.fogOfWar[i][j] && !fogShowsPortalPreview(cell.building)))
+                shown.draw(meter.context)
+        } catch (_) {
+            // (a call the bounds context cannot take: the caller keeps drawRange's margin)
+            failed = true
+            ++this.unitSectorWork.reachFailures
+        } finally {
+            this.reachMeasuring = false
+            this.lod = lod
+            if (cell._infoText !== info)
+                cell._infoText = info
+            if (info)
+                info.text = text
+            if (!hadText)
+                this.infoTextCells.delete(index)
+            this.unitSectorWork.reachMs += performance.now() - t0
+            ++this.unitSectorWork.reaches
+        }
+        return failed ? undefined : meter.end()
     }
     // The stand-in a lit frame draws for a square without its tile (standIn: drawLitView's, true = the surface cache as it
     // matches, 'standin' = drawStandIn's source) as one object while what it draws from is the same.
@@ -5912,6 +6198,48 @@ class Grid extends SpritesGroup {
     // What the cache sectors' ground is drawn from (sceneLayerKey and the split under way, which draws the raster uncut).
     cacheSectorKey() {
         return [...this.sceneLayerKey(), !!this.surfaceSplitJob]
+    }
+    // TASK-1626 (Grid.cacheSectorCarry): fn changes the surface cache's raster or shown canvas where rects (world {x, y, w, h};
+    // a function: found after fn; [] none: the same pixels, as a split's end or a lit layer's revision) say. The cache unit
+    // sectors drawn over the cache as it was (their tag: cacheSectorKey before fn) that meet none of them still hold the
+    // ground the cache now gives them: they take the new key, where every one was built again (a patch, a split's end, a
+    // cell layer follow changed the key of all). Returns fn's result.
+    carryCacheSectors(rects, fn) {
+        if (!Grid.cacheSectorCarry || !this.unitSectors?.entries.size)
+            return fn()
+        const before = this.cacheSectorKey()
+        const result = fn()
+        const after = this.cacheSectorKey()
+        if (sameKeyArray(before, after))
+            return result
+        const boxes = typeof rects === 'function' ? rects() : rects
+        if (!boxes)
+            return result
+        const cache = this.unitSectors
+        for (const entry of cache.entries.values()) {
+            if (entry.kind !== 'cache' || !entry.tag || !sameKeyArray(entry.tag, before))
+                continue
+            if (boxes.length) {
+                const r = cache.sectorRect(entry.level, entry.u, entry.v), m = UNIT_REACH_PAD / entry.level
+                if (boxes.some(b => b.x - m < r.x + r.w && b.x + b.w + m > r.x && b.y - m < r.y + r.h && b.y + b.h + m > r.y)) {
+                    ++this.unitSectorWork.tagDropped
+                    continue
+                }
+            }
+            entry.tag = after
+            ++this.unitSectorWork.tagCarried
+        }
+        return result
+    }
+    // TASK-1626: pixel rectangles of the surface cache (or its layer, the same size) as world rectangles, each grown by two
+    // cache pixels and (whole: a region a re-split takes whole cells round) a cell's box; null without a cache.
+    cacheWorldRects(regions, whole = true) {
+        const b = this.surfaceCacheBounds, scale = this.surfaceCacheScale
+        if (!b || !(scale > 0))
+            return null
+        const m = (whole ? 2.2 * basis.r : 0) + 2 / scale
+        return regions.filter(Boolean).map(q => ({x: b.left + q.x / scale - m, y: b.top + q.y / scale - m, w: q.w / scale + 2 * m,
+            h: q.h / scale + 2 * m}))
     }
     // The squares (u, v ranges) at level the board and its units can draw on: mapDepth.bounds and the surface cache's grown by
     // drawRange's margin.
@@ -11840,6 +12168,216 @@ function sectorEdited(canvas) {
     canvas.sectorEdits = (canvas.sectorEdits || 0) + 1
     canvas.sectorVersion = sectorEditsVersion
 }
+// TASK-1626: a bounds context: the drawing code draws on context (an ES Proxy) as on a 2D context, and no pixel is drawn: each
+// drawing call's box (device units of a context whose transform starts as the identity: board units for the board's drawing)
+// is added to the box (end()). State, transform and text metric calls go to a scratch 2D context. drawImage, putImageData
+// and the rectangle calls: their rectangle; texts: their measured box; paths (beginPath to fill / stroke): their points and
+// arcs' boxes; strokes grown by half the line width (miter joins by the miter limit); shadows by their blur and offset. A
+// call whose box it cannot know (a Path2D drawn, a filter) makes end() undefined. Gradients and patterns made on it are
+// stand-ins (nothing is painted).
+class ReachMeter {
+    constructor() {
+        const scratchCanvas = document.createElement('canvas')
+        scratchCanvas.width = scratchCanvas.height = 1
+        this.scratch = scratchCanvas.getContext('2d')
+        this.canvas = {width: 1 << 20, height: 1 << 20, reachMeter: true}
+        const meter = this, methods = new Map()
+        const paint = {addColorStop() {}, setTransform() {}}
+        const own = {
+            canvas: () => meter.canvas,
+            // (SpriteCache.draw: a sprite shape's bounds at its anchor, one box for a bar's or an outlined text's calls)
+            reachShape: () => (shape, x, y) => meter.shape(shape, x, y),
+            createLinearGradient: () => () => paint, createRadialGradient: () => () => paint,
+            createConicGradient: () => () => paint, createPattern: () => () => paint
+        }
+        this.context = new Proxy({}, {
+            get(_, name) {
+                if (own[name]) return own[name]()
+                if (name in meter.styles) return meter.styles[name]
+                const value = meter.scratch[name]
+                if (typeof value !== 'function') return value
+                let method = methods.get(name)
+                if (!method) methods.set(name, method = (...args) => meter.call(name, args))
+                return method
+            },
+            set(_, name, value) {
+                if (name === 'fillStyle' || name === 'strokeStyle')
+                    meter.styles[name] = value
+                else
+                    meter.scratch[name] = value
+                return true
+            },
+            has(_, name) {
+                return name === 'canvas' || name in meter.scratch
+            }
+        })
+        this.styles = {}
+    }
+    begin() {
+        const g = this.scratch
+        if (typeof g.reset === 'function') g.reset()
+        else { g.canvas.width = 1; g.setTransform(1, 0, 0, 1, 0, 0) }
+        this.styles = {}
+        this.box = null
+        this.path = null
+        this.unknown = false
+        this.stack = []
+        // The transform, kept here (the scratch context's is left as the identity: only its state and text metrics are read).
+        this.m = [1, 0, 0, 1, 0, 0]
+    }
+    // A SpriteCache shape (its bounds round its anchor, its stroke's half width left out of them) drawn at (x, y).
+    shape(shape, x, y) {
+        const b = shape.bounds, g = this.scratch
+        const pad = (shape.halfStroke || 0) * (g.lineJoin === 'miter' ? Math.max(1, g.miterLimit) : 1) + 1
+        this.paint(this.addRect(null, x + b.x0 - pad, y + b.y0 - pad, x + b.x1 + pad, y + b.y1 + pad), 1)
+        return true
+    }
+    // The box drawn in since begin(): {x, y, w, h}, null for none, undefined when a call's box is unknown.
+    end() {
+        const b = this.box
+        if (this.unknown)
+            return undefined
+        return b ? {x: b.x0, y: b.y0, w: b.x1 - b.x0, h: b.y1 - b.y0} : null
+    }
+    // A rectangle of the context's current user space, transformed, added to q (a box, made when null); returns q.
+    addRect(q, x0, y0, x1, y1) {
+        const [a, b, c, d, e, f] = this.m
+        for (let k = 0; k < 4; ++k) {
+            const x = k & 1 ? x1 : x0, y = k & 2 ? y1 : y0
+            const X = a * x + c * y + e, Y = b * x + d * y + f
+            if (!Number.isFinite(X) || !Number.isFinite(Y))
+                continue
+            if (!q)
+                q = {x0: X, y0: Y, x1: X, y1: Y}
+            else {
+                if (X < q.x0) q.x0 = X
+                if (Y < q.y0) q.y0 = Y
+                if (X > q.x1) q.x1 = X
+                if (Y > q.y1) q.y1 = Y
+            }
+        }
+        return q
+    }
+    // The transform times [A, B, C, D, E, F] (as transform() does).
+    multiply(A, B, C, D, E, F) {
+        const [a, b, c, d, e, f] = this.m
+        this.m = [a * A + c * B, b * A + d * B, a * C + c * D, b * C + d * D, a * E + c * F + e, b * E + d * F + f]
+    }
+    // q (device units) painted, grown by grow (user units: scaled by the transform's larger axis) and the shadow.
+    paint(q, grow = 0) {
+        if (!q)
+            return
+        const g = this.scratch, t = this.m, s = Math.max(Math.hypot(t[0], t[1]), Math.hypot(t[2], t[3]))
+        let m = grow * s
+        if (g.shadowColor && !/^(transparent|rgba\([^)]*,\s*0\))$/.test(g.shadowColor) && (g.shadowBlur || g.shadowOffsetX || g.shadowOffsetY))
+            m += 2 * g.shadowBlur + Math.max(Math.abs(g.shadowOffsetX), Math.abs(g.shadowOffsetY))
+        if (g.filter && g.filter !== 'none')
+            this.unknown = true
+        const b = this.box
+        const x0 = q.x0 - m, y0 = q.y0 - m, x1 = q.x1 + m, y1 = q.y1 + m
+        this.box = !b ? {x0, y0, x1, y1} : {x0: Math.min(b.x0, x0), y0: Math.min(b.y0, y0), x1: Math.max(b.x1, x1), y1: Math.max(b.y1, y1)}
+    }
+    strokeGrow() {
+        const g = this.scratch
+        return g.lineWidth / 2 * (g.lineJoin === 'miter' ? Math.max(1, g.miterLimit) : 1) + 1
+    }
+    call(name, args) {
+        const g = this.scratch
+        switch (name) {
+        case 'drawImage': {
+            const image = args[0], n = args.length
+            const w = n === 3 ? image?.width : n === 5 ? args[3] : args[7], h = n === 3 ? image?.height : n === 5 ? args[4] : args[8]
+            const x = n === 9 ? args[5] : args[1], y = n === 9 ? args[6] : args[2]
+            if (w && h)
+                this.paint(this.addRect(null, x, y, x + w, y + h), 1)
+            return
+        }
+        case 'putImageData':
+            this.paint({x0: args[1], y0: args[2], x1: args[1] + (args[0]?.width || 0), y1: args[2] + (args[0]?.height || 0)})
+            return
+        case 'fillRect': case 'clearRect':
+            this.paint(this.addRect(null, args[0], args[1], args[0] + args[2], args[1] + args[3]), 1)
+            return
+        case 'strokeRect':
+            this.paint(this.addRect(null, args[0], args[1], args[0] + args[2], args[1] + args[3]), this.strokeGrow())
+            return
+        case 'fillText': case 'strokeText': {
+            const m = g.measureText(String(args[0])), x = args[1], y = args[2]
+            let left = m.actualBoundingBoxLeft, right = m.actualBoundingBoxRight
+            if (args[3] !== undefined && m.width > args[3])
+                left = right = args[3]
+            const pad = UNIT_TEXT_PAD + (name === 'strokeText' ? this.strokeGrow() : 1)
+            this.paint(this.addRect(null, x - left, y - m.actualBoundingBoxAscent, x + right, y + m.actualBoundingBoxDescent), pad)
+            return
+        }
+        case 'beginPath':
+            this.path = null
+            return
+        case 'moveTo': case 'lineTo':
+            this.path = this.addRect(this.path, args[0], args[1], args[0], args[1])
+            return
+        case 'quadraticCurveTo': case 'bezierCurveTo':
+            for (let k = 0; k + 1 < args.length; k += 2)
+                this.path = this.addRect(this.path, args[k], args[k + 1], args[k], args[k + 1])
+            return
+        case 'arc': case 'ellipse': {
+            const r = name === 'arc' ? args[2] : Math.max(args[2], args[3])
+            this.path = this.addRect(this.path, args[0] - r, args[1] - r, args[0] + r, args[1] + r)
+            return
+        }
+        case 'arcTo':
+            this.path = this.addRect(this.path, args[0] - args[4], args[1] - args[4], args[0] + args[4], args[1] + args[4])
+            this.path = this.addRect(this.path, args[2] - args[4], args[3] - args[4], args[2] + args[4], args[3] + args[4])
+            return
+        case 'rect': case 'roundRect':
+            this.path = this.addRect(this.path, args[0], args[1], args[0] + args[2], args[1] + args[3])
+            return
+        case 'fill': case 'stroke':
+            if (args[0] && typeof args[0] === 'object')
+                this.unknown = true
+            else
+                this.paint(this.path, name === 'stroke' ? this.strokeGrow() : 1)
+            return
+        case 'closePath': case 'clip':
+            return
+        case 'save':
+            this.stack.push([this.styles, this.m])
+            this.styles = {...this.styles}
+            return g.save()
+        case 'restore':
+            if (this.stack.length)
+                [this.styles, this.m] = this.stack.pop()
+            return g.restore()
+        case 'setTransform': {
+            const t = args.length === 1 ? args[0] || {a: 1, b: 0, c: 0, d: 1, e: 0, f: 0} : null
+            this.m = t ? [t.a ?? t.m11 ?? 1, t.b ?? t.m12 ?? 0, t.c ?? t.m21 ?? 0, t.d ?? t.m22 ?? 1, t.e ?? t.m41 ?? 0, t.f ?? t.m42 ?? 0] :
+                args.length ? args.slice(0, 6) : [1, 0, 0, 1, 0, 0]
+            return
+        }
+        case 'resetTransform':
+            this.m = [1, 0, 0, 1, 0, 0]
+            return
+        case 'transform':
+            this.multiply(...args)
+            return
+        case 'translate':
+            this.multiply(1, 0, 0, 1, args[0], args[1])
+            return
+        case 'scale':
+            this.multiply(args[0], 0, 0, args[1] ?? args[0], 0, 0)
+            return
+        case 'rotate': {
+            const c = Math.cos(args[0]), s = Math.sin(args[0])
+            this.multiply(c, s, -s, c, 0, 0)
+            return
+        }
+        case 'getTransform':
+            return new DOMMatrix(this.m)
+        default:
+            return g[name](...args)
+        }
+    }
+}
 class SectorRecorder {
     // target: the real 2D context the runs are drawn on; snapshot: Grid.sectorSnapshot's (its targets get {k, segs});
     // sink: {sprites (key -> image), cellIndex (board index -> index in snapshot.cells)}.
@@ -12640,6 +13178,8 @@ const SURFACE_PATCH_STEPS = [
 const SURFACE_PATCH_CHECK_MS = 100
 // The largest part of the surface cache's pixels a patch redraws (Grid.patchSurfaceCache); more is rebuilt.
 const SURFACE_PATCH_MAX_AREA = 0.25
+// TASK-1626: a region of at most this many cache pixels is patched whatever its share (0: as before).
+const SURFACE_PATCH_SMALL_PIXELS = 1.5e6
 // Cache pixels round a patch's region redrawn with it and then put back as they were (Grid.patchSurfaceCache): the clip
 // rectangle's edge, where Chromium draws clip paths, strokes and blurs unlike a whole build, kept that far off the region;
 // at a cache scale below 1 (a raster capped at the screen's area) the same world distance, at least the minimum.
@@ -12933,6 +13473,8 @@ Grid.LOD_RADIUS = 8
 // TASK-1514: bumped by every logic text change (made, set, cleaned, Grid.logicTextChanged): the scene layer's key.
 Grid.logicTextRevision = 0
 Grid.logicTextChanged = () => { ++Grid.logicTextRevision }
+// TASK-1626: the layers' keys hold the logic texts' revision only while they are drawn (logicTextKey). False: always.
+Grid.logicTextKeyDrawnOnly = true
 Grid.lodFrames = true
 // TASK-1376: simple visuals' frames walk the cells reaching the canvas only (drawRange); still frames above the
 // level-of-detail threshold are held (Grid.stillFrameCandidate).
@@ -13055,6 +13597,23 @@ const UNIT_SECTOR_CHUNK_CALLS = 100
 const UNIT_TEXT_EM_WIDTH = 1
 const UNIT_TEXT_EM_HEIGHT = 1.5
 const UNIT_TEXT_PAD = 3
+// TASK-1626: the device pixels a cell's measured reach (unitCellReachBox) is grown by at a sector's level (antialiasing, a
+// sprite's sub-pixel phase); Grid.unitCellReach false: a change dirties drawRange's margin round the cell, as before.
+const UNIT_REACH_PAD = 3
+Grid.unitCellReach = true
+// TASK-1626: cache unit sectors away from a local change of the surface cache keep their ground (carryCacheSectors).
+Grid.cacheSectorCarry = true
+// TASK-1626: a surface cache split the board changed under past its preparation is finished, not dropped (settleSplit).
+Grid.splitSettles = true
+// TASK-1626: a lamp or portal shown, hidden or replaced patches the surface cache over its light reach (lampReachRects).
+Grid.lampPatches = true
+// TASK-1626: the light map kept aside at a layer's resolution stands in for its variants (withHeldLightMap).
+Grid.heldStashMaps = true
+// TASK-1626: a patch keeps the cache unit sectors away from its changed cells' rectangles (else from its whole region).
+Grid.patchBoxCarry = true
+// TASK-1626: a surface cache whose layer cannot follow the board waits up to FOLLOW_WAIT_MS before it is dropped.
+Grid.followWaits = true
+const FOLLOW_WAIT_MS = 1000
 const UNIT_SECTOR_BURST_CALLS = 10000
 const UNIT_SECTOR_BURST_MS = 100
 // TASK-1561: frames at rest have their unit sectors built between frames (Grid.restUnitSectors); false: only pans build.

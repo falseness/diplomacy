@@ -1163,7 +1163,8 @@
     // event to the next: 'pre' (the capture's start), 'begin' (turnPlaybackView.begin), 'r<R>:load' (an AI turn's snapshot
     // loaded: a new Grid), 'r<R>:s<S>' (step S: its glide from pace(), then its apply and wait), 'end' (the computed board
     // back). Per window: board (the Grid instance's number), the cells it changed (content: owner or unit; hp; buildings;
-    // lamps: a light kind shown, hidden or replaced; fog: the viewer's fog flipped), the tiles they touch at the camera's
+    // lamps: a light kind shown, hidden or replaced; fog: the viewer's fog flipped; TASK-1626 marks: the rest the units pass
+    // draws, a moves bar, a hit or heal mark, production turns, a portal preview), the tiles they touch at the camera's
     // level (each changed cell's hex box, its sprites' height above it, an owner change's territory glow, a lamp change's
     // light reach LAMP_REACH; grown as Grid.staleSectorsIn grows), the lit tiles and unit sectors stored (rebuilt) in it, each
     // with its cause, the surface cache's builds and patches, the lit patches and the sector clears. A tile's cause:
@@ -1171,7 +1172,9 @@
     // a step's changed cells / a fog flip since its last build reach it), clear:<reason> (Grid.clearSectors / clearUnitSectors
     // since its last build), glide-new (its first build, the camera moving in the window or the one before: a square new in
     // view), glide-again (built on this board before, no change reaches it, the camera moving: evicted or dropped), new (its
-    // first build, the camera still) or other. Also per window: the levels built at, the refusals of the surface cache's and the
+    // first build, the camera still), TASK-1626 path (a unit sector's first build over the other ground: its square built over
+    // a lit tile before and now over the surface cache or the other way, the frames' path changed) or other. TASK-1626: a
+    // unit sector's history is its kind's (over a lit tile or over the cache). Also per window: the levels built at, the refusals of the surface cache's and the
     // lit view's patches (with patchSurfaceCache's early returns: early-<why>).
     const playbackTrace = (() => {
         const LAMP_REACH = 4, boards = new WeakMap()
@@ -1182,10 +1185,20 @@
         const tileSize = () => typeof LIT_TILE !== 'undefined' ? LIT_TILE : 256
         const level = () => grid?.litView?.sectorLevel || grid?.litView?.a || (typeof mainCtx !== 'undefined' ? mainCtx.getTransform().a : canvas.scale)
         const sig = e => !e || (e.isEmpty && e.isEmpty()) ? '' : e.name + '|' + JSON.stringify(e.playerColor ?? null)
+        // TASK-1626: the rest of what a cell's units pass draws (Grid.unitCellValues): the unit's moves bar, hit and heal marks,
+        // the building's hit mark, ruin, heal, production turns and portal preview.
+        const marksOf = cell => {
+            const u = cell.unit, b = cell.building
+            const unit = u && !(u.isEmpty && u.isEmpty()) ? [u.moves, u.wasHitted, u.hpIncrease, typeof shouldShowMovesBar === 'function' ? shouldShowMovesBar(u) : ''] : []
+            const building = b && !(b.isEmpty && b.isEmpty()) ? [b.wasHitted, b.killed, b.hpIncrease, b.isBuildingProduction?.() ? b.turns : '',
+                b.isPreparingManufacture ? (b.unitProduction?.name || '') + '/' + (b.unitProduction?.turns ?? '') : '',
+                b.isDemonPortal ? (b.nextProduction?.type || '') + '/' + (b.nextProduction?.roundsRemaining ?? '') : ''] : []
+            return JSON.stringify([unit, building])
+        }
         const lampOf = b => { try { return b && !(b.isEmpty && b.isEmpty()) && atmosphericLighting.emitsLight(b) ? (b.isDemonPortal ? 'demonPortal' : b.name) : '' } catch (_) { return '' } }
         // The board's cells now: per cell index (i x height + j) owner, unit, hp, building, lamp, the viewer's fog.
         const snap = () => {
-            const g = grid, out = {board: g, w: g.arr.length, h: g.arr[0].length, owner: [], unit: [], hp: [], building: [], lamp: [], fog: []}
+            const g = grid, out = {board: g, w: g.arr.length, h: g.arr[0].length, owner: [], unit: [], hp: [], building: [], lamp: [], fog: [], marks: []}
             for (let i = 0; i < out.w; ++i)
                 for (let j = 0; j < out.h; ++j) {
                     const cell = g.arr[i][j]
@@ -1193,8 +1206,11 @@
                     out.unit.push(sig(cell.unit))
                     out.hp.push((cell.unit && !cell.unit.isEmpty?.() ? cell.unit.hp : '') + '|' + (cell.building && !cell.building.isEmpty?.() ? cell.building.hp : ''))
                     out.building.push(sig(cell.building))
-                    out.lamp.push(lampOf(cell.building))
+                    // TASK-1626: a lamp is shown where collect finds it (in view, known, not killed): fog hides or shows it.
+                    const fogged = typeof isFogOfWar !== 'undefined' && isFogOfWar && g.fogOfWar && !g.fogOfWar[i]?.[j]
+                    out.lamp.push(fogged || cell.hexagon.unknown || cell.building?.killed ? '' : lampOf(cell.building))
                     out.fog.push(typeof isFogOfWar !== 'undefined' && isFogOfWar && g.fogOfWar ? (g.fogOfWar[i]?.[j] ? 1 : 0) : 1)
+                    out.marks.push(marksOf(cell))
                 }
             return out
         }
@@ -1212,6 +1228,37 @@
             }
             return rects
         }
+        // TASK-1626: a lamp shown, hidden or replaced also turns the shadows of the casters within the shadow lamps' reach
+        // (atmosphericLighting.SHADOW.reachRadii) whose strongest lamp or its strength changed: their shadows as cast with the
+        // lamps before and after (shadowBounds).
+        const lampShadowRects = (was, now, cells) => {
+            const lamps = cells.filter(([, , kinds]) => kinds.includes('l'))
+            if (!lamps.length || !was || was.w !== now.w || was.h !== now.h || typeof atmosphericLighting === 'undefined') return []
+            const L = atmosphericLighting, r = basis.r, reach = (L.SHADOW.reachRadii + 1) * r, out = []
+            const sources = s => {
+                const list = []
+                for (let k = 0; k < s.lamp.length; ++k) if (s.lamp[k]) {
+                    const i = Math.floor(k / s.h), j = k % s.h
+                    list.push({x: i, y: j, pos: grid.arr[i][j].hexagon.calcPos(), name: s.lamp[k]})
+                }
+                return list
+            }
+            const then = sources(was), after = sources(now), centres = lamps.map(([i, j]) => grid.arr[i][j].hexagon.calcPos())
+            for (let i = 0; i < now.w; ++i) for (let j = 0; j < now.h; ++j) {
+                const cell = grid.arr[i][j], c = cell.hexagon.calcPos(), b = cell.building
+                if (!centres.some(q => Math.hypot(q.x - c.x, q.y - c.y) <= reach)) continue
+                if (!b || !b.notEmpty?.() || !L.castsShadow(grid, i, j, b, true)) continue
+                // (the same strongest lamp at the same strength: the same shadow)
+                const was = L.strongestLamp(c, then, L.SHADOW.reachRadii), is = L.strongestLamp(c, after, L.SHADOW.reachRadii)
+                if (was.strength === is.strength && (was.best === is.best || was.best && is.best && was.best.x === is.best.x && was.best.y === is.best.y)) continue
+                for (const image of new Set([cachedImages[grid.getEntityBodyImageName(b)], cachedImages[b.bodyImageName]])) {
+                    if (!image || !image.width) continue
+                    for (const q of [L.shadowBounds(b, image, c, then), L.shadowBounds(b, image, c, after)])
+                        out.push({x0: q.x0, y0: q.y0, x1: q.x1, y1: q.y1, fog: false})
+                }
+            }
+            return out
+        }
         const tilesOf = (rects, a) => {
             const L = tileSize(), grow = (3 + 4 * (typeof LIT_EDGE_BLOCK !== 'undefined' ? LIT_EDGE_BLOCK : 8)) / a, set = new Set()
             for (const q of rects)
@@ -1221,7 +1268,7 @@
             return set
         }
         const diff = (was, now) => {
-            const cells = [], count = {content: 0, hp: 0, buildings: 0, lamps: 0, fog: 0}
+            const cells = [], count = {content: 0, hp: 0, buildings: 0, lamps: 0, fog: 0, marks: 0}
             if (!was || was.w !== now.w || was.h !== now.h) return {cells, count, sizeChanged: !!was}
             for (let k = 0; k < now.owner.length; ++k) {
                 let kinds = ''
@@ -1231,12 +1278,14 @@
                 if (was.building[k] !== now.building[k]) kinds += 'b'
                 if (was.lamp[k] !== now.lamp[k]) kinds += 'l'
                 if (was.fog[k] !== now.fog[k]) kinds += 'f'
+                if (was.marks && was.marks[k] !== now.marks[k]) kinds += 'm'
                 if (!kinds) continue
                 if (/[ou]/.test(kinds)) ++count.content
                 if (kinds.includes('h')) ++count.hp
                 if (kinds.includes('b')) ++count.buildings
                 if (kinds.includes('l')) ++count.lamps
                 if (kinds.includes('f')) ++count.fog
+                if (kinds.includes('m')) ++count.marks
                 cells.push([Math.floor(k / now.h), k % now.h, kinds])
             }
             return {cells, count}
@@ -1253,7 +1302,7 @@
         const record = (was) => {
             if (!trace || !win || !grid) return
             const now = snap(), d = diff(was, now)
-            const a = level(), rects = changeRects(d.cells)
+            const a = level(), rects = changeRects(d.cells).concat(lampShadowRects(was, now, d.cells))
             win.board = boardId(now.board)
             win.cells = d.count
             if (d.sizeChanged) win.cells.sizeChanged = true
@@ -1269,14 +1318,20 @@
             before = now
         }
         const inRect = (q, x0, y0, x1, y1) => q.x0 < x1 && q.x1 > x0 && q.y0 < y1 && q.y1 > y0
-        const tileBuilt = (kind, a, u, v, board) => {
+        // TASK-1626: ground: a unit sector's kind ('lit': over a lit tile, 'cache': over the surface cache), two pictures of a
+        // square with their own histories: a square's first build over the other ground (its other kind built before) is
+        // 'path' (the frames' path changed between the lit tiles and the cache), not new.
+        const tileBuilt = (kind, a, u, v, board, ground = '') => {
             if (!trace || !win) return
             const L = tileSize(), x0 = u * L / a, y0 = v * L / a, x1 = (u + 1) * L / a, y1 = (v + 1) * L / a
-            const id = kind + ':' + Math.round(a * 1e4) + ':' + u + ':' + v, prev = built.get(id), b = boardId(board)
+            const sq = Math.round(a * 1e4) + ':' + u + ':' + v, id = kind + ground + ':' + sq, b = boardId(board)
+            let prev = built.get(id)
+            const other = !prev && ground ? built.get(kind + (ground === 'lit' ? 'cache' : 'lit') + ':' + sq) || built.get(kind + ':' + sq) : null
             // (a glide's squares may arrive in the window after it: the window before counts too)
             const last = trace.windows[win.w - 1], moving = !!(win.motionFrames || win.glideFrames || last && (last.motionFrames || last.glideFrames))
             let cause
-            if (!prev) cause = moving ? 'glide-new' : 'new'
+            if (!prev && other) cause = other.board !== b ? 'board-reload' : 'path'
+            else if (!prev) cause = moving ? 'glide-new' : 'new'
             else if (prev.board !== b) cause = 'board-reload'
             else {
                 const hit = marks.filter(m => m.seq > prev.seq && m.board === board && inRect(m.rect, x0, y0, x1, y1))
@@ -1311,7 +1366,7 @@
                 return original.apply(this, args)
             })
             around(G, 'storeUnitSector', function(original, args) {
-                if (active && this === grid && args[3]) tileBuilt('unit', args[0], args[1], args[2], this)
+                if (active && this === grid && args[3]) tileBuilt('unit', args[0], args[1], args[2], this, args[5] === 'lit' || args[5] === 'cache' ? args[5] : '')
                 return original.apply(this, args)
             })
             for (const [name, field] of [['finishSurfaceCacheBuild', 'full'], ['finishSurfacePatch', 'patch'], ['finishLitPatch', 'litPatch']])
@@ -1342,6 +1397,12 @@
                     if (active && win && this === grid && had && !this.surfaceCache) win.refusals['surface-drop:' + why] = (win.refusals['surface-drop:' + why] || 0) + 1
                     return result
                 })
+            // TASK-1626: a split finished at once (the board changed under it) instead of the cache dropped.
+            around(G, 'settleSplit', function(original, args) {
+                const result = original.apply(this, args)
+                if (active && win && this === grid && result) win.refusals['surface-split:settled'] = (win.refusals['surface-split:settled'] || 0) + 1
+                return result
+            })
             around(G, 'surfaceCacheBuildHolds', function(original, args) {
                 const result = original.apply(this, args)
                 if (active && win && this === grid && !result) win.refusals['surface-build:restart'] = (win.refusals['surface-build:restart'] || 0) + 1
@@ -1429,7 +1490,8 @@
                 const seed = (kind, a, u, v) => built.set(kind + ':' + Math.round(a * 1e4) + ':' + u + ':' + v, {board: b, seq: 0})
                 if (g?.litView) for (const key of g.litView.tiles.keys()) { const [u, v] = key.split(',').map(Number); seed('lit', g.litView.sectorLevel || g.litView.a, u, v) }
                 for (const [kind, cache] of [['lit', g?.sectors], ['unit', g?.unitSectors]])
-                    if (cache?.entries) for (const entry of cache.entries.values()) if (entry.level) seed(kind, entry.level, entry.u, entry.v)
+                    if (cache?.entries) for (const entry of cache.entries.values()) if (entry.level)
+                        seed(kind === 'unit' && (entry.kind === 'lit' || entry.kind === 'cache') ? kind + entry.kind : kind, entry.level, entry.u, entry.v)
                 trace = report.playbackTrace = {schema: 1, lampReachRadii: LAMP_REACH, tile: tileSize(), windows: [], clears: []}
                 open('pre')
             },

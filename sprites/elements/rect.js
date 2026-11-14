@@ -487,6 +487,9 @@ class SpriteCache {
     // (and a sprite for it is queued when it can be made). owner.paintSprite(g) draws it on g; owner.spriteShape()
     // and owner.spriteAnchor() are read again when the queued sprite is built.
     static draw(ctx, shape, x, y, owner) {
+        // TASK-1626: a bounds context (Grid's ReachMeter) takes the shape's bounds as its box (nothing is drawn).
+        if (ctx.reachShape && shape && !shape.dead)
+            return ctx.reachShape(shape, x, y)
         if (!SpriteCache.enabled || typeof mainCanvas === 'undefined' || ctx.canvas !== mainCanvas || !shape || shape.dead)
             return false
         if (ctx.globalAlpha !== 1 || ctx.globalCompositeOperation !== 'source-over' || ctx.filter !== 'none' ||
