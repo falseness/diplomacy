@@ -172,6 +172,7 @@ class Unit extends Entity {
         const attack = typeof attackFx !== 'undefined' ? attackFx.before(this, cell) : null
         const origin = {x: this.coord.x, y: this.coord.y}, facing = this.mirrorX
         this.attackCoord = null
+        this.actionPath = null
         let noNeedInstructionsEnough = this.interaction.sendInstructions(cell, this)
         this.faceAttackTarget(origin, facing)
         this.updateMovesBar()

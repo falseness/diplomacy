@@ -444,7 +444,7 @@ const gameDiffHandler = {
                 moveTween.start(unit, hint.path)
         }
         if (attacks)
-            attackFx.remoteAfter(attacks, message)
+            attackFx.remoteAfter(attacks, message, diff.paths)
         if (heals)
             healFx.remoteAfter(heals)
         // Waiting views also need pictures of uncommitted co-op actions: a

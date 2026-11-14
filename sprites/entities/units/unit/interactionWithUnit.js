@@ -113,6 +113,8 @@ class InterationWithUnit {
         actionManager.lastAction.units.push(unit.toJSON())
     }
     move(coord, cell, arr, unit) {
+        // TASK-1621: the cells this action walks, the unit's cell to coord (display only: the attack animation's walk)
+        unit.actionPath = this.pathTo(coord, unit)
         this.addThisUndo(unit)
             //this.addUndo()
         this.moves -= this.way.getDistance(coord)
@@ -129,6 +131,17 @@ class InterationWithUnit {
         if (gameSettings.coop) refreshCoopVision()
         else if (isFogOfWar) unit.changeFogOfWarByVision()
         grid.reportLoadingCells()
+    }
+    // The way's cells from the unit's cell to coord ([{x, y}], both ends in), or null when the way does not reach it.
+    pathTo(coord, unit) {
+        const path = [{x: coord.x, y: coord.y}]
+        for (let guard = 0; guard < 64 && !coordsEqually(path[0], unit.coord); ++guard) {
+            const parent = this.way.getParent(path[0])
+            if (coordsEqually(parent, path[0]))
+                return null
+            path.unshift(parent)
+        }
+        return coordsEqually(path[0], unit.coord) ? path : null
     }
     paintHexagons(original_coord, arr, unit, isKillUnit) {
         let coord = Object.assign({}, original_coord)

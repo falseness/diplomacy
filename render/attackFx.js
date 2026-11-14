@@ -285,7 +285,7 @@ class AttackFx {
         const hold = s.cells && target.killed && !s.ranged && (to.x !== s.from.x || to.y !== s.from.y) ? this.changedCells(s.cells) : null
         const effect = this.queue({kind: this.kindOf(attacker), attacker, own: this.isOwn(attacker), image: s.image, from: s.from, fromPos: s.fromPos,
             to, target: coord, targetPos: target.pos, targetImage: target.image,
-            targetIsUnit: target.unit, targetUnit, damage: target.damage, killed: target.killed})
+            targetIsUnit: target.unit, targetUnit, damage: target.damage, killed: target.killed, path: attacker.actionPath || null})
         if (effect && hold?.length && effect.kind === 'lasthit' && effect.startTime !== null) {
             effect.hold = hold
             ++this.stats.holds
@@ -319,7 +319,7 @@ class AttackFx {
     }
     // The landing: the time (ms since its start) from which a held effect's cells show their new state.
     landing(e) {
-        return e.duration / e.span
+        return (e.walkMs || 0) + (e.attackMs ?? e.duration) / e.span
     }
     // Ends every hold (the cells show the board's state from the next frame).
     endHolds() {
@@ -418,7 +418,7 @@ class AttackFx {
     // attacker is the enemy unit of the change that spent moves nearest the target (unknown: its cell is not in the change,
     // then only the hit plays). A cell counts as seen when it was seen before or after the change. message: the change's
     // game:diff (its actor: an attack an observation played already is not played again, TASK-1427).
-    remoteAfter(before, message = null) {
+    remoteAfter(before, message = null, paths = null) {
         if (!before)
             return []
         const played = []
@@ -475,7 +475,7 @@ class AttackFx {
                     targetPos: target.pos, targetImage: target.image, targetIsUnit: target.isUnit,
                     targetUnit: this.ranged[kind] && target.isUnit && !target.killed ? target.unit : null,
                     damage: target.damage, killed: target.killed,
-                    seen: {from: source.seen || this.seen(source.coord), to: seenTo}}
+                    seen: {from: source.seen || this.seen(source.coord), to: seenTo}, path: this.hintPath(paths, source.coord, to)}
             }
             else
                 // An unseen attacker: only the hit on the target.
@@ -987,7 +987,10 @@ class AttackFx {
         effect.kind = kind
         effect.span = span
         effect.startTime = event.own ? this.now() : null
-        effect.duration = duration
+        // TASK-1621: a move-attack walks to its strike hex first (walkMs), then the attack plays (attackMs) from there.
+        this.setWalk(effect)
+        effect.attackMs = duration
+        effect.duration = effect.walkMs + duration
         // One effect per attacker: a new attack of the same unit replaces its effect. The finished effects (held at their
         // end, prune) let their units go: the attack changes the board in this frame anyway (TASK-1425).
         const now = this.now()
@@ -1005,6 +1008,113 @@ class AttackFx {
         if (!this.flushing)
             this.hideUnits()
         return effect
+    }
+    // TASK-1621: a move-attack (the attacker struck from another hex than the one it started on) walks first: the
+    // STRIKE HEX is 'to' when the target lives, else (a kill that moved the attacker into the target's hex) the last cell
+    // of its path before the target ('from' when it struck from there). The walk is the attacker's real path from
+    // 'from' to the strike hex (event.path: the rules' way of the action, Unit.actionPath, or an online change's path
+    // hint), else the shortest path the board allows (walkRoute); it takes moveTween.msPerCell a cell (on this object's
+    // clock: a turn playback's scaled one), then the attack plays from the strike hex (strikePos). Sets e.walk (cells,
+    // null: none), e.walkMs, e.strike and e.strikePos.
+    setWalk(e) {
+        e.walk = null
+        e.walkMs = 0
+        e.strike = null
+        e.strikePos = null
+        const same = (a, b) => !!a && !!b && a.x === b.x && a.y === b.y
+        if (!e.attacker || !e.from || !e.to || e.edge === 'in' || !e.image || typeof grid === 'undefined' || !grid?.arr)
+            return
+        const movedIn = !!e.killed && same(e.to, e.target) && !same(e.to, e.from)
+        if (!movedIn && same(e.to, e.from))
+            return
+        const end = movedIn ? e.target : e.to
+        let full = null
+        if (Array.isArray(e.path) && same(e.path[0], e.from)) {
+            const i = e.path.findIndex(c => same(c, end))
+            if (i > 0)
+                full = e.path.slice(0, i + 1).map(c => ({x: c.x, y: c.y}))
+        }
+        full ??= this.walkRoute(e.from, end, e.attacker)
+        if (!full || full.length < 2)
+            return
+        const walk = movedIn ? full.slice(0, -1) : full
+        if (walk.length < 2)
+            return
+        const strike = walk[walk.length - 1]
+        e.walk = walk
+        e.strike = strike
+        e.strikePos = this.cellPos(e.attacker, strike)
+        e.walkMs = (walk.length - 1) * (typeof moveTween !== 'undefined' ? moveTween.msPerCell : 120)
+    }
+    // A unit's top-left pos on coord (as unit.pos there).
+    cellPos(unit, coord) {
+        if (typeof unit.calcPos === 'function')
+            return unit.calcPos.call({coord})
+        const p = grid.arr[coord.x][coord.y].hexagon.calcPos()
+        return {x: p.x - assets.size / 2, y: p.y - assets.size / 2}
+    }
+    // The shortest path (cells, both ends in) from 'from' to 'to' over the board's neighbours that the rules let a unit
+    // pass (no other unit, no obstacle building on the cells between), else over any cell; null when none.
+    walkRoute(from, to, unit) {
+        const arr = grid.arr
+        const blocked = c => {
+            const cell = arr[c.x][c.y]
+            try {
+                return cell.unit.notEmpty() && cell.unit !== unit || !!cell.building.isObstacle?.(unit.playerColor)
+            } catch (error) {
+                return false
+            }
+        }
+        for (const strict of [true, false]) {
+            const parent = new Map([[from.x + ',' + from.y, null]])
+            const queue = [from]
+            for (let i = 0; i < queue.length && queue.length < 4096; ++i) {
+                const v = queue[i]
+                if (v.x === to.x && v.y === to.y) {
+                    const path = []
+                    for (let c = v; c; c = parent.get(c.x + ',' + c.y))
+                        path.unshift({x: c.x, y: c.y})
+                    return path
+                }
+                for (const n of arr[v.x]?.[v.y]?.hexagon?.neighbours || []) {
+                    const key = n.x + ',' + n.y
+                    if (!arr[n.x]?.[n.y] || parent.has(key) || strict && !(n.x === to.x && n.y === to.y) && blocked(n))
+                        continue
+                    parent.set(key, v)
+                    queue.push(n)
+                }
+            }
+        }
+        return null
+    }
+    // An online change's path hint (applyCellDiff's diff.paths: {from, to, path}) of the unit that went from 'from' to
+    // 'to', or null.
+    hintPath(paths, from, to) {
+        if (!Array.isArray(paths) || !from || !to)
+            return null
+        for (const hint of paths) {
+            const path = hint && Array.isArray(hint.path) ? hint.path : null
+            const last = path && path[path.length - 1]
+            if (last && last.x === to.x && last.y === to.y && path[0].x === from.x && path[0].y === from.y)
+                return path
+        }
+        return null
+    }
+    // The walk of a move-attack (elapsed < e.walkMs): the attacker slides from cell to cell (drawn where the screen's player
+    // sees a cell of the step, as a move tween); a killed target is still drawn (its snapshot), as a ranged hit's target.
+    drawWalk(ctx, e, elapsed, lod) {
+        if (e.killed && !e.edge && e.targetImage)
+            ctx.drawImage(e.targetImage, e.targetPos.x, e.targetPos.y)
+        if (this.drawsTarget(e))
+            this.drawUnitAt(ctx, e.targetUnit, this.imageOf(e.targetUnit) || e.targetImage, e.targetUnit.pos.x, e.targetUnit.pos.y, lod)
+        const ms = e.walkMs / (e.walk.length - 1)
+        const segment = Math.min(e.walk.length - 2, Math.floor(Math.max(0, elapsed) / ms))
+        const t = Math.min(1, Math.max(0, elapsed) / ms - segment)
+        const a = e.walk[segment], b = e.walk[segment + 1]
+        if (!e.own && !this.seen(a) && !this.seen(b))
+            return
+        const pa = this.cellPos(e.attacker, a), pb = this.cellPos(e.attacker, b)
+        this.drawUnitAt(ctx, e.attacker, e.image, pa.x + (pb.x - pa.x) * t, pa.y + (pb.y - pa.y) * t, lod)
     }
     clear() {
         this.batchFrame = false
@@ -1382,7 +1492,14 @@ class AttackFx {
                 continue
             }
             // (an effect waiting behind the pass-device screen: its first pose)
-            const time = e.startTime === null ? 0 : Math.min(1, (now - e.startTime) / e.duration) * e.span
+            const elapsed = e.startTime === null ? 0 : now - e.startTime
+            if (e.walk && elapsed < e.walkMs) {
+                this.drawWalk(ctx, e, elapsed, lod)
+                ctx.restore()
+                continue
+            }
+            const attackMs = e.attackMs ?? e.duration
+            const time = e.startTime === null ? 0 : Math.min(1, (elapsed - (e.walkMs || 0)) / attackMs) * e.span
             if (this.siege[e.kind])
                 this.drawSiege(ctx, e, time, lod)
             else if (this.ranged[e.kind])
@@ -1505,11 +1622,14 @@ class AttackFx {
     drawMelee(ctx, e, t, lod) {
         const r = basis.r, half = assets.size / 2
         const last = e.kind === 'lasthit'
-        const A = {x: e.fromPos.x + half, y: e.fromPos.y + half}
+        // (TASK-1621: from the strike hex, where a move-attack's walk ended)
+        const P = e.strikePos || e.fromPos
+        const A = {x: P.x + half, y: P.y + half}
         const E = {x: e.targetPos.x + half, y: e.targetPos.y + half}
         const vx = E.x - A.x, vy = E.y - A.y
         const time = t
-        const moved = !!e.from && (e.to.x !== e.from.x || e.to.y !== e.from.y)
+        // (a last hit that moved the attacker into the target's hex slides in after it)
+        const moved = !!e.from && !!e.to && (e.to.x !== e.from.x || e.to.y !== e.from.y) && (!e.target || e.to.x === e.target.x && e.to.y === e.target.y)
         // The attacker: hop toward the target (k of the way, hop up), back, or (last hit, moved in) into the hex.
         let k = 0, hop = 0
         if (time < 0.3) {
@@ -1550,7 +1670,7 @@ class AttackFx {
         else
             this.drawDying(ctx, e, time, 0.3, 0.45, E, vx * 0.12, vy * 0.12, tint)
         // The attacker over the target, its bars with it (but in a level-of-detail frame).
-        this.drawUnitAt(ctx, e.attacker, e.image, e.fromPos.x + vx * k, e.fromPos.y + vy * k + hop, lod)
+        this.drawUnitAt(ctx, e.attacker, e.image, P.x + vx * k, P.y + vy * k + hop, lod)
         // (a shot toward the fog edge: no slash, flash or number)
         if (time >= 0.28 && time < 0.48 && e.edge !== 'out')
             this.drawSlash(ctx, E, (time - 0.28) / 0.2, r)
@@ -1724,7 +1844,8 @@ class AttackFx {
     // hit + 0.5)]); sizes in r as drawMelee. The shooter draws back (a hexcaster rises), the shot flies, lands at hit.
     drawRanged(ctx, e, t, lod) {
         const r = basis.r, half = assets.size / 2, style = this.ranged[e.kind], hit = style.hit
-        const A = {x: e.fromPos.x + half, y: e.fromPos.y + half}
+        const P = e.strikePos || e.fromPos
+        const A = {x: P.x + half, y: P.y + half}
         const E = {x: e.targetPos.x + half, y: e.targetPos.y + half}
         const vx = E.x - A.x, vy = E.y - A.y, dist = Math.hypot(vx, vy) || 1
         const ux = vx / dist, uy = vy / dist
@@ -1766,7 +1887,7 @@ class AttackFx {
             dx = -ux * pull
             dy = -uy * pull
         }
-        this.drawUnitAt(ctx, e.attacker, e.image, e.fromPos.x + dx, e.fromPos.y + dy, lod)
+        this.drawUnitAt(ctx, e.attacker, e.image, P.x + dx, P.y + dy, lod)
         if (e.kind === 'hexcaster')
             this.drawHexcaster(ctx, t, A, E, ux, uy, dy, r, e.edge)
         else {
@@ -1992,7 +2113,8 @@ class AttackFx {
     // Siege shots (B2-catapult, B3-bombard, B3-mortar), t in concept time units [0, 1]; sizes in r as drawMelee.
     drawSiege(ctx, e, t, lod) {
         const r = basis.r, half = assets.size / 2, st = this.siege[e.kind], {fly0, fly1} = st
-        const A = {x: e.fromPos.x + half, y: e.fromPos.y + half}
+        const P = e.strikePos || e.fromPos
+        const A = {x: P.x + half, y: P.y + half}
         const E = {x: e.targetPos.x + half, y: e.targetPos.y + half + 0.1 * r}
         const vx = E.x - A.x, vy = E.y - A.y, dist = Math.hypot(vx, vy) || 1
         const ux = vx / dist, uy = vy / dist
@@ -2019,11 +2141,11 @@ class AttackFx {
             ctx.translate(bx, by)
             ctx.rotate(-Math.sign(ux || 1) * 3 * Math.PI / 180 * k)
             ctx.translate(-bx, -by)
-            this.drawUnitAt(ctx, e.attacker, e.image, e.fromPos.x + dx, e.fromPos.y + dy, lod)
+            this.drawUnitAt(ctx, e.attacker, e.image, P.x + dx, P.y + dy, lod)
             ctx.restore()
         }
         else
-            this.drawUnitAt(ctx, e.attacker, e.image, e.fromPos.x + dx, e.fromPos.y + dy, lod)
+            this.drawUnitAt(ctx, e.attacker, e.image, P.x + dx, P.y + dy, lod)
         // Muzzle flash and smoke (bombard: toward the target, mortar: up).
         if (e.kind !== 'catapult' && e.edge !== 'in' && t >= fly0 && t < fly0 + 0.4) {
             const q = (t - fly0) / 0.4
