@@ -10200,12 +10200,13 @@ class Grid extends SpritesGroup {
             piece = performance.now() - begin
             ++this.startSteps
             this.startMaxStepMs = Math.max(this.startMaxStepMs, piece)
-            const [name, raster] = done ? ['end', false] : next.value
+            const [name, raster, wait] = done ? ['end', false] : next.value
             const kind = this.startPieces[name] ||= [0, 0, 0]
             ++kind[0]
             kind[1] += piece
             kind[2] = Math.max(kind[2], piece)
-            if (raster && ++rasters >= job.allow)
+            // (TASK-1615: a piece waiting for the rock workers: nothing more to do in this frame)
+            if (wait || raster && ++rasters >= job.allow)
                 break
         } while (!done && performance.now() - start + piece < START_STEP_MS)
         this.startWorkMs += performance.now() - start
@@ -10224,6 +10225,12 @@ class Grid extends SpritesGroup {
     *startBuildSteps(t) {
         // The sky's key and board first: its first draw for a new board releases the light map (atmosphericBackground.syncKey).
         atmosphericBackground.syncKey()
+        // TASK-1615: the board's rock sprites (its tiles' slab sides draw them) asked of the rock workers first, made while the
+        // owned tiles, light map and view are; the tiles wait for them ('rock' pieces, MapDepth.rockSpriteSteps), so no tile
+        // makes a sprite inside its frame (without workers they are made here a pixel row a piece).
+        mapDepth.ensureGeometry(this)
+        const rocks = mapDepth.rockKeys()
+        MapDepth.requestRockSprites(rocks)
         // The owned tiles the cells drawn at t show (drawTile); the other owners' are built a tile a task after the first
         // frame (prewarmOwnedTiles), as before a fill a task after it.
         const fills = new Set(), drawn = this.drawRange(mainCtx)
@@ -10254,6 +10261,11 @@ class Grid extends SpritesGroup {
             yield ['view', false]
         const view = this.setLitView(made.value, cw, ch)
         yield ['view', false]
+        for (const wait of MapDepth.rockSpriteSteps(rocks)) {
+            if (view !== this.litView)
+                return
+            yield ['rock', false, wait]
+        }
         const ox = Math.round(t.e - view.e), oy = Math.round(t.f - view.f)
         const range = this.litTileRange(cw, ch, ox, oy, 0), tiles = []
         const cu = (cw / 2 - ox) / LIT_TILE - 0.5, cv = (ch / 2 - oy) / LIT_TILE - 0.5
