@@ -1058,10 +1058,13 @@
     // raster: scale, key / revision, else outside), zoom-raster (a new one: zoom), surface-cache (finishSurfaceCacheBuild:
     // state when replacing a cache, else other).
     const sectorCounters = (() => {
-        let seen = null, litCause = null, litDropReason = 'other', viewDrop = null
-        const add = (name, reason, cause) => {
+        let seen = null, litCause = null, litDropReason = 'other', viewDrop = null, litQueuedIn = null
+        const add = (name, reason, cause, from = null) => {
             work.layerFullRebuild[name + ':' + reason] = (work.layerFullRebuild[name + ':' + reason] || 0) + 1
             work.layerRebuildCauses[name + ':' + cause] = (work.layerRebuildCauses[name + ':' + cause] || 0) + 1
+            // TASK-1625: also in the turn playback window it happens in (call time, not the next sample's), with the window its
+            // work was queued or started in when that is known (from: the lit layer's queue, the surface cache build's start).
+            playbackTrace.full(name + ':' + cause, from)
         }
         const litReason = cause => cause === 'outside' ? 'outside' : cause === 'scale' ? 'zoom' :
             cause === 'canvas' || cause.startsWith('state') || cause === 'key' || cause === 'cells' ? 'state' :
@@ -1077,7 +1080,7 @@
             wrap(proto) {
                 const queue = proto.queueLitLayer, drop = proto.dropLitLayer, dropView = proto.dropLitView, finish = proto.finishSurfaceCacheBuild
                 if (queue) proto.queueLitLayer = function(ctx, t, state, ahead, cause = 'ahead') {
-                    if (active && this === grid && !this.litLayerQueued) litCause = cause
+                    if (active && this === grid && !this.litLayerQueued) { litCause = cause; litQueuedIn = playbackTrace.windowKey() }
                     return queue.apply(this, arguments)
                 }
                 if (drop) proto.dropLitLayer = function(...args) {
@@ -1094,7 +1097,9 @@
                 if (finish) proto.finishSurfaceCacheBuild = function(...args) {
                     const had = this === grid && !!this.surfaceCacheBounds && this.surfaceCacheRevision > 0
                     const result = finish.apply(this, args)
-                    if (active && this === grid) add('surface-cache', had ? 'state' : 'other', had ? 'replaced' : 'first')
+                    // TASK-1625: the playback window the finished build was started in (startSurfaceCacheBuild).
+                    const from = active && this === grid ? playbackTrace.surfaceBuilt(args[0]) : null
+                    if (active && this === grid) add('surface-cache', had ? 'state' : 'other', had ? 'replaced' : 'first', from)
                     return result
                 }
             },
@@ -1102,7 +1107,7 @@
                 const g = typeof grid !== 'undefined' ? grid : null
                 if (!g) return
                 if (!seen || seen.board !== g) { seen = snapshot(g); return }
-                for (let n = seen.litBuilds; n < g.litLayerBuilds; ++n) add('lit-layer', litReason(litCause || 'none'), litCause || 'none')
+                for (let n = seen.litBuilds; n < g.litLayerBuilds; ++n) add('lit-layer', litReason(litCause || 'none'), litCause || 'none', litQueuedIn)
                 seen.litBuilds = g.litLayerBuilds
                 // TASK-1559: the lit sectors dropped whole because they no longer draw the board (Grid.clearSectors), as
                 // ground-sectors: zoom in a zoom gesture, else by its cause (state: the board, light map, cell layer, lamp or
@@ -1150,7 +1155,7 @@
                 if (g.zoomRaster && g.zoomRaster !== seen.zoomRaster) add('zoom-raster', 'zoom', 'gesture')
                 seen.zoomRaster = g.zoomRaster
             },
-            reset() { seen = null; litCause = null; litDropReason = 'other'; viewDrop = null }
+            reset() { seen = null; litCause = null; litDropReason = 'other'; viewDrop = null; litQueuedIn = null }
         }
     })()
     // TASK-1624 (ENEMY TURN 1/6): what an AI turn's playback (turnPlaybackView) changes and rebuilds, step by step
@@ -1171,6 +1176,8 @@
     const playbackTrace = (() => {
         const LAMP_REACH = 4, boards = new WeakMap()
         let lightRebuildsAt = null, boardSeq = 0, trace = null, win = null, wrapped = false, seq = 0, built = new Map(), marks = [], before = null
+        // TASK-1625: the window each surface cache build was started in (by the build object).
+        const buildStarts = new WeakMap()
         const boardId = g => { if (!g) return null; if (!boards.has(g)) boards.set(g, ++boardSeq); return boards.get(g) }
         const tileSize = () => typeof LIT_TILE !== 'undefined' ? LIT_TILE : 256
         const level = () => grid?.litView?.sectorLevel || grid?.litView?.a || (typeof mainCtx !== 'undefined' ? mainCtx.getTransform().a : canvas.scale)
@@ -1345,6 +1352,7 @@
                 if (active && win && this === grid && result) {
                     const k = 'surface-build:' + (args[0] ? 'after-cache' : 'no-cache')
                     win.refusals[k] = (win.refusals[k] || 0) + 1
+                    if (typeof result === 'object') buildStarts.set(result, win.key)
                 }
                 return result
             })
@@ -1395,6 +1403,24 @@
             })
         }
         return {
+            // TASK-1625: per window, the board layers rebuilt whole in it ('layer:cause', at call time: win.full) and the surface
+            // cache builds finished in it by the window they were started in (win.surfaceStarted; 'before': not seen starting).
+            // win.fullFrom['layer:cause@window']: those whose work was queued or started in another known window ('before':
+            // a surface cache build not seen starting, before the capture).
+            full(key, from) {
+                if (!trace || !win) return
+                ;(win.full ||= {})[key] = (win.full[key] || 0) + 1
+                if (from) (win.fullFrom ||= {})[key + '@' + from] = (win.fullFrom[key + '@' + from] || 0) + 1
+            },
+            surfaceBuilt(build) {
+                if (!trace || !win) return null
+                const from = build && typeof build === 'object' && buildStarts.get(build) || 'before'
+                ;(win.surfaceStarted ||= {})[from] = (win.surfaceStarted[from] || 0) + 1
+                return from
+            },
+            windowKey() {
+                return trace && win ? win.key : null
+            },
             start(report) {
                 wrap()
                 built = new Map(); marks = []; seq = 0; before = null

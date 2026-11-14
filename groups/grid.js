@@ -461,6 +461,10 @@ class Grid extends SpritesGroup {
         // Frames that drew a patch's changed cells over its old picture (drawPatchCells), and its window while it draws.
         this.patchCellFrames = 0
         this.patchCellsWindow = null
+        // TASK-1625: boards taken (takeBoard) and the references re-pointed by the last one.
+        this.boardTakeCount = 0
+        this.boardRemapped = 0
+        this.boardTakeMisses = 0
 
         if (size) 
             this.fill(size.x, size.y)
@@ -3027,6 +3031,156 @@ class Grid extends SpritesGroup {
         this.surfaceCacheInertUnits = inertUnits
         this.surfaceCacheInertBuildings = inertBuildings
         this.surfaceCacheNatureNames = natureNames
+    }
+    // TASK-1625 (ENEMY TURN 2/6): this Grid (the board shown) takes from's board (a turn playback's loaded snapshot, or the
+    // computed board back at its end, options/turnPlayback.js load / end): the board fields (GRID_BOARD_FIELDS: the cells,
+    // the fog and vision arrays, the texts' cell lists) are swapped between the two Grids, so everything the shown Grid keeps
+    // for drawing (the surface cache, the lit view and its tiles, the lit and unit sectors, the layers, the held frames, the
+    // light map and sky bound to it) stays on it, as when a step changes cells in place. The kept state that names the cells'
+    // entities by object (the captured surface states, the unit sectors' cell values, the lit layer's signature) is
+    // re-pointed from each old entity to the new one on the same cell (remapBoardEntities, boardEntityMap: one class and
+    // name), as if the step had changed it in place, so only the cells that differ in what is drawn are found changed by
+    // the usual checks (surfaceStateMatches, unitSectorCheck, litLayerSignature) and their tiles, sectors and cache pixels
+    // rebuilt; the rest carries over.
+    // from is left with this Grid's board before (the caller keeps it: the computed board aside, or drops it). False
+    // (nothing swapped) for boards of different sizes, Grid.boardTakes off, or an observed board.
+    takeBoard(from) {
+        if (!Grid.boardTakes || !from || from === this || !(from instanceof Grid) || !this.arr?.length || !from.arr?.length ||
+                this.arr.length !== from.arr.length || this.arr[0].length !== from.arr[0].length || this.isObserving())
+            return false
+        const old = this.arr
+        Grid.swapBoardFields(this, from)
+        this.remapBoardEntities(old, this.arr)
+        // The lit tiles' path memo (litMemo, keyed by the captured state's epoch) holds the old board's hexagons.
+        ++this.litMemoEpoch
+        this.litMemo = new Map()
+        this.litMemoSig = null
+        // The next check compares the board with the cache now (as after an adoption).
+        this.surfaceCacheChecked = 0
+        ++this.boardTakeCount
+        return true
+    }
+    static swapBoardFields(a, b) {
+        for (const name of GRID_BOARD_FIELDS) {
+            const v = a[name]
+            a[name] = b[name]
+            b[name] = v
+        }
+    }
+    // TASK-1625: old -> new entity (unit, building, a building's production) per cell where the two are the same entity on that
+    // cell: of one class and name. Their other properties (hp, moves, wasHitted, a town's suburbs, the image) may differ, as
+    // they do when a step changes an entity in place: every check that keeps an entity by object compares what it draws
+    // of it besides (surfaceStateMatches: the image, the cell's state and light; unitCellValues: hp, bars, moves, image,
+    // production), so such a cell is found changed there and only there. An old entity found on two cells, or mapped two
+    // ways, is left out (never re-pointed). boardTakeMisses: the cells whose entities of one class differ in name.
+    boardEntityMap(oldArr, newArr) {
+        const map = new Map(), bad = new Set()
+        this.boardTakeMisses = 0
+        const pair = (a, b) => {
+            if (!a || !b || a === b || typeof a !== 'object' || typeof b !== 'object' || bad.has(a))
+                return
+            if (map.has(a)) {
+                if (map.get(a) !== b) {
+                    map.delete(a)
+                    bad.add(a)
+                }
+                return
+            }
+            if (a.constructor !== b.constructor)
+                return
+            if (a.name !== b.name) {
+                ++this.boardTakeMisses
+                return
+            }
+            map.set(a, b)
+        }
+        for (let i = 0; i < oldArr.length; ++i)
+            for (let j = 0; j < oldArr[i].length; ++j) {
+                const a = oldArr[i][j], b = newArr[i][j]
+                pair(a.unit, b.unit)
+                pair(a.building, b.building)
+                const pa = a.building?.isPreparingManufacture ? a.building.unitProduction : undefined
+                const pb = b.building?.isPreparingManufacture ? b.building.unitProduction : undefined
+                pair(pa, pb)
+            }
+        return map
+    }
+    // TASK-1625: every reference this Grid keeps for drawing to an old board's entity (map's keys) re-pointed to the new
+    // board's one on the same cell (boardEntityMap): arrays and Map values reached from this Grid's own fields (not the board's, not canvases,
+    // images, typed arrays or the sector caches' pictures), a few levels deep. Returns the references re-pointed.
+    remapBoardEntities(oldArr, newArr) {
+        const map = this.boardEntityMap(oldArr, newArr)
+        let remapped = 0
+        if (!map.size)
+            return this.boardRemapped = 0
+        const seen = new Set(), skip = new Set(GRID_BOARD_FIELDS)
+        const opaque = v => ArrayBuffer.isView(v) || v instanceof ArrayBuffer ||
+            typeof HTMLCanvasElement !== 'undefined' && v instanceof HTMLCanvasElement ||
+            typeof OffscreenCanvas !== 'undefined' && v instanceof OffscreenCanvas ||
+            typeof ImageBitmap !== 'undefined' && v instanceof ImageBitmap ||
+            typeof HTMLImageElement !== 'undefined' && v instanceof HTMLImageElement ||
+            typeof CanvasRenderingContext2D !== 'undefined' && v instanceof CanvasRenderingContext2D ||
+            typeof SectorCache === 'function' && v instanceof SectorCache || v instanceof Grid || v instanceof Cell ||
+            typeof Entity !== 'undefined' && v instanceof Entity || v instanceof Empty || typeof Hexagon !== 'undefined' && v instanceof Hexagon
+        const walk = (v, depth) => {
+            if (!v || typeof v !== 'object' || seen.has(v) || opaque(v))
+                return
+            seen.add(v)
+            if (Array.isArray(v)) {
+                for (let k = 0; k < v.length; ++k) {
+                    const x = v[k]
+                    if (x && typeof x === 'object') {
+                        const to = map.get(x)
+                        if (to !== undefined) {
+                            v[k] = to
+                            ++remapped
+                        }
+                        else if (depth > 0)
+                            walk(x, depth - 1)
+                    }
+                }
+                return
+            }
+            if (v instanceof Map) {
+                for (const [key, x] of v) {
+                    if (x && typeof x === 'object') {
+                        const to = map.get(x)
+                        if (to !== undefined) {
+                            v.set(key, to)
+                            ++remapped
+                        }
+                        else if (depth > 0)
+                            walk(x, depth - 1)
+                    }
+                }
+                return
+            }
+            if (v instanceof Set || typeof v === 'function')
+                return
+            const proto = Object.getPrototypeOf(v)
+            if (proto !== Object.prototype && proto !== null)
+                return
+            for (const key of Object.keys(v)) {
+                const x = v[key]
+                if (x && typeof x === 'object') {
+                    const to = map.get(x)
+                    if (to !== undefined) {
+                        v[key] = to
+                        ++remapped
+                    }
+                    else if (depth > 0)
+                        walk(x, depth - 1)
+                }
+            }
+        }
+        for (const key of Object.keys(this)) {
+            if (skip.has(key))
+                continue
+            const x = this[key]
+            if (x && typeof x === 'object')
+                walk(x, 4)
+        }
+        return this.boardRemapped = remapped
     }
     // TASK-1519: this board takes over from's surface cache (a turn playback's loaded board from the computed one, and back
     // at the end, options/turnPlayback.js): its raster, cell layer, shown canvas and patch buffer move over (from has none
@@ -12500,6 +12654,9 @@ Grid.surfacePatching = true
 Grid.liveCellLayer = true
 // TASK-1519: a turn playback's loaded board takes over the computed board's surface cache (Grid.adoptSurfaceCache).
 Grid.surfaceAdoption = true
+// TASK-1625: a turn playback's board loads and its end swap the board into the Grid shown (Grid.takeBoard); false: a new Grid
+// shown at each load (its caches built again, the surface cache adopted: TASK-1519).
+Grid.boardTakes = true
 // TASK-1519: a lit view without a finished rest snapshot follows a board change, the tiles it reaches stale (Grid.refreshLitTiles).
 Grid.litTileRefresh = true
 // TASK-1519: a surface cache standing in for lit tiles has its cell layer brought up to the board first (Grid.litStandIn).
@@ -13099,6 +13256,10 @@ const SURFACE_CACHE_CHECK_MS = 500
 const SURFACE_STATE_FIELDS = ['surfaceCacheLighting', 'surfaceCacheAtmospheric', 'surfaceCacheLayered', 'surfaceCacheState',
     'surfaceCacheBuildings', 'surfaceCacheUnits', 'surfaceCacheBuildingImages', 'surfaceCacheUnitImages',
     'surfaceCacheInert', 'surfaceCacheInertUnits', 'surfaceCacheInertBuildings', 'surfaceCacheNatureNames']
+// TASK-1625: a Grid's board (what a load sets and the rules read and write), swapped between two Grids by Grid.takeBoard;
+// every other field is what the Grid keeps for drawing it.
+const GRID_BOARD_FIELDS = ['arr', 'fogOfWar', 'visionUsed', 'visionDistance', 'newVisionUsedValue', 'visionWay',
+    'showChanceOfWinning', 'chanceOfWinning', 'logicTextCells', 'infoTextCells', 'drawLogicText']
 // TASK-1519: the surface cache's rasters and their geometry (besides SURFACE_STATE_FIELDS) a board takes over from another
 // (Grid.adoptSurfaceCache).
 const SURFACE_ADOPTED_FIELDS = ['surfaceCache', 'surfaceCacheScale', 'surfaceCacheBounds', 'surfaceCacheLit',

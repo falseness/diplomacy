@@ -668,6 +668,19 @@ const turnPlaybackView = {
         } finally {
             unpacker.ownSnapshot = false
         }
+        // TASK-1625: the loaded board goes into the Grid shown (Grid.takeBoard: its caches carry over where the cells are the
+        // same); the loaded Grid keeps the board shown before. At the first load that is the computed board: the loaded Grid
+        // stands for it from then on (p.live.grid: saves, withLiveBoard) and the Grid shown is kept (p.shownGrid) to take it
+        // back at the end.
+        const loaded = grid
+        p.taken = !!(shown && shown !== loaded && shown.takeBoard?.(loaded))
+        if (p.taken) {
+            grid = shown
+            if (shown === p.live.grid) {
+                p.live.grid = loaded
+                p.shownGrid = shown
+            }
+        }
         // The AI slots keep their classes (loadFromJson makes plain Players): others' effects, not own ones.
         for (let i = 0; i < players.length && i < p.liveClasses.length; ++i)
             if (Object.getPrototypeOf(players[i]) !== p.liveClasses[i] && players[i].constructor === Player)
@@ -684,7 +697,8 @@ const turnPlaybackView = {
             grid.fogOfWar = recording.fog.map(column => Array.from(column))
         p.rulesFog = isFogOfWar ? grid.fogOfWar : null
         this.showViewerFog(p)
-        this.adoptCache(shown)
+        if (!p.taken)
+            this.adoptCache(shown)
         p.stepIndex = -1
         p.recordingStart = this.now()
         p.log.recordings.push({player: recording.player, round: recording.round, start: Math.round(p.recordingStart - p.startReal),
@@ -1003,6 +1017,16 @@ const turnPlaybackView = {
         const played = grid
         if (result !== 'discarded')
             this.restoreGlobals(p.live)
+        // TASK-1625: the computed board (p.live.grid since the first load) goes back into the Grid it was in, the one shown
+        // since: taken (its caches carry over where the playback's last board and the computed one hold the same cells), else
+        // (a left game, a Grid shown that is not the playback's) swapped back as it is.
+        const keeper = p.shownGrid
+        p.shownGrid = undefined
+        if (keeper && result !== 'discarded') {
+            if (!(!left && played === keeper && keeper.takeBoard(grid)))
+                Grid.swapBoardFields(keeper, grid)
+            grid = keeper
+        }
         // TASK-1519: the computed board takes the surface cache back (patched to it where the board shown last differs).
         if (!left)
             this.adoptCache(played)
