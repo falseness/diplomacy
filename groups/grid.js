@@ -5567,8 +5567,11 @@ class Grid extends SpritesGroup {
         const t = ctx.getTransform()
         const refused = !Grid.unitSectors || !this.unitSectors || !otherSettings.atmosphericVisuals || !screen ? 'off' :
             // (TASK-1618: so is a frame of a pan's hold with the camera at rest, Grid.restingHoldFrames: drawn as at rest, its
-            // board's base kept and drawn back, drawBaseFrame, where every frame of the hold drew the cache and unit sectors)
-            (!screen.surfaceMoving || Grid.restingHoldFrames && this.restingInHold(screen)) && !rest ? 'rest' :
+            // board's base kept and drawn back, drawBaseFrame, where every frame of the hold drew the cache and unit sectors.
+            // TASK-1619: only on the surface cache's path, the one drawBaseFrame draws: a lit view or stand-in frame of the hold
+            // has no base to draw back, so refused it drew every unit and text live and queued a lit layer each hold, ~40 more
+            // heavy frames on the phone co-op replay)
+            (!screen.surfaceMoving || Grid.restingHoldFrames && kind === 'cache' && this.restingInHold(screen)) && !rest ? 'rest' :
             (screen.zoomGesture || screen.surfaceZooming) && !(zoomBuild && Grid.zoomBuildOpen()) ? 'zoom' :
             typeof mainCanvas === 'undefined' || ctx.canvas !== mainCanvas || this !== grid || !this.arr.length ? 'canvas' :
             t.b !== 0 || t.c !== 0 || !(t.a > 0) || t.a !== t.d ? 'transform' : this.lod ? 'lod' :
@@ -12518,6 +12521,7 @@ Grid.stillBaseFrames = true
 Grid.stillUnlitFrames = true
 // TASK-1618: a pan's hold with the camera at rest plans no unit sector frame (Grid.unitSectorPlan): the frames draw the board as
 // at rest (on the board's base, Grid.drawBaseFrame) instead of from the sectors, as they did until the hold's end.
+// TASK-1619: on the surface cache's path only (unitSectorPlan kind 'cache'); lit view and stand-in frames keep their sectors.
 Grid.restingHoldFrames = true
 // TASK-1618: InterfaceRecorder.metrics' memo forgotten when a font finishes loading (its metrics may change).
 if (typeof document !== 'undefined' && document.fonts?.addEventListener)
