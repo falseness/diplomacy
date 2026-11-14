@@ -2611,52 +2611,12 @@ const atmosphericLighting = {
     edgeTileSet: null,
     edgeTileBuilds: 0,
     drawEdgeTiles(ctx, map, runs, clip) {
-        const t = ctx.getTransform(), bounds = mapDepth.surfaceBounds
+        const t = ctx.getTransform()
         if (!this.edgeTiles || !this.gain || t.b !== 0 || t.c !== 0 || t.a <= 0 || t.d <= 0) return false
-        const w = bounds.right - bounds.left, h = bounds.bottom - bounds.top
-        const sx = map.width / w, sy = map.height / h, T = this.EDGE_TILE, M = this.EDGE_TILE_MARGIN
-        let set = this.edgeTileSet
-        if (!set || set.map !== map || set.gain !== this.gain || set.edits !== this.mapEdits || set.W !== map.width || set.H !== map.height ||
-                set.T !== T || set.M !== M) {
-            // TASK-1616: the old set's canvases kept for the new one's copies of their size (edgeTileCopy), the rest let go of.
-            const free = this.edgeTileFree = new Map()
-            if (set) for (const tile of set.tiles.values()) for (const canvas of [tile.map, tile.gain]) {
-                const size = canvas.width + 'x' + canvas.height
-                if (!free.has(size)) free.set(size, [])
-                free.get(size).push(canvas)
-            }
-            set = this.edgeTileSet = {map, gain: this.gain, edits: this.mapEdits, W: map.width, H: map.height, T, M, tiles: new Map()}
-        }
-        const cols = Math.ceil(map.width / T), rows = Math.ceil(map.height / T), cw = ctx.canvas.width, ch = ctx.canvas.height
-        // The cells' device edges: tile column k's left (row l's top) edge rounded to a whole pixel, the map's bounds outside.
-        const bx0 = bounds.left * t.a + t.e, bx1 = bounds.right * t.a + t.e, by0 = bounds.top * t.d + t.f, by1 = bounds.bottom * t.d + t.f
-        const cutX = k => k <= 0 ? bx0 : k >= cols ? bx1 : Math.round((bounds.left + k * T / sx) * t.a + t.e)
-        const cutY = l => l <= 0 ? by0 : l >= rows ? by1 : Math.round((bounds.top + l * T / sy) * t.d + t.f)
-        const colOf = x => Math.max(0, Math.min(cols - 1, Math.floor(((x - t.e) / t.a - bounds.left) * sx / T)))
-        const rowOf = y => Math.max(0, Math.min(rows - 1, Math.floor(((y - t.f) / t.d - bounds.top) * sy / T)))
-        const cells = new Map()
-        for (const run of runs) {
-            const x1 = run.x + run.w, y1 = run.y + run.h
-            for (let k = Math.max(0, colOf(run.x) - 1); k < cols && cutX(k) < x1; ++k) {
-                if (cutX(k + 1) <= run.x) continue
-                for (let l = Math.max(0, rowOf(run.y) - 1); l < rows && cutY(l) < y1; ++l)
-                    if (cutY(l + 1) > run.y) cells.set(k * 65536 + l, [k, l])
-            }
-        }
+        const set = this.edgeTileSetFor(map)
         // Every cell's part first (one outside its tile's margin: the whole maps draw instead).
-        const parts = []
-        for (const [key, [k, l]] of cells) {
-            const x0 = Math.max(0, cutX(k)), x1 = Math.min(cw, cutX(k + 1)), y0 = Math.max(0, cutY(l)), y1 = Math.min(ch, cutY(l + 1))
-            if (x0 >= x1 || y0 >= y1) continue
-            const left = (x0 - t.e) / t.a, right = (x1 - t.e) / t.a, top = (y0 - t.f) / t.d, bottom = (y1 - t.f) / t.d
-            const tx0 = Math.max(0, k * T - M), ty0 = Math.max(0, l * T - M)
-            const tx1 = Math.min(map.width, (k + 1) * T + M), ty1 = Math.min(map.height, (l + 1) * T + M)
-            const sx0 = (left - bounds.left) * sx, sy0 = (top - bounds.top) * sy, sx1 = (right - bounds.left) * sx, sy1 = (bottom - bounds.top) * sy
-            // The filter's reach past the part: a map pixel each way, at the map's own edge none.
-            if (sx0 - 1 < tx0 && tx0 > 0 || sy0 - 1 < ty0 && ty0 > 0 || sx1 + 1 > tx1 && tx1 < map.width || sy1 + 1 > ty1 && ty1 < map.height)
-                return false
-            parts.push({key, left, top, right, bottom, tx0, ty0, tx1, ty1, sx0, sy0, sx1, sy1})
-        }
+        const parts = this.edgeTileParts(t, map, runs, ctx.canvas.width, ctx.canvas.height)
+        if (!parts) return false
         clip(runs)
         const operation = ctx.globalCompositeOperation
         for (const name of ['map', 'gain']) {
@@ -2673,22 +2633,111 @@ const atmosphericLighting = {
             }
         }
         ctx.globalCompositeOperation = operation
-        // (the old set's canvases no copy took)
-        if (this.edgeTileFree?.size) {
-            for (const list of this.edgeTileFree.values()) for (const canvas of list) canvas.width = canvas.height = 0
-            this.edgeTileFree.clear()
-        }
         return true
     },
-    // Canvases of the edge tile set before (drawEdgeTiles) by size 'w x h', for its copies to reuse (TASK-1616: a new board's
-    // or light map's first lit frames made two new canvases per tile, ~75 ms of such a frame on the tutorial replay).
+    // The edge tile set of map (drawEdgeTiles): kept while the map, its gain, their edits and sizes hold, else a new one.
+    edgeTileSetFor(map) {
+        const T = this.EDGE_TILE, M = this.EDGE_TILE_MARGIN
+        let set = this.edgeTileSet
+        if (!set || set.map !== map || set.gain !== this.gain || set.edits !== this.mapEdits || set.W !== map.width || set.H !== map.height ||
+                set.T !== T || set.M !== M) {
+            // TASK-1616: the old set's canvases kept for the new one's copies of their size (edgeTileCopy). TASK-1617: kept past
+            // this frame (the next frames' new cells take them too), at most EDGE_TILE_SPARE_BYTES.
+            if (set) for (const tile of set.tiles.values()) for (const canvas of [tile.map, tile.gain]) this.edgeTileGive(canvas)
+            set = this.edgeTileSet = {map, gain: this.gain, edits: this.mapEdits, W: map.width, H: map.height, T, M, tiles: new Map()}
+        }
+        return set
+    },
+    // The parts drawEdgeTiles draws for runs (device rectangles of a cw x ch canvas) under transform t (a positive scale): for
+    // each tile cell a run meets, its device pixels and its source rectangle in map and tile pixels; null when a cell would
+    // need more than the tile's margin.
+    edgeTileParts(t, map, runs, cw, ch) {
+        const bounds = mapDepth.surfaceBounds
+        const w = bounds.right - bounds.left, h = bounds.bottom - bounds.top
+        const sx = map.width / w, sy = map.height / h, T = this.EDGE_TILE, M = this.EDGE_TILE_MARGIN
+        const cols = Math.ceil(map.width / T), rows = Math.ceil(map.height / T)
+        // The cells' device edges: tile column k's left (row l's top) edge rounded to a whole pixel, the map's bounds outside.
+        const bx0 = bounds.left * t.a + t.e, bx1 = bounds.right * t.a + t.e, by0 = bounds.top * t.d + t.f, by1 = bounds.bottom * t.d + t.f
+        const cutX = k => k <= 0 ? bx0 : k >= cols ? bx1 : Math.round((bounds.left + k * T / sx) * t.a + t.e)
+        const cutY = l => l <= 0 ? by0 : l >= rows ? by1 : Math.round((bounds.top + l * T / sy) * t.d + t.f)
+        const colOf = x => Math.max(0, Math.min(cols - 1, Math.floor(((x - t.e) / t.a - bounds.left) * sx / T)))
+        const rowOf = y => Math.max(0, Math.min(rows - 1, Math.floor(((y - t.f) / t.d - bounds.top) * sy / T)))
+        const cells = new Map()
+        for (const run of runs) {
+            const x1 = run.x + run.w, y1 = run.y + run.h
+            for (let k = Math.max(0, colOf(run.x) - 1); k < cols && cutX(k) < x1; ++k) {
+                if (cutX(k + 1) <= run.x) continue
+                for (let l = Math.max(0, rowOf(run.y) - 1); l < rows && cutY(l) < y1; ++l)
+                    if (cutY(l + 1) > run.y) cells.set(k * 65536 + l, [k, l])
+            }
+        }
+        const parts = []
+        for (const [key, [k, l]] of cells) {
+            const x0 = Math.max(0, cutX(k)), x1 = Math.min(cw, cutX(k + 1)), y0 = Math.max(0, cutY(l)), y1 = Math.min(ch, cutY(l + 1))
+            if (x0 >= x1 || y0 >= y1) continue
+            const left = (x0 - t.e) / t.a, right = (x1 - t.e) / t.a, top = (y0 - t.f) / t.d, bottom = (y1 - t.f) / t.d
+            const tx0 = Math.max(0, k * T - M), ty0 = Math.max(0, l * T - M)
+            const tx1 = Math.min(map.width, (k + 1) * T + M), ty1 = Math.min(map.height, (l + 1) * T + M)
+            const sx0 = (left - bounds.left) * sx, sy0 = (top - bounds.top) * sy, sx1 = (right - bounds.left) * sx, sy1 = (bottom - bounds.top) * sy
+            // The filter's reach past the part: a map pixel each way, at the map's own edge none.
+            if (sx0 - 1 < tx0 && tx0 > 0 || sy0 - 1 < ty0 && ty0 > 0 || sx1 + 1 > tx1 && tx1 < map.width || sy1 + 1 > ty1 && ty1 < map.height)
+                return null
+            parts.push({key, left, top, right, bottom, tx0, ty0, tx1, ty1, sx0, sy0, sx1, sy1})
+        }
+        return parts
+    },
+    // TASK-1617 (Grid.startBuildSteps): the edge tiles board's first lit frame at camera t will draw for runs (its lit view's
+    // edges on the cw x ch canvas, drawLitEdges' runs), copied ahead a few tiles a step (a generator), with the light map the
+    // frame draws (lightMapReady): the start hold makes them while it waits for the rock workers, not the first lit frame
+    // (~230 copies, two new canvases a tile, in that one frame on the tutorial replay). The same copies drawEdgeTiles makes.
+    EDGE_AHEAD_STEP: 8,
+    *edgeTilesAheadSteps(board, t, runs, cw, ch) {
+        if (!otherSettings.atmosphericVisuals || !this.edgeTiles || !runs.length || t.b !== 0 || t.c !== 0 || t.a <= 0 || t.d <= 0 ||
+                !this.lightMapReady(board) || !this.gain)
+            return
+        const map = this.map, parts = this.edgeTileParts(t, map, runs, cw, ch)
+        if (!parts) return
+        let n = 0
+        for (const part of parts) {
+            // (a map rebuilt between the steps: the frames copy what they draw)
+            if (this.map !== map || !this.gain) return
+            const set = this.edgeTileSetFor(map)
+            if (set.tiles.has(part.key)) continue
+            set.tiles.set(part.key, {map: this.edgeTileCopy(map, part), gain: this.edgeTileCopy(this.gain, part)})
+            ++this.edgeTileBuilds
+            if (++n % this.EDGE_AHEAD_STEP === 0) yield
+        }
+    },
+    // Canvases of the edge tile sets before (drawEdgeTiles) by size 'w x h', for the copies to reuse (TASK-1616: a new board's
+    // or light map's first lit frames made two new canvases per tile, ~75 ms of such a frame on the tutorial replay; TASK-1617:
+    // kept across frames, up to EDGE_TILE_SPARE_BYTES, the oldest let go of first: ~2,000 copies a tutorial replay made new
+    // when the free ones were dropped at the end of the set's first frame).
     edgeTileFree: null,
+    edgeTileFreeBytes: 0,
+    EDGE_TILE_SPARE_BYTES: 8 * 1024 * 1024,
+    edgeTileGive(canvas) {
+        if (!canvas?.width || !canvas.height) return
+        const free = this.edgeTileFree ||= new Map(), size = canvas.width + 'x' + canvas.height
+        if (!free.has(size)) free.set(size, [])
+        free.get(size).push(canvas)
+        this.edgeTileFreeBytes += canvas.width * canvas.height * 4
+        for (const list of free.values()) {
+            while (this.edgeTileFreeBytes > this.EDGE_TILE_SPARE_BYTES && list.length) {
+                const old = list.shift()
+                this.edgeTileFreeBytes -= old.width * old.height * 4
+                old.width = old.height = 0
+            }
+            if (this.edgeTileFreeBytes <= this.EDGE_TILE_SPARE_BYTES) break
+        }
+    },
     // A tile of an edge tile set (drawEdgeTiles): source's pixels tx0..tx1 x ty0..ty1, copied (into a canvas of that size the
     // set before had, else a new one: the 'copy' of the whole canvas replaces every pixel either way).
     edgeTileCopy(source, {tx0, ty0, tx1, ty1}) {
         const w = tx1 - tx0, h = ty1 - ty0, kept = this.edgeTileFree?.get(w + 'x' + h)
         let canvas = kept?.pop()
-        if (!canvas) {
+        if (canvas)
+            this.edgeTileFreeBytes -= w * h * 4
+        else {
             canvas = document.createElement('canvas')
             canvas.width = w
             canvas.height = h

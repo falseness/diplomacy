@@ -167,6 +167,12 @@ class Rect {
 class CanvasPool {
     static REST_MS = 400
     static RESERVE_PER_FRAME = 48
+    // TASK-1617: canvases all rest hooks together may make, a token bucket: REST_RATE a second, at most REST_BURST at once (the
+    // hooks made 500-600 a second for several seconds after the tutorial's first click: ~3,000 canvases in 5 s).
+    static REST_RATE = 120
+    static REST_BURST = 60
+    static restTokens = CanvasPool.REST_BURST
+    static restTokensAt = 0
     static TRIM_SHARE = 0.75
     static seq = 0
     static pools = []
@@ -314,7 +320,7 @@ class CanvasPool {
     }
     // Each frame (SpriteCache.beginFrame), moving: whether the main canvas's camera moved since the frame before. After
     // REST_MS still, the pools are trimmed (once a rest) and the rest hooks run every frame, given how many canvases they
-    // may make (RESERVE_PER_FRAME a hook a frame).
+    // may make (RESERVE_PER_FRAME a hook a frame, TASK-1617: REST_RATE a second for all of them).
     static restTick(moving) {
         const now = performance.now()
         if (moving) {
@@ -332,8 +338,16 @@ class CanvasPool {
         // TASK-1562: not after a zoom (Grid.zoomQuiet).
         if (typeof Grid !== 'undefined' && Grid.zoomQuiet?.())
             return
-        for (const hook of CanvasPool.restHooks)
-            hook(CanvasPool.RESERVE_PER_FRAME)
+        // TASK-1617: each hook given at most RESERVE_PER_FRAME and what the bucket holds; what it made (its return) taken out.
+        CanvasPool.restTokens = Math.min(CanvasPool.REST_BURST,
+            CanvasPool.restTokens + Math.max(0, now - CanvasPool.restTokensAt) * CanvasPool.REST_RATE / 1000)
+        CanvasPool.restTokensAt = now
+        for (const hook of CanvasPool.restHooks) {
+            const limit = Math.min(CanvasPool.RESERVE_PER_FRAME, Math.floor(CanvasPool.restTokens))
+            if (limit <= 0)
+                break
+            CanvasPool.restTokens -= Math.max(0, +hook(limit) || 0)
+        }
     }
     static summary() {
         const out = {}
@@ -391,7 +405,9 @@ class SpriteCache {
     static STOCK_PER_SHAPE = 6
     // At least STOCK_SMALL of each bucket of sides up to 32 px, TASK-1551: 48 px (texts and bars far out: new ones appear as the camera moves,
     // shapes never drawn yet).
-    static STOCK_SMALL = 256
+    // TASK-1617: 8 (256 of each of the nine small buckets was 2,304 canvases made at the first rest, ~2,500 of the tutorial
+    // replay's stock while its sprites took ~140; the peaks and the plan still stock what pans built).
+    static STOCK_SMALL = 8
     static SMALL_BUCKETS = ['16x16', '32x16', '16x32', '32x32', '48x16', '16x48', '48x32', '32x48', '48x48']
     static plan = null
     static planKey = null

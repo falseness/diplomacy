@@ -197,7 +197,8 @@ class Grid extends SpritesGroup {
         // the snapshot's canvas, spare tile canvases and what the frame drew.
         this.litView = undefined
         this.litRestCanvas = undefined
-        this.litTilePool = []
+        // TASK-1617: one pool for every board (Grid.litTilePool), kept when a board's lit canvases are released.
+        this.litTilePool = Grid.litTilePool
         // TASK-1559 (Grid.litSectors): the lit tiles kept as board-space sectors (render/sectorCache.js; level = the view's
         // device scale, a sector a LIT_TILE square of the board's device grid at that scale), owned by the cache (LRU under
         // SECTOR_CACHE_BYTES; a tile evicted or released leaves the view, close), kept past the view that built them: a view
@@ -4828,6 +4829,7 @@ class Grid extends SpritesGroup {
                 canvas.litStrip = true
                 Grid.litStripLive.add(canvas)
                 ++Grid.litStripMoving
+                Grid.litStripPeak = Math.max(Grid.litStripPeak, LIT_STRIP_RESERVE)
                 pieces.push(...parts.map(piece => ({x: r.x0 + piece.x, y: r.y0 + piece.y, w: piece.w, h: piece.h, sx: piece.x, sy: piece.y, canvas, strip: true})))
                 const lctx = canvas.getContext('2d')
                 lctx.save()
@@ -6968,6 +6970,8 @@ class Grid extends SpritesGroup {
         if (b && (b.u !== u || b.v !== v || b.plan.key !== plan.key || b.ground !== ground || b.changes !== this.unitCellChanges)) {
             if (b.u === u && b.v === v)
                 ++this.unitSectorWork.restarts
+            // TASK-1617: its canvas (never stored) taken by the next build.
+            Grid.unitSectorSpareGive(b.canvas)
             b = this.unitSectorBuilding = undefined
         }
         if (!b) {
@@ -6984,8 +6988,7 @@ class Grid extends SpritesGroup {
             const range = this.drawRange({getTransform: () => transform, canvas: {width: LIT_TILE, height: LIT_TILE}})
             // Compared first: the sector is drawn from the values its cells keep (unitSectorCheck).
             this.unitSectorCheck(range)
-            const canvas = document.createElement('canvas')
-            canvas.width = canvas.height = LIT_TILE
+            const canvas = Grid.unitSectorSpareTake()
             const holder = {calls: null}
             let g = canvas.getContext('2d'), sector = null, recorder = null
             // TASK-1563: drawn through SectorDraw: the steps recorded into the sector's snapshot (g its recording context,
@@ -7047,6 +7050,9 @@ class Grid extends SpritesGroup {
                 changes: b.changes, epoch: this.unitGroundEpoch}
             if (this.sectorSubmit(b.sector, out => this.unitSectorArrived(rec, out), () => this.unitSectorFailed(rec))) {
                 (this.unitWorkerSectors ||= new Map()).set(key, rec)
+                // TASK-1617: the Worker makes the picture; this canvas (the recording drew nothing on it) serves the next build
+                // (the tutorial replay made ~1,500 such canvases, one per unit sector build).
+                Grid.unitSectorSpareGive(b.canvas)
                 return false
             }
         }
@@ -9265,6 +9271,9 @@ class Grid extends SpritesGroup {
                     Grid.litWorkerOrder ? () => this.litTilePriority(rec) : null)) {
                 tile.workerPending = rec
                 ;(view.workerTiles ||= new Map()).set(key, rec)
+                // TASK-1617: its quarters lent to the build until it comes back (reserveLitTileParts counts them).
+                rec.lent = tile.parts.filter(part => part && !(typeof ImageBitmap !== 'undefined' && part instanceof ImageBitmap)).length
+                Grid.litPartsLent += rec.lent
             }
             else if (whole)
                 this.litWholeToQuarters(whole.part, quarters, X, Y)
@@ -9434,6 +9443,7 @@ class Grid extends SpritesGroup {
                 ++this.aheadWork.litDropBy[why]
             SectorWorker.dropped(out)
             delete tile.workerPending
+            Grid.litPartsBack(rec)
             this.freeLitTile(tile)
             return
         }
@@ -9441,6 +9451,7 @@ class Grid extends SpritesGroup {
         for (const [k, bitmap] of out)
             tile.parts[k] = bitmap
         delete tile.workerPending
+        Grid.litPartsBack(rec)
         this.freeLitTile({parts})
         view.tiles.set(key, tile)
         this.releaseStaleTile(view, key)
@@ -9453,6 +9464,7 @@ class Grid extends SpritesGroup {
         if (view.workerTiles?.get(key) === rec)
             view.workerTiles.delete(key)
         delete tile.workerPending
+        Grid.litPartsBack(rec)
         this.freeLitTile(tile)
     }
     // TASK-1564: a sector build's recording ended (sector: sectorSnapshot's): its pictures sent to the Worker (onDone / onFail
@@ -9500,7 +9512,8 @@ class Grid extends SpritesGroup {
             // draw it), never pooled.
             if (typeof ImageBitmap !== 'undefined' && part instanceof ImageBitmap)
                 continue
-            if (this.litTilePool.length < (Grid.litAhead ? LIT_TILE_SPARE_PARTS : 4 * LIT_TILE_POOL))
+            // (TASK-1617: up to LIT_TILE_KEEP_PARTS given back: a released view's quarters serve the next view's builds.)
+            if (this.litTilePool.length < (Grid.litAhead ? LIT_TILE_KEEP_PARTS : 4 * LIT_TILE_POOL))
                 this.litTilePool.push(part)
             else
                 part.width = part.height = 0
@@ -9757,9 +9770,9 @@ class Grid extends SpritesGroup {
         this.dropLitView()
         // TASK-1559: the sectors too (the surface cache draws the board).
         this.clearSectors('released')
-        for (const part of this.litTilePool)
-            part.width = part.height = 0
-        this.litTilePool.length = 0
+        // TASK-1617: the spare quarters stay in the pool (Grid.litTilePool, shared by the boards; the sectors' quarters given
+        // back up to LIT_TILE_KEEP_PARTS): the next lit view takes them instead of making new ones (the tutorial replay's board
+        // went between the cache and the lit view dozens of times, each time ~200 quarters let go of and made again).
         this.dropLitTileJob()
         if (this.litRestCanvas)
             this.litRestCanvas.width = this.litRestCanvas.height = 0
@@ -10285,12 +10298,34 @@ class Grid extends SpritesGroup {
             yield ['view', false]
         const view = this.setLitView(made.value, cw, ch)
         yield ['view', false]
+        const ox = Math.round(t.e - view.e), oy = Math.round(t.f - view.f)
+        // TASK-1617: the edge tiles the first lit frame draws (drawLitEdges' runs of this view at t: no stand-in squares yet)
+        // copied while the frames wait for the rock workers (else after them, before the tiles): ~230 canvases and their copies
+        // were made inside that frame. 'edges' pieces (a few tiles each), heavy to rasterize (copies).
+        const runs = []
+        for (const run of view.edges) {
+            const x0 = Math.max(run.x + ox, 0), y0 = Math.max(run.y + oy, 0)
+            const x1 = Math.min(run.x + run.w + ox, cw), y1 = Math.min(run.y + run.h + oy, ch)
+            if (x0 < x1 && y0 < y1) runs.push({x: x0, y: y0, w: x1 - x0, h: y1 - y0})
+        }
+        const edges = atmosphericLighting.edgeTilesAheadSteps(this, t, runs, cw, ch)
+        let edgesDone = !Grid.startEdgeTiles
         for (const wait of MapDepth.rockSpriteSteps(rocks)) {
             if (view !== this.litView)
                 return
+            if (wait && !edgesDone) {
+                edgesDone = edges.next().done
+                yield ['edges', true]
+                continue
+            }
             yield ['rock', false, wait]
         }
-        const ox = Math.round(t.e - view.e), oy = Math.round(t.f - view.f)
+        while (!edgesDone) {
+            if (view !== this.litView)
+                return
+            edgesDone = edges.next().done
+            yield ['edges', true]
+        }
         const range = this.litTileRange(cw, ch, ox, oy, 0), tiles = []
         const cu = (cw / 2 - ox) / LIT_TILE - 0.5, cv = (ch / 2 - oy) / LIT_TILE - 0.5
         for (let v = range.v0; v <= range.v1; ++v)
@@ -12907,6 +12942,45 @@ const LIT_AHEAD_REST_MAX = 2
 const LIT_AHEAD_PEAK_MS = 4000
 // TASK-1552: lit tile quarters kept spare (Grid.releaseLitTile; topped up at rest, Grid.reserveLitTileParts).
 const LIT_TILE_SPARE_PARTS = 192
+// TASK-1617: quarters given back kept in the pool up to this many (the rest's top-up stays at LIT_TILE_SPARE_PARTS): when the
+// surface cache took over, a lit view's tiles came back to a full pool and were let go of, and the next lit view's builds and
+// top-up made as many again (~500 a tutorial replay).
+const LIT_TILE_KEEP_PARTS = 320
+// TASK-1617: the start hold copies the first lit frame's edge tiles ahead (startBuildSteps, atmosphericLighting.edgeTilesAheadSteps).
+Grid.startEdgeTiles = true
+// TASK-1617: the spare quarters of every board (Grid.prototype.litTilePool), and the quarters lent to tiles the Worker is making
+// (they come back to the pool when the tile does: the rest's top-up leaves room for them, else the pool overflowed when they
+// came back and new ones were made at the next rest, ~900 a tutorial replay).
+Grid.litTilePool = []
+Grid.litPartsLent = 0
+Grid.litPartsBack = rec => {
+    Grid.litPartsLent = Math.max(0, Grid.litPartsLent - (rec.lent || 0))
+    rec.lent = 0
+}
+// TASK-1617: unit sector build canvases (LIT_TILE squares) no sector kept (a build the Worker made, one given up), for the
+// next builds: at most UNIT_SECTOR_SPARE; taken cleared, its context in the default state.
+const UNIT_SECTOR_SPARE = 4
+Grid.unitSectorSpare = []
+Grid.unitSectorSpareGive = canvas => {
+    if (!canvas || canvas.width !== LIT_TILE || canvas.height !== LIT_TILE)
+        return
+    if (Grid.unitSectorSpare.length < UNIT_SECTOR_SPARE && !Grid.unitSectorSpare.includes(canvas))
+        Grid.unitSectorSpare.push(canvas)
+}
+Grid.unitSectorSpareTake = () => {
+    const kept = Grid.unitSectorSpare.pop()
+    if (kept) {
+        const g = kept.getContext('2d')
+        if (typeof g.reset === 'function')
+            g.reset()
+        else
+            kept.width = LIT_TILE
+        return kept
+    }
+    const canvas = document.createElement('canvas')
+    canvas.width = canvas.height = LIT_TILE
+    return canvas
+}
 const LIT_AHEAD_LATER = 1000
 const LIT_MOTION_SMOOTH_MS = 100
 const LIT_MOTION_GAP_MS = 400
@@ -13147,10 +13221,11 @@ Grid.canvasPool = new CanvasPool('grid', GRID_POOL_BYTES, 16, 4, true)
 Grid.litPieceDemand = null
 // TASK-1551: the lit layer strips' chunk canvases (LIT_STRIP_TILE squares) in a pool of their own (the grid pool's other takers
 // took any canvas up to 4 times their size), kept ready at rest: the most a moving period took (litStripMoving, into
-// litStripPeak at rest), at least LIT_STRIP_RESERVE (about a layer's chunks).
+// litStripPeak at rest), at least LIT_STRIP_RESERVE (about a layer's chunks). TASK-1617: that floor only once a strip was made
+// (litStripSteps): a session whose boards never draw the lit layer's strips made 128 such canvases (32 MB) none took.
 Grid.litStripPool = new CanvasPool('lit-strips', LIT_STRIP_POOL_BYTES, 16, 1)
 Grid.litStripMoving = 0
-Grid.litStripPeak = LIT_STRIP_RESERVE
+Grid.litStripPeak = 0
 Grid.litStripPool.wanted = () => new Map([[LIT_STRIP_TILE + 'x' + LIT_STRIP_TILE, Grid.litStripPeak]])
 // A lit layer piece's canvas given back to its pool.
 Grid.giveLitCanvas = canvas => {
@@ -13215,12 +13290,14 @@ Grid.reserveLitTileParts = limit => {
     if (!Grid.litAhead || typeof grid === 'undefined' || !grid || !otherSettings.atmosphericVisuals || !grid.litView)
         return
     const pool = grid.litTilePool, Q = LIT_TILE_PART
-    for (let k = 0; k < limit && pool.length < LIT_TILE_SPARE_PARTS; ++k) {
+    let made = 0
+    for (; made < limit && pool.length + Grid.litPartsLent < LIT_TILE_SPARE_PARTS; ++made) {
         const part = document.createElement('canvas')
         part.width = Q
         part.height = Q
         pool.push(part)
     }
+    return made
 }
 CanvasPool.restHooks.push(limit => Grid.reserveLitTileParts(limit))
 // TASK-1550: at rest before the board's surface cache is split, a sprite canvas for each cell of its cell layer (the cells
@@ -13280,7 +13357,8 @@ Grid.reserveCellSprites = limit => {
     }
     return made
 }
-CanvasPool.restHooks.push(() => Grid.reserveCellSprites(CELL_SPRITE_RESERVE_PER_FRAME))
+// (TASK-1617: within the rest's budget, CanvasPool.restTick.)
+CanvasPool.restHooks.push(limit => Grid.reserveCellSprites(Math.min(limit, CELL_SPRITE_RESERVE_PER_FRAME)))
 // What a rest's trim keeps first: the spare pieces and, until the surface cache's layer is split (its cells set), its sprites.
 Grid.canvasPool.wanted = () => {
     const want = Grid.litPieceWant()
