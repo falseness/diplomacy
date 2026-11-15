@@ -129,15 +129,16 @@ const atmosphericLighting = {
     TILE: {
         variants: 8,
         rasterScale: 1.5,
-        // Warm tan before the light map, which keeps it near this tan across the board (KEY). TASK-1582: the grout is a
-        // thin antique brass trim (drawGrout), as the concept's: a bronze fill of the gap (grout), a near-black shade line
-        // shifted up (trim.shade: the groove's shadowed upper wall) and a gold highlight line shifted down (trim.highlight:
-        // its lit lower lip), strokes of the same path. Widths and shifts (screen y, + down) are fractions of the gap
-        // (groutWidth x the hex radius, about the concept's trim width at its hex size).
-        grout: '#86471c',
+        // Warm tan before the light map, which keeps it near this tan across the board (KEY). TASK-1641: the grout is the
+        // concept's thin dark seam between the slabs (drawGrout; was TASK-1582's bronze trim with a gold line): a dark brown
+        // fill of the gap (grout), a near-black core line along its middle (trim.shade) and a faint warm lit lower lip
+        // (trim.highlight, translucent; the concept's slight glint under its seams; null draws none), strokes of the same
+        // path. Widths and shifts (screen y, + down) are fractions of the gap (groutWidth x the hex radius, about the
+        // concept's seam width at its hex size).
+        grout: '#6e3f12',
         groutWidth: 0.087,
-        trim: {shade: '#1c1004', shadeWidth: 0.4, shadeShift: -0.26,
-            highlight: '#aa561a', highlightWidth: 0.3, highlightShift: 0.25,
+        trim: {shade: '#2a1204', shadeWidth: 0.45, shadeShift: 0,
+            highlight: 'rgba(196, 128, 40, 0.55)', highlightWidth: 0.25, highlightShift: 0.38,
             // TASK-1585: at a distant zoom the trim reads as the concept's dark joints: a stroke of the whole gap (width x the
             // gap) in color over the brass, at alpha from 0 with a hex at most from device pixels wide to alpha with one at
             // most to; the tiles drawn up to shrink smaller about their centres (farJoint), so the joints widen.
@@ -1907,7 +1908,7 @@ const atmosphericLighting = {
         }
         ctx.fillStyle = this.TILE.grout
         draw('fill')
-        // TASK-1582: the brass trim's shade and highlight lines, the same hexagon edges stroked shifted up / down across
+        // TASK-1582 / TASK-1641: the seam's core and lip lines, the same hexagon edges stroked shifted up / down across
         // the gap (each edge sits in the middle of its gap; the tiles drawn next cover what spills past it), clipped to
         // the grout fill, so no line reaches past the drawn cells (into a hidden cell's half of its gap, off the board).
         const {trim, groutWidth} = this.TILE
@@ -1916,6 +1917,7 @@ const atmosphericLighting = {
         ctx.lineJoin = 'miter'
         for (const [style, width, shift] of [[trim.shade, trim.shadeWidth, trim.shadeShift],
             [trim.highlight, trim.highlightWidth, trim.highlightShift]]) {
+            if (!style) continue
             ctx.save()
             ctx.translate(0, shift * gap)
             ctx.strokeStyle = style
