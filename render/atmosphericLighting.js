@@ -3293,8 +3293,11 @@ const atmosphericLighting = {
     // whole board's raster in a game. A generator (each yield ends a step); nothing for a sprite not cached yet.
     *prebuildLampSteps() {
         if (typeof cachedImages === 'undefined') return
-        for (const name of ['goldmine', 'town']) {
-            const image = cachedImages[name], door = this.DOOR[name]
+        // TASK-1632: and each demon portal category's sprite (a co-op board's lamps, DemonPortal.imageName).
+        const portals = typeof COOP_PORTAL_CATEGORY_ORDER !== 'undefined' ?
+            COOP_PORTAL_CATEGORY_ORDER.map(c => ['demonPortal' + c[0].toUpperCase() + c.slice(1), 'demonPortal']) : []
+        for (const [imageName, name] of [['goldmine', 'goldmine'], ['town', 'town'], ...portals]) {
+            const image = cachedImages[imageName], door = this.DOOR[name] || this.DOOR.goldmine
             if (!image || !image.width) continue
             if (door.grade && this.gradedImages.get(image) === undefined) {
                 const graded = yield* this.gradeSteps(image, door)

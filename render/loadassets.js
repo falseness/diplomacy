@@ -263,6 +263,14 @@ function teamColourImage(name, rgb) {
         paintTeamColourImage(variant, base, key)
     return variant
 }
+// TASK-1632: whether teamColourImage(name, rgb) would build its variant now (the menu builds the variants ahead).
+function teamColourVariantMissing(name, rgb) {
+    const base = cachedImages[name], variants = teamColourVariants.get(name)
+    if (!variants || !base || !rgb || !otherSettings.usePolishedSprites || failedImages.has(name))
+        return false
+    const variant = variants.get((rgb.r << 16) | (rgb.g << 8) | rgb.b)
+    return !variant || variant.base !== base || variant.baseVersion !== base.contentVersion || variant.width !== base.width
+}
 // TASK-1594: the player-colour variant at a given pixel size, rasterized from the SVG (the unit panel's portrait is
 // drawn larger than the board's cached sprites): null when the board's image would be drawn as it is (not a polished
 // player unit, polished sprites off, no colour, image not loaded). One kept per slot: the name by default (the panel

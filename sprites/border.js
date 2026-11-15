@@ -759,6 +759,7 @@ class MapDepth {
         W.workers = []
         W.counters.failed += W.pending.size
         W.pending.clear()
+        MapDepth.rockAhead.inFlight = 0
     }
     // Asks the workers for the sprites of keys (rockKeys) not made or asked for yet at this radius; false without workers.
     static requestRockSprites(keys) {
@@ -778,6 +779,10 @@ class MapDepth {
         const W = MapDepth.rockWorker
         if (W.pending.get(m.key) === m.r)
             W.pending.delete(m.key)
+        if (m.ahead) {
+            --MapDepth.rockAhead.inFlight
+            MapDepth.rockAheadPump()
+        }
         if (m.error) {
             ++W.counters.failed
             return
@@ -790,6 +795,68 @@ class MapDepth {
         sprites.set(m.key, MapDepth.rockSpriteOf(m))
         ++MapDepth.rockBuilds
         ++W.counters.built
+        if (m.ahead)
+            ++MapDepth.rockAhead.counters.built
+    }
+    // TASK-1632 (LEVEL LOAD 2/5): ROCK SPRITES MADE AHEAD WHILE THE MENU SHOWS. A rock sprite depends only on its key and the
+    // hex radius (rockCache: kept across boards), but a fresh page made every sprite of its first board inside that board's
+    // start hold (tutorial-0: 21 sprites, ~1 s of worker time each, the hold waiting ~120 frames for them; a loaded save's
+    // stand-in made them on the main thread: a 3-4 s task). While the menu shows, the sprites of the boards it can start
+    // (menuPrebuild.rockMaps: the next boards first, then every tutorial, hot seat map and co-op radius) are asked of the rock
+    // workers, at most one a worker at a time (inFlight; a game's own requests, requestRockSprites, never wait behind more than
+    // that), the queue paused while a game runs (rockAheadOn: the menu hidden) and taken up again when the menu shows. The
+    // same keys, workers and pixels as a board's own request. counters: queued, posted, built (from that queue).
+    static rockAhead = {queue: [], queued: new Set(), inFlight: 0, counters: {queued: 0, posted: 0, built: 0}}
+    static rockAheadOn() {
+        return typeof menu !== 'undefined' && !!menu.visible && typeof otherSettings !== 'undefined' && !!otherSettings.atmosphericVisuals
+    }
+    // Queues keys (rockKeys) not made, asked or queued yet (first: ahead of the queue, the next boards'); false without
+    // workers (the menu then makes none ahead).
+    static rockAheadAdd(keys, first = false) {
+        if (!MapDepth.rockWorkersOn())
+            return false
+        const A = MapDepth.rockAhead, sprites = MapDepth.rockCache(), W = MapDepth.rockWorker
+        if (A.radius !== basis.r) {
+            A.radius = basis.r
+            A.queue = []
+            A.queued.clear()
+        }
+        const add = []
+        for (const key of keys)
+            if (!sprites.has(key.key) && W.pending.get(key.key) !== basis.r) {
+                if (A.queued.has(key.key)) {
+                    if (!first)
+                        continue
+                    A.queue = A.queue.filter(k => k.key !== key.key)
+                }
+                else
+                    ++A.counters.queued
+                A.queued.add(key.key)
+                add.push(key)
+            }
+        if (first)
+            A.queue.unshift(...add)
+        else
+            A.queue.push(...add)
+        MapDepth.rockAheadPump()
+        return true
+    }
+    static rockAheadPump() {
+        const A = MapDepth.rockAhead, W = MapDepth.rockWorker
+        while (A.queue.length && W.state === 'on' && A.inFlight < W.workers.length && A.radius === basis.r && MapDepth.rockAheadOn()) {
+            const {key, side, kx, ky, open} = A.queue.shift(), r = basis.r
+            A.queued.delete(key)
+            if (MapDepth.rockCache().has(key) || W.pending.get(key) === r)
+                continue
+            W.pending.set(key, r)
+            ++A.inFlight
+            W.workers[W.next++ % W.workers.length].postMessage({key, side, kx, ky, open, r, ahead: true})
+            ++A.counters.posted
+        }
+    }
+    // Whether every queued sprite is made (none queued or in flight).
+    static rockAheadDone() {
+        return !MapDepth.rockAhead.queue.length && !MapDepth.rockAhead.inFlight
     }
     // The start hold's rock pieces (a generator, Grid.startBuildSteps): until every sprite of keys is made, yields true
     // while the workers make them (nothing to do in this frame) or false after a pixel row made here (without workers).
@@ -1830,8 +1897,8 @@ if (typeof document === 'undefined' && typeof importScripts === 'function' && ty
         const q = e.data
         try {
             const pixels = MapDepth.rockPixels(q.side, q.kx, q.ky, q.open, q.r)
-            self.postMessage({key: q.key, r: q.r, ...pixels}, [pixels.data.buffer])
+            self.postMessage({key: q.key, r: q.r, ahead: !!q.ahead, ...pixels}, [pixels.data.buffer])
         } catch (error) {
-            self.postMessage({key: q.key, r: q.r, error: String(error)})
+            self.postMessage({key: q.key, r: q.r, ahead: !!q.ahead, error: String(error)})
         }
     }

@@ -1,7 +1,7 @@
 {
   "format": 1,
   "algorithm": "sha256(path NUL bytes NUL ...)",
-  "rulesVersion": "dbc8190bf3cea2819b92811fdcfae0b62eca2a1947567950f7409fbce3a3ed7d",
+  "rulesVersion": "8d8e23d1bcdf03609d63aad742238024dfdff9a63b4519528fd62b42c67d32ed",
   "scripts": [
     {
       "path": "options/assert.js",
@@ -120,8 +120,8 @@
     },
     {
       "path": "render/loadassets.js",
-      "sha256": "fddc5ac703f57144d3c33590535b51aa4c54b1a62c9e73103d41c090a6834a1d",
-      "bytes": 24304
+      "sha256": "1006947e14bfb8a78f8efc5d7274fc5eef56e3573b28802d112ebf29142fd878",
+      "bytes": 24860
     },
     {
       "path": "render/staticons.js",
@@ -265,8 +265,8 @@
     },
     {
       "path": "sprites/border.js",
-      "sha256": "4806093c99cba36ac53385cca0a0c8cee08e8161adbfb0324ec487caa6f4aeea",
-      "bytes": 96437
+      "sha256": "b537bf1f12b8be7f8af2d4a348acd22e0a9380ece234a397790b4e731aee7338",
+      "bytes": 99944
     },
     {
       "path": "events/geteventpos.js",
@@ -300,8 +300,8 @@
     },
     {
       "path": "menu/menu.js",
-      "sha256": "0c8e26950bd6505b8b630cb90e16e65ec407e4ca7e0a8aa50e3b26a990dff5e0",
-      "bytes": 181794
+      "sha256": "50d53745a481bade90b3f325910e3f3f0eb5453a30ed2a7f855b9ad900a3f886",
+      "bytes": 186440
     },
     {
       "path": "sprites/hexagon.js",

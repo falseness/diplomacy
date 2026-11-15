@@ -3810,6 +3810,8 @@ function menuLoop() {
 // more while STEP_MS of idle time is left; the work stops while a game runs (menu hidden) and goes on when the menu is
 // shown again (start). A new selection is planned again after the next input.
 const menuPrebuild = {
+    // TASK-1632: the sprites casting soft shadows on a board (buildings neither flat nor lamps).
+    SHADOW_CASTERS: ['mountain', 'hill', 'bush', 'barrack', 'farm', 'tower', 'wall'],
     STEP_MS: 8,
     MIN_STEP_MS: 4,
     QUIET_MS: 300,
@@ -3854,6 +3856,35 @@ const menuPrebuild = {
             maps.push(setup.selectedMap)
         return maps.filter(Boolean)
     },
+    // TASK-1632: every board the menu can start, for their rock sprites (MapDepth.rockAheadAdd): each tutorial, each hot seat
+    // map, and a co-op board of each generated radius (its hexagonal shape is all its rock sprites take of it).
+    rockMaps() {
+        const boards = tutorials.map(t => t.map)
+        for (const list of Object.values(typeof maps !== 'undefined' ? maps : {}))
+            for (const map of list || [])
+                boards.push(map)
+        if (typeof coopHexMapShape === 'function' && typeof baselineRadius === 'function') {
+            const radii = new Set()
+            for (let humans = 1; humans <= 12; ++humans)
+                for (const size of ['tiny', 'normal', 'big'])
+                    try {
+                        radii.add(baselineRadius(humans, size))
+                    } catch (e) {}
+            for (const R of radii)
+                boards.push({mapSize: {x: 2 * R + 1, y: 2 * R + 1}, mapShape: coopHexMapShape(R)})
+        }
+        return boards.filter(map => map && map.mapSize)
+    },
+    // TASK-1632: the unit colours to prebuild: the next boards' (colours) first, then every tutorial's and hot seat map's.
+    unitColours(colours) {
+        const all = new Map(colours), boards = tutorials.map(t => t.map)
+        for (const list of Object.values(typeof maps !== 'undefined' ? maps : {}))
+            boards.push(...(list || []))
+        for (const map of boards)
+            for (const {rgb} of map?.players?.slice(1) || [])
+                if (rgb) all.set(rgb.r + ',' + rgb.g + ',' + rgb.b, rgb)
+        return [...all.values()]
+    },
     // The work as pieces (a generator, each yield one piece: what it built).
     *pieces() {
         const maps = this.maps()
@@ -3861,12 +3892,58 @@ const menuPrebuild = {
         for (const map of maps)
             for (const {rgb} of map.players.slice(1))
                 colours.set(rgb.r + ',' + rgb.g + ',' + rgb.b, rgb)
+        // TASK-1632: a co-op setup's players' colours (its generated board's: coopPlayerColor by slot).
+        if (menu.play?.isCoop && typeof coopPlayerColor === 'function')
+            for (let slot = 1; slot <= (menu.play.playersSlider?.value || 0); ++slot) {
+                const rgb = coopPlayerColor(slot)
+                colours.set(rgb.r + ',' + rgb.g + ',' + rgb.b, rgb)
+            }
+        // TASK-1632: the next boards' rock sprites asked of the rock workers first (off the main thread, while the rest is
+        // built here), then every other board's the menu can start (rockMaps), a board's keys a piece.
+        if (typeof MapDepth !== 'undefined' && MapDepth.rockWorkersOn()) {
+            for (const map of maps) {
+                MapDepth.rockAheadAdd(MapDepth.rockKeysOf(Grid.prebuildBoardOf(map)), true)
+                yield 'rockKeys'
+            }
+        }
         yield* atmosphericLighting.prebuildOwnedSteps([...colours.values()])
+        // TASK-1632: the fogged cells' variants (per hex radius, any board).
+        for (let i = 0; i < atmosphericLighting.TILE.variants; i++)
+            if (!atmosphericLighting.fogVariants || atmosphericLighting.fogVariants.radius !== basis.r || !atmosphericLighting.fogVariants[i]) {
+                atmosphericLighting.fogVariant(i)
+                yield 'fogVariant ' + i
+            }
+        // TASK-1632: the lamps' spill sprites of the light map (per lamp kind and hex radius, any board).
+        for (const name of Object.keys(atmosphericLighting.LAMP))
+            for (const part of ['map', 'gain']) {
+                const before = atmosphericLighting.spillSpriteBuilds
+                atmosphericLighting.spillSprite(part, name)
+                if (atmosphericLighting.spillSpriteBuilds !== before)
+                    yield 'spillSprite'
+            }
+        if (typeof MapDepth !== 'undefined' && MapDepth.rockWorkersOn())
+            for (const map of this.rockMaps()) {
+                MapDepth.rockAheadAdd(MapDepth.rockKeysOf(Grid.prebuildBoardOf(map)))
+                yield 'rockKeys'
+            }
         // TASK-1473: the lamps' overlays (any board, co-op too), once the game sprites are cached; planned again then.
         const sprites = typeof gameSpritesLoaded !== 'undefined'
         if (sprites && gameSpritesLoaded) {
+            // TASK-1632: the player-colour unit variants of the next boards' colours and of every tutorial's (teamColourImage).
+            for (const rgb of this.unitColours(colours))
+                for (const name of TEAM_COLOUR_IMAGES)
+                    if (teamColourVariantMissing(name, rgb)) {
+                        teamColourImage(name, rgb)
+                        yield 'teamColour'
+                    }
             for (const _ of atmosphericLighting.prebuildLampSteps())
                 yield 'lampOverlay'
+            // TASK-1632: the soft shadows' silhouettes of the sprites that cast them (atmosphericLighting.drawShadows).
+            for (const name of this.SHADOW_CASTERS)
+                if (cachedImages[name]?.width && !atmosphericLighting.shadowSilhouettes.has(cachedImages[name])) {
+                    atmosphericLighting.shadowSilhouette(cachedImages[name])
+                    yield 'shadowSilhouette'
+                }
         }
         else if (sprites && !this.lampWait) {
             this.lampWait = true
