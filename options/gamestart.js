@@ -354,7 +354,14 @@ class GameMap {
         if (this.coop) validateCoopTypedPortals(this)
         validateGameMap(this)
         grid = new Grid(0, 0, this.mapSize)
-        _gameManager.clearValues()
+        // TASK-1633: the new board's geometry is made once, after its map edge (updateCameraBorders below): clearValues'
+        // call (clearBasisValues) takes the borders from the board's bounds only (boardPending).
+        _gameManager.boardPending = true
+        try {
+            _gameManager.clearValues()
+        } finally {
+            _gameManager.boardPending = false
+        }
         normalizeInterfaceSettings(gameSettings)
         gameSettings.mapShape = this.mapShape
         if (this.coop) gameSettings.coop = {...JSON.parse(JSON.stringify(this.coop)), balanceVersion: 2}
@@ -1763,7 +1770,13 @@ class GameManager {
         this.clearBasisValues()
     }
     static updateCameraBorders() {
-        mapDepth.rebuild(grid)
+        // TASK-1633: a board whose map edge is not made yet (map.start's clearValues: boardPending) gets its bounds and
+        // surface bounds (MapDepth.boundsOf, as rebuild sets them: the scale limits and fit below read them), not a rebuild
+        // of its slab (geometry, underlay raster, rock sprites: 50-100 ms, made by map.start's own call once the map edge is).
+        if (this.boardPending)
+            Object.assign(mapDepth, mapDepth.boundsOf(grid))
+        else
+            mapDepth.rebuild(grid)
         mapBorder = {
 	        left: mapDepth.bounds.left,
 	        right: mapDepth.bounds.right,
@@ -1875,6 +1888,9 @@ class GameManager {
 
         nextTurnButton.setNextPlayerColor(players[whooseTurn].hexColor)
         nextTurnPauseInterface.visible = true
+        // TASK-1633: a saved game's first frames are held while its first lit view is built, as a new game's (Grid.holdStartFrame).
+        if (typeof grid !== 'undefined' && grid)
+            grid.startHoldWanted = true
         if (!gameSettings.tutorial)
             focusCameraOnPlayerStart(players[whooseTurn])
 

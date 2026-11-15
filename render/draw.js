@@ -906,6 +906,9 @@ function drawAll() {
     // TASK-1518: a new board's first frame is held while its lit tiles are built (Grid.holdStartFrame).
     if (typeof grid !== 'undefined' && grid?.holdStartFrame?.())
         return
+    // TASK-1633: after it, a frame that would draw the board partial is held till its builds are done (Grid.holdLoadFrame).
+    if (typeof grid !== 'undefined' && grid?.holdLoadFrame?.())
+        return
     // TASK-1519: a turn playback's start is held while its board's surface cache is finished (turnPlaybackView.holdFrame).
     if (typeof turnPlaybackView !== 'undefined' && turnPlaybackView.holdFrame())
         return

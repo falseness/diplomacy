@@ -1,7 +1,7 @@
 {
   "format": 1,
   "algorithm": "sha256(path NUL bytes NUL ...)",
-  "rulesVersion": "8d8e23d1bcdf03609d63aad742238024dfdff9a63b4519528fd62b42c67d32ed",
+  "rulesVersion": "5a1af73245e21ecdbcb684fe65e8037a7e1a62dab9a2b89ca8c028d542f58b7c",
   "scripts": [
     {
       "path": "options/assert.js",
@@ -30,8 +30,8 @@
     },
     {
       "path": "options/gamestart.js",
-      "sha256": "34ae7bf8e8e038515043610a67dcb0d77f835392faf3b3101493ee098cc3f1f4",
-      "bytes": 99997
+      "sha256": "154857e568d9b2be61bbb20bbc9108391f4e3e9afd111876dd935270be68e4b5",
+      "bytes": 101057
     },
     {
       "path": "options/tutorials.js",
@@ -150,8 +150,8 @@
     },
     {
       "path": "render/draw.js",
-      "sha256": "d1d1760f9fa5649a42e64bbd603d370834dc811ca3930a670c4bc5eb202fb733",
-      "bytes": 46480
+      "sha256": "5620bc6bc653a333695d6b80661092baf667e8a7119abd345d3c4964734bb1a9",
+      "bytes": 46684
     },
     {
       "path": "interface/entityinterface.js",
@@ -265,8 +265,8 @@
     },
     {
       "path": "sprites/border.js",
-      "sha256": "b537bf1f12b8be7f8af2d4a348acd22e0a9380ece234a397790b4e731aee7338",
-      "bytes": 99944
+      "sha256": "a271c72d37964b92ce9122e95c5684ddbf33acb846e4028b78376aa559799555",
+      "bytes": 107532
     },
     {
       "path": "events/geteventpos.js",
@@ -300,8 +300,8 @@
     },
     {
       "path": "menu/menu.js",
-      "sha256": "50d53745a481bade90b3f325910e3f3f0eb5453a30ed2a7f855b9ad900a3f886",
-      "bytes": 186440
+      "sha256": "0530fb0e356f2d7c5643abcaec0c29ebd43ad9a1759347ac328946c1d668396a",
+      "bytes": 186710
     },
     {
       "path": "sprites/hexagon.js",
@@ -310,8 +310,8 @@
     },
     {
       "path": "groups/grid.js",
-      "sha256": "a8b66369711bf281770c7725e668c2b08f4d24612a8b3491f1e0029884a545f8",
-      "bytes": 864527
+      "sha256": "e44bcc48c596ca573ce4b32939ed4e2b4eb1451569dbe228707fb18a0d458cc0",
+      "bytes": 877245
     },
     {
       "path": "sprites/entities/hpBar.js",

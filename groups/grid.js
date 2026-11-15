@@ -171,7 +171,8 @@ class Grid extends SpritesGroup {
         // TASK-1518: the board's first frame held while what it draws is built in steps (holdStartFrame): the job (null once
         // over), and the frames held, steps run, longest step (ms), the frames' work (ms), and how it ended
         // ('built', 'camera', 'time', 'direct': a drawAll call outside the game loop, 'off').
-        // Set by GameManager.start: a board loaded otherwise (a save, an online board, a turn playback's recordings) is not held.
+        // Set by GameManager.start and (TASK-1633) GameManager.load (a saved game): a board loaded otherwise (an online board, a
+        // turn playback's recordings) is not held.
         this.startHoldWanted = false
         this.startRestFirst = false
         // TASK-1543: when the frames after the start hold first called litRestUnderWay (its START_REST_FIRST_MS bound).
@@ -184,6 +185,17 @@ class Grid extends SpritesGroup {
         this.startEnd = undefined
         // By kind of piece (startBuildSteps' yields): [pieces, ms, longest ms].
         this.startPieces = {}
+        // TASK-1633: the guard of the frames after a start hold (holdLoadFrame; null when over), how it ended ('done', 'camera',
+        // 'time', 'held', 'direct', 'off') and the frames it held.
+        this.loadGuard = null
+        this.loadGuardEnd = undefined
+        this.loadGuardEndAt = undefined
+        this.loadGuardHeld = 0
+        // The lit tasks queueLitTiles queued (holdLoadFrame: one queued since the frame before is a build under way).
+        this.litTasksQueued = 0
+        // The unit sectors the frames asked for meanwhile (queueUnitSectors' args, the last frame's) and how many asks.
+        this.unitSectorDeferred = undefined
+        this.unitSectorsDeferred = 0
         this.lodRecorder = undefined
         this.lodFrame = undefined
         this.lodHolds = 0
@@ -7306,6 +7318,9 @@ class Grid extends SpritesGroup {
     // cells in view are compared first (unitSectorCheck). It draws nothing.
     restUnitSectors(ctx) {
         const screen = typeof gameEvent !== 'undefined' ? gameEvent.screen : undefined
+        // TASK-1633: not while a start's builds run (queueUnitSectors keeps the frames' wish for after them).
+        if (Grid.loadDefersSectors && (this.startJob || this.loadGuard))
+            return
         if (!Grid.unitSectorsAtRest || !screen || screen.surfaceMoving || screen.zoomGesture || screen.surfaceZooming ||
                 this.zoomBoardPass || !otherSettings.atmosphericVisuals || this.levelMode(ctx))
             return
@@ -7432,6 +7447,13 @@ class Grid extends SpritesGroup {
     // The frame's wanted squares (on the canvas, nearest its centre first) and the ring UNIT_SECTOR_AHEAD round the canvas
     // (within the board's squares, not clean) built by a task between frames.
     queueUnitSectors(plan, wanted, range, board, cw, ch, ox, oy, upgrades = null) {
+        // TASK-1633: none while a start's builds run (the start hold, its guard: holdLoadFrame): the last frame's wish is kept
+        // (unitSectorDeferred) and queued when the guard ends, so the main thread makes the board's first whole frame first.
+        if (Grid.loadDefersSectors && (this.startJob || this.loadGuard)) {
+            this.unitSectorDeferred = [plan, wanted, range, board, cw, ch, ox, oy, upgrades]
+            ++this.unitSectorsDeferred
+            return
+        }
         const cu = (cw / 2 - ox) / LIT_TILE - 0.5, cv = (ch / 2 - oy) / LIT_TILE - 0.5
         const near = (p, q) => Math.hypot(p.u - cu, p.v - cv) - Math.hypot(q.u - cu, q.v - cv)
         // TASK-1562: a level frame's live squares first (plan.first), then the others nearest the centre.
@@ -9458,6 +9480,7 @@ class Grid extends SpritesGroup {
         // No view yet: a step of the light map at the camera's scale (atmosphericLighting.stepLightMap).
         if (!view) {
             this.litTilesQueued = true
+            ++this.litTasksQueued
             setTimeout(gridTask(() => {
                 this.litTilesQueued = false
                 // TASK-1576: in a zoom gesture only for its held level's builds (Grid.zoomBuildOpen), in their scope.
@@ -9493,6 +9516,7 @@ class Grid extends SpritesGroup {
         // TASK-1372: the snapshot's split, a step a task (cellSplitStep), not during its patch.
         if (view.splitJob && !banding && !view.patch) {
             this.litTilesQueued = true
+            ++this.litTasksQueued
             setTimeout(gridTask(() => {
                 this.litTilesQueued = false
                 // (TASK-1630: litSplitHolds drops a split made for another rest snapshot or layer and holds: view.splitJob
@@ -9516,6 +9540,7 @@ class Grid extends SpritesGroup {
         if (this.litQueueAt?.view === view)
             this.litQueueAt.refill = !banding
         this.litTilesQueued = true
+        ++this.litTasksQueued
         // TASK-1439: a task of tiles with the camera at rest when the browser is idle (LIT_IDLE_TIMEOUT at most); TASK-1453: a
         // view the frames draw live at once (setTimeout).
         // TASK-1570 (Grid.litWorkerOrder): not while tiles on the canvas are missing (litQueueAt.shownMissing): an idle callback
@@ -10984,11 +11009,131 @@ class Grid extends SpritesGroup {
         this.startWorkMs += performance.now() - start
         if (done) {
             atmosphericLighting.prewarmOwnedTiles()
+            // TASK-1633: the frames after it guarded till the board's builds are done (holdLoadFrame).
+            if (Grid.loadGuards)
+                this.loadGuard = {t: job.t, start: performance.now(), heldSince: undefined, held: 0}
             return end('built')
         }
         ++job.frames
         ++this.startHeldFrames
         return true
+    }
+    // TASK-1633 (LEVEL LOAD 3/5): after a start hold that built its view (holdStartFrame 'built'), until the board's
+    // builds are done (the surface cache made and lit, nothing in boardBuildsPending: the surface cache, the lit tiles,
+    // the rest snapshot, the rock sprites; for Grid.LOAD_GUARD_SETTLE_MS), a frame that would draw the board partial is not drawn: the screen keeps
+    // the frame it shows (the board's last whole frame, else the menu's) while what that frame needs is made (the lit
+    // tiles queued as drawLitView queues them, the surface cache's step as Grid.draw queues it; a view the light map no
+    // longer holds made again by planLitView's tasks, but at the cache's scale while the cache is built: the frames
+    // wait for the cache). Partial: no lit view at the camera's scale or one the light map's state does not hold
+    // (planLitView would draw the ground fill or a stand-in), or a tile on the canvas not built (the rest snapshot not
+    // finished); at or below the surface cache's scale those too unless the cache is made and matches the board
+    // (drawMapSurface draws it, else its stand-in or the lit view). Given up (the frames drawn as before) when the
+    // camera moves or zooms, a drawAll call comes from elsewhere, after Grid.LOAD_GUARD_HOLD_MS of frames held in a row
+    // or Grid.LOAD_GUARD_MS in all. While it runs no unit sector is built (queueUnitSectors, restUnitSectors: they are
+    // made for the frames after it).
+    holdLoadFrame() {
+        const guard = this.loadGuard
+        if (!guard)
+            return false
+        const end = why => {
+            this.loadGuard = null
+            this.loadGuardEnd = why
+            this.loadGuardEndAt = performance.now()
+            this.loadGuardHeld += guard.held
+            // The unit sectors the guard kept back (queueUnitSectors' unitSectorDeferred; a stale plan's task refuses it: 'key').
+            const deferred = this.unitSectorDeferred
+            this.unitSectorDeferred = undefined
+            if (deferred && this === grid)
+                this.queueUnitSectors(...deferred)
+            return false
+        }
+        if (this !== grid || !otherSettings.atmosphericVisuals || typeof mainCtx === 'undefined')
+            return end('off')
+        const t = mainCtx.getTransform(), screen = gameEvent.screen, g = guard.t
+        // (The start's moveTo leaves the camera marked as moving, Screen.surfaceMoving, though it does not: the transform is
+        // compared, as holdStartFrame compares it.)
+        if (t.a !== g.a || t.b !== g.b || t.c !== g.c || t.d !== g.d || t.e !== g.e || t.f !== g.f ||
+                screen.surfaceZooming || screen.zoomGesture)
+            return end('camera')
+        if (typeof gameLoopFrame === 'undefined' || !gameLoopFrame)
+            return end('direct')
+        const now = performance.now()
+        if (now - guard.start >= Grid.LOAD_GUARD_MS)
+            return end('time')
+        // (Done once the surface cache is made and lit with nothing under way for Grid.LOAD_GUARD_SETTLE_MS: right after the
+        // start hold nothing is queued yet, and between two builds' tasks nothing may be for a frame.)
+        // (A lit task queued since the last frame counts: it ran before this frame, and the frame queues the next.)
+        const litQueued = this.litTasksQueued !== guard.litTasks
+        guard.litTasks = this.litTasksQueued
+        if (this.surfaceCache && this.surfaceCacheLit && !litQueued && !this.boardBuildsPending()) {
+            guard.doneSince ??= now
+            if (now - guard.doneSince >= Grid.LOAD_GUARD_SETTLE_MS)
+                return end('done')
+        }
+        else
+            guard.doneSince = undefined
+        // At or below the cache's scale (drawMapSurface): the cache when it matches the board; else its stand-in (partial),
+        // else the lit view as at a larger scale.
+        const cached = this.canUseSurfaceCache()
+        if (cached && this.surfaceCache && this.surfaceStateMatches(mainCtx)) {
+            guard.heldSince = undefined
+            return false
+        }
+        const L = atmosphericLighting, cw = mainCanvas.width, ch = mainCanvas.height
+        let view = this.litView, partial
+        const stale = !view || view.a !== t.a || view.d !== t.d || view.rebuilds !== L.rebuilds || view.mapScale !== L.mapScale
+        // At the cache's scale with its build under way (its last stages take the light map to the cache's scale: the lit view
+        // no longer holds) the frames wait for the cache, not a view made again for them.
+        if (stale && cached && this.surfaceCacheBuild) {
+            view = null
+            partial = true
+        }
+        else if (stale) {
+            // (planLitView makes the view again: at once or by its tasks, the light map first.)
+            const plan = this.planLitView(mainCtx)
+            this.litPlan = undefined
+            view = plan && plan.view
+            partial = !view || !plan.rest && this.litTilesMissing(view, t, cw, ch) > 0
+        }
+        else
+            partial = !(view.rest && view.rest.done === LIT_REST_BANDS) && this.litTilesMissing(view, t, cw, ch) > 0
+        if (!partial) {
+            guard.heldSince = undefined
+            return false
+        }
+        guard.heldSince ??= now
+        if (now - guard.heldSince >= Grid.LOAD_GUARD_HOLD_MS)
+            return end('held')
+        // What the frame would have queued: its lit tiles (drawLitView) and the surface cache's next step (Grid.draw).
+        if (view)
+            this.queueLitTiles(view, t, cw, ch)
+        this.prepareSurfaceCache()
+        ++guard.held
+        return true
+    }
+    // TASK-1633: the tiles on a cw x ch canvas at transform t that view has not built (litTilesUnbuilt's count).
+    litTilesMissing(view, t, cw, ch) {
+        const range = this.litTileRange(cw, ch, Math.round(t.e - view.e), Math.round(t.f - view.f), 0)
+        let missing = 0
+        for (let v = range.v0; v <= range.v1; ++v)
+            for (let u = range.u0; u <= range.u1; ++u)
+                if (!this.litHas(view, u, v) && !view.stale?.has(u + ',' + v))
+                    ++missing
+        return missing
+    }
+    // TASK-1633: whether the board's builds are under way (as visualsPerf's frame.loadPending names them): the surface cache
+    // (queued, building, split, patched, layered, dirty, or built unlit), the lit tiles (queued, a view unbuilt, patched or
+    // with a layer job), the lit view's rest snapshot, the rock sprites asked of the workers.
+    boardBuildsPending() {
+        if (this.surfaceCacheQueued || this.surfaceCacheBuild || this.surfaceSplitJob || this.surfacePatchJob || this.surfaceLayerJob ||
+                this.surfaceCacheDirty || this.surfaceCache && !this.surfaceCacheLit)
+            return true
+        const v = this.litView
+        if (this.litTilesQueued || v && (v.unbuilt || v.patch || v.layerJob))
+            return true
+        if (v && v.rest && v.rest.done !== LIT_REST_BANDS)
+            return true
+        return !!MapDepth.rockWorker?.pending?.size
     }
     // The board's first lit view at camera t (as planLitView makes it, newLitView) and what it draws, a piece a step (a
     // generator): the owned tiles of the board's colours (as its first frame built them: prebuildOwnedSteps, the menu's
@@ -11027,6 +11172,10 @@ class Grid extends SpritesGroup {
         const cw = mainCanvas.width, ch = mainCanvas.height
         if (t.b !== 0 || t.c !== 0 || t.a <= 0 || t.d <= 0 || this.constructionInView(mainCtx))
             return
+        // TASK-1633: the board's underlay raster from its worker (MapDepth.createUnderlayCache) before the view and its tiles
+        // read it ('underlay' pieces wait; a read before it comes makes it on the main thread).
+        for (const since = performance.now(); mapDepth.underlayJob && performance.now() - since < START_WAIT_MS;)
+            yield ['underlay', false, true]
         const viewSteps = this.newLitViewSteps(t, mainCanvas)
         let made
         while (!(made = viewSteps.next()).done)
@@ -11072,6 +11221,29 @@ class Grid extends SpritesGroup {
                 return
             atmosphericLighting.checkedOnce(this, () => this.litTile(view, u, v))
             yield ['tile', true]
+        }
+        // TASK-1633 (Grid.startArrive): the tiles the Worker draws (litTileSteps posted them: litPending) waited for, so the
+        // first frame drawn has every tile on the canvas (it drew the missing ones with the ground fill: 13-19 squares of a
+        // tutorial's first frame). A tile the Worker could not make (litTileFailed) or that came back stale is made again
+        // (litTile: the Worker again, else here). 'arrive' pieces wait (nothing more to do in that frame).
+        const arriveFrom = performance.now()
+        for (let round = 0; Grid.startArrive && round < START_ARRIVE_ROUNDS && performance.now() - arriveFrom < START_WAIT_MS; ++round) {
+            let pending = false, missing = false
+            for (const {u, v} of tiles) {
+                if (view !== this.litView)
+                    return
+                if (this.litPending(view, u, v))
+                    pending = true
+                else if (!this.litHas(view, u, v)) {
+                    missing = true
+                    atmosphericLighting.checkedOnce(this, () => this.litTile(view, u, v))
+                    yield ['tile', true]
+                }
+            }
+            if (!pending && !missing)
+                break
+            if (pending)
+                yield ['arrive', false, true]
         }
     }
     // Keeps a recorded frame's calls on the main canvas (beginLodFrame) as the board on the canvas now (the zoom raster's
@@ -13612,7 +13784,24 @@ Grid.ZOOM_HOLD_FRAMES = 4
 // TASK-1518: a new board's first frame held while its lit tiles are built (Grid.holdStartFrame), for at most
 // START_HOLD_MS (then the frames are drawn as before), START_STEP_MS of steps a frame.
 Grid.startHolds = true
-Grid.START_HOLD_MS = 5000
+// TASK-1633: 5000 before (a 6-player co-op start or a slow host ran past it and drew its first frames partial: the hold is
+// only a safety bound now).
+Grid.START_HOLD_MS = 30000
+// TASK-1633: the start hold waits for the Worker's tiles (startBuildSteps' 'arrive' pieces), at most this many rounds of
+// tiles made again; it waits for them and for the underlay worker's raster ('underlay' pieces) at most START_WAIT_MS each
+// (then the frames make what is missing as before).
+Grid.startArrive = true
+const START_ARRIVE_ROUNDS = 400
+const START_WAIT_MS = 6000
+// TASK-1633: the frames after a start hold guarded (Grid.holdLoadFrame) for at most LOAD_GUARD_MS, at most LOAD_GUARD_HOLD_MS of
+// them held in a row.
+Grid.loadGuards = true
+Grid.LOAD_GUARD_MS = 60000
+Grid.LOAD_GUARD_HOLD_MS = 4000
+// TASK-1633: how long the builds must stay done before the guard ends (the unit sectors it kept back then queued).
+Grid.LOAD_GUARD_SETTLE_MS = 500
+// TASK-1633: no unit sector built while a start's builds run (Grid.queueUnitSectors, restUnitSectors).
+Grid.loadDefersSectors = true
 const START_STEP_MS = 8
 // The frame pace the held frames keep (ms from one to the next: 60 Hz with a margin) and the most pieces heavy to rasterize
 // a held frame runs (Grid.holdStartFrame).
@@ -14473,6 +14662,26 @@ Grid.reserveLitTileParts = limit => {
     return made
 }
 CanvasPool.restHooks.push(limit => Grid.reserveLitTileParts(limit))
+// TASK-1633: the menu's idle prebuild (menuPrebuild) fills the shared pool (Grid.litTilePool: LIT_TILE_PART squares, any
+// board) with the quarters a first lit view of the main canvas takes (its tiles' four, at most LIT_TILE_KEEP_PARTS), so the
+// start hold's tiles make none (~300 canvases a fresh page's first level made in its hold, ~40 ms). LIT_PART_PREBUILD_STEP a
+// piece.
+const LIT_PART_PREBUILD_STEP = 32
+Grid.prebuildLitPartsSteps = function* () {
+    if (typeof mainCanvas === 'undefined' || !mainCanvas.width || typeof otherSettings === 'undefined' || !otherSettings.atmosphericVisuals)
+        return
+    const Q = LIT_TILE_PART, pool = Grid.litTilePool
+    const want = Math.min(LIT_TILE_KEEP_PARTS, 4 * (Math.ceil(mainCanvas.width / LIT_TILE) + 1) * (Math.ceil(mainCanvas.height / LIT_TILE) + 1))
+    while (pool.length + Grid.litPartsLent < want) {
+        for (let k = 0; k < LIT_PART_PREBUILD_STEP && pool.length + Grid.litPartsLent < want; ++k) {
+            const part = document.createElement('canvas')
+            part.width = Q
+            part.height = Q
+            pool.push(part)
+        }
+        yield
+    }
+}
 // TASK-1550: at rest before the board's surface cache is split, a sprite canvas for each cell of its cell layer (the cells
 // of its mask, cellMaskCache, built ahead by the menu's prebuild or a split before): the first split, which runs while the
 // camera moves, takes them instead of making ~one canvas per cell. Not while the cache's layer holds sprites (a split

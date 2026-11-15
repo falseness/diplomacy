@@ -3921,6 +3921,10 @@ const menuPrebuild = {
                 if (atmosphericLighting.spillSpriteBuilds !== before)
                     yield 'spillSprite'
             }
+        // TASK-1633: the lit tiles' quarter canvases a first lit view takes (Grid.litTilePool, any board).
+        if (typeof Grid !== 'undefined' && Grid.prebuildLitPartsSteps)
+            for (const _ of Grid.prebuildLitPartsSteps())
+                yield 'litParts'
         if (typeof MapDepth !== 'undefined' && MapDepth.rockWorkersOn())
             for (const map of this.rockMaps()) {
                 MapDepth.rockAheadAdd(MapDepth.rockKeysOf(Grid.prebuildBoardOf(map)))

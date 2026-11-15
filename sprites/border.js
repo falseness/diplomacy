@@ -341,6 +341,17 @@ class MapDepth {
         return ribbons
     }
     rebuild(_grid) {
+        // TASK-1633: a second rebuild of the same board with the same map edge (GameManager.start's map.start, then its
+        // clearBasisValues: updateCameraBorders twice, 30-70 ms each) keeps the geometry, underlay and rock sprites it has.
+        const sig = MapDepth.rebuildSkips ? this.geometrySig(_grid) : null
+        if (sig !== null && this.outline && this.builtFor === _grid && this.builtSig === sig && this.builtR === basis.r &&
+                this.underlayAtmospheric === otherSettings.atmosphericVisuals) {
+            ++MapDepth.rebuildsSkipped
+            return
+        }
+        this.builtFor = _grid
+        this.builtSig = sig
+        this.builtR = basis.r
         this.buildFaces(_grid)
         this.createOutline()
         this.markOpenFaces()
@@ -350,7 +361,20 @@ class MapDepth {
             MapDepth.requestRockSprites(this.rockKeys())
 
         Object.assign(this, this.boundsOf(_grid))
-        this.createUnderlayCache()
+        // TASK-1633: its raster made by the underlay worker (createUnderlayCache's async path).
+        this.createUnderlayCache(true)
+    }
+    // TASK-1633: what rebuild draws from a board: its size and which cells are map edge (the cells' positions follow from
+    // their indices and the radius).
+    geometrySig(_grid) {
+        const arr = _grid.arr, rows = []
+        for (let x = 0; x < arr.length; ++x) {
+            let row = ''
+            for (let y = 0; y < arr[x].length; ++y)
+                row += arr[x][y].building.isMapEdge ? '1' : '0'
+            rows.push(row)
+        }
+        return arr.length + 'x' + (arr[0]?.length || 0) + ':' + rows.join('|')
     }
     // TASK-1616: the slab's faces and edges of a board (rebuild's first part; _grid needs only arr[x][y].hexagon.calcPos()
     // and .building.isMapEdge, as boundsOf: MapDepth.rockKeysOf takes them for a board not yet made).
@@ -451,6 +475,9 @@ class MapDepth {
             this.createUnderlayCache()
     }
     getFaceColors(side) {
+        return MapDepth.faceColors(side)
+    }
+    static faceColors(side) {
         if (side == 3)
             return ['#969994', '#5c605f']
         if (side == 2 || side == 4)
@@ -458,31 +485,39 @@ class MapDepth {
         return ['#696d6b', '#383c3d']
     }
     renderUnderlay(ctx, cacheScale = 1) {
+        MapDepth.paintUnderlay(ctx, this.outline, this.faces, this.shadowBlur, this.shadowOffset, cacheScale,
+            otherSettings.atmosphericVisuals, face => this.outsideClipWindow(face.begin, face.end, face.bottomEnd, face.bottomBegin))
+    }
+    // TASK-1633: renderUnderlay's drawing, shared with the underlay worker (createUnderlayCache): the outline's shadowed fill,
+    // then each face (skip: a face outside a patch's clip window) with its gradient, outlined without atmospheric visuals.
+    static paintUnderlay(ctx, outline, faces, shadowBlur, shadowOffset, cacheScale, atmospheric, skip = null) {
         ctx.save()
         ctx.fillStyle = MapDepth.GROUND_FILL
         ctx.shadowColor = 'rgba(4, 12, 18, 0.72)'
         // Canvas shadow dimensions are device-space values and do not follow the
         // current transform, so account for a downscaled render cache explicitly.
-        ctx.shadowBlur = this.shadowBlur * cacheScale
+        ctx.shadowBlur = shadowBlur * cacheScale
         ctx.shadowOffsetX = 0
-        ctx.shadowOffsetY = this.shadowOffset * cacheScale
-        ctx.fill(this.outline)
+        ctx.shadowOffsetY = shadowOffset * cacheScale
+        ctx.fill(outline)
         ctx.restore()
 
-        for (let i = 0; i < this.faces.length; ++i) {
-            const face = this.faces[i]
-            if (this.outsideClipWindow(face.begin, face.end, face.bottomEnd, face.bottomBegin))
+        for (let i = 0; i < faces.length; ++i) {
+            const face = faces[i]
+            if (skip && skip(face))
                 continue
             // One gradient a face and context, as renderAtmosphericSides: a rebuild of the surface cache or
             // its patch (Grid.patchSurfaceCache) draws with the gradients the first build made.
+            // (In the underlay worker no gradientContext: its context's own.)
+            const gctx = typeof gradientContext === 'function' ? gradientContext(ctx) : ctx
             face.underlayGradients ||= new WeakMap()
-            let gradient = face.underlayGradients.get(gradientContext(ctx))
+            let gradient = face.underlayGradients.get(gctx)
             if (!gradient) {
-                const colors = this.getFaceColors(face.side)
+                const colors = MapDepth.faceColors(face.side)
                 gradient = ctx.createLinearGradient(0, face.begin.y, 0, face.sortY)
                 gradient.addColorStop(0, colors[0])
                 gradient.addColorStop(1, colors[1])
-                face.underlayGradients.set(gradientContext(ctx), gradient)
+                face.underlayGradients.set(gctx, gradient)
             }
 
             ctx.beginPath()
@@ -494,15 +529,33 @@ class MapDepth {
             ctx.fillStyle = gradient
             ctx.fill()
             // Atmospheric faces are repainted without outlines (renderAtmosphericSides).
-            if (otherSettings.atmosphericVisuals)
+            if (atmospheric)
                 continue
             ctx.strokeStyle = 'rgba(25, 29, 30, 0.78)'
             ctx.lineWidth = 0.025 * basis.r
             ctx.stroke()
         }
     }
-    createUnderlayCache() {
+    // TASK-1633: the cache's raster (the board's shadowed fill and faces, MapDepth.paintUnderlay) made by the underlay worker
+    // when async (MapDepth.rebuild, with atmospheric visuals and workers): the cache's bounds and regions are set at once, its
+    // canvas comes back as an ImageBitmap (underlayWorkerDone); meanwhile underlayJob is set and the first read of
+    // underlayCache makes it here (the getter: what draws it never waits), the worker's then dropped. The start hold waits
+    // for it (Grid.startBuildSteps' 'underlay' pieces) before its lit tiles draw it: ~100-200 ms of a level's start (in
+    // GameManager.start's first task) off the main thread. The pixels are the same code's on a canvas of the same size.
+    get underlayCache() {
+        if (this.underlayJob) {
+            this.underlayJob = undefined
+            ++MapDepth.underlayCounters.sync
+            this.createUnderlayCache()
+        }
+        return this.underlayRaster
+    }
+    set underlayCache(value) {
+        this.underlayRaster = value
+    }
+    createUnderlayCache(async = false) {
         this.underlayAtmospheric = otherSettings.atmosphericVisuals
+        this.underlayJob = undefined
         this.underlayCache = undefined
         this.cacheBounds = undefined
         this.cacheRegions = []
@@ -527,15 +580,28 @@ class MapDepth {
         const rasterWidth = Math.max(1, Math.ceil(cacheWidth * cacheScale))
         const rasterHeight = Math.max(1, Math.ceil(cacheHeight * cacheScale))
 
-        const cache = document.createElement('canvas')
-        cache.width = rasterWidth
-        cache.height = rasterHeight
-        const cacheCtx = cache.getContext('2d')
-        cacheCtx.scale(cacheScale, cacheScale)
-        cacheCtx.translate(-this.bounds.left, -this.bounds.top)
-        this.renderUnderlay(cacheCtx, cacheScale)
-
-        this.underlayCache = cache
+        const worker = async && otherSettings.atmosphericVisuals && this.outlineLoop ? MapDepth.underlayWorkerOn() : null
+        if (worker) {
+            const token = ++MapDepth.underlaySerial
+            this.underlayJob = {token}
+            MapDepth.underlayOwner = this
+            const point = p => [p.x, p.y]
+            worker.postMessage({underlay: token, w: rasterWidth, h: rasterHeight, scale: cacheScale, left: this.bounds.left,
+                top: this.bounds.top, loop: this.outlineLoop.map(point), shadowBlur: this.shadowBlur, shadowOffset: this.shadowOffset,
+                faces: this.faces.map(f => ({side: f.side, sortY: f.sortY, begin: f.begin, end: f.end, bottomEnd: f.bottomEnd,
+                    bottomBegin: f.bottomBegin}))})
+            ++MapDepth.underlayCounters.posted
+        }
+        else {
+            const cache = document.createElement('canvas')
+            cache.width = rasterWidth
+            cache.height = rasterHeight
+            const cacheCtx = cache.getContext('2d')
+            cacheCtx.scale(cacheScale, cacheScale)
+            cacheCtx.translate(-this.bounds.left, -this.bounds.top)
+            this.renderUnderlay(cacheCtx, cacheScale)
+            this.underlayCache = cache
+        }
         this.cacheBounds = {
             left: this.bounds.left,
             top: this.bounds.top,
@@ -747,6 +813,64 @@ class MapDepth {
         }
         W.state = 'on'
         return true
+    }
+    // TASK-1633: the underlay worker (this file loaded as a worker, its own: never behind a rock sprite), made with the rock
+    // workers' conditions; null without it (createUnderlayCache draws on the main thread). underlayCounters: posted, built
+    // (from the worker), sync (made on the main thread at a read before the worker's came), dropped (came stale), failed.
+    // TASK-1633: rebuild skips a board it has already built (the same object, map edge and radius); the skips counted.
+    static rebuildSkips = true
+    static rebuildsSkipped = 0
+    static underlayWorkers = true
+    static underlayWorker = null
+    static underlayState = 'off'
+    static underlaySerial = 0
+    static underlayOwner = null
+    static underlayCounters = {posted: 0, built: 0, sync: 0, dropped: 0, failed: 0}
+    static underlayWorkerOn() {
+        if (MapDepth.underlayState === 'on')
+            return MapDepth.underlayWorker
+        if (MapDepth.underlayState === 'failed' || !MapDepth.underlayWorkers || typeof OffscreenCanvas !== 'function' ||
+                typeof createImageBitmap !== 'function' || !MapDepth.rockWorkersOn())
+            return null
+        const own = [...document.scripts].find(script => /sprites\/border\.js(\?|$)/.test(script.src))
+        try {
+            const worker = new Worker(own ? own.src : 'sprites/border.js')
+            worker.onmessage = e => MapDepth.underlayWorkerDone(e.data)
+            worker.onerror = e => {
+                e.preventDefault?.()
+                MapDepth.underlayFail()
+            }
+            MapDepth.underlayWorker = worker
+        } catch (error) {
+            MapDepth.underlayFail()
+            return null
+        }
+        MapDepth.underlayState = 'on'
+        return MapDepth.underlayWorker
+    }
+    static underlayFail() {
+        MapDepth.underlayState = 'failed'
+        try {
+            MapDepth.underlayWorker?.terminate()
+        } catch (e) {}
+        MapDepth.underlayWorker = null
+        // (a job under way: its first read makes it, the getter)
+        ++MapDepth.underlayCounters.failed
+    }
+    static underlayWorkerDone(m) {
+        const owner = MapDepth.underlayOwner
+        if (m.error || !m.bitmap) {
+            ++MapDepth.underlayCounters.failed
+            return
+        }
+        if (!owner || !owner.underlayJob || owner.underlayJob.token !== m.underlay) {
+            ++MapDepth.underlayCounters.dropped
+            m.bitmap.close?.()
+            return
+        }
+        owner.underlayJob = undefined
+        owner.underlayCache = m.bitmap
+        ++MapDepth.underlayCounters.built
     }
     static rockWorkerFail(reason) {
         const W = MapDepth.rockWorker
@@ -1895,6 +2019,25 @@ class SelectionOverlay {
 if (typeof document === 'undefined' && typeof importScripts === 'function' && typeof self !== 'undefined')
     self.onmessage = e => {
         const q = e.data
+        // TASK-1633: an underlay's raster (MapDepth.createUnderlayCache's async path), drawn as on the main thread.
+        if (q.underlay) {
+            try {
+                const canvas = new OffscreenCanvas(q.w, q.h), g = canvas.getContext('2d')
+                g.scale(q.scale, q.scale)
+                g.translate(-q.left, -q.top)
+                const outline = new Path2D()
+                outline.moveTo(q.loop[0][0], q.loop[0][1])
+                for (let k = 1; k < q.loop.length; ++k)
+                    outline.lineTo(q.loop[k][0], q.loop[k][1])
+                outline.closePath()
+                MapDepth.paintUnderlay(g, outline, q.faces, q.shadowBlur, q.shadowOffset, q.scale, true)
+                const bitmap = canvas.transferToImageBitmap()
+                self.postMessage({underlay: q.underlay, bitmap}, [bitmap])
+            } catch (error) {
+                self.postMessage({underlay: q.underlay, error: String(error)})
+            }
+            return
+        }
         try {
             const pixels = MapDepth.rockPixels(q.side, q.kx, q.ky, q.open, q.r)
             self.postMessage({key: q.key, r: q.r, ahead: !!q.ahead, ...pixels}, [pixels.data.buffer])

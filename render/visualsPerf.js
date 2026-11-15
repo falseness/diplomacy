@@ -277,7 +277,7 @@
                 for (const n of ['stepLightMap', 'lightMap', 'build', 'updateMapRegion', 'prewarmGlows', 'finishLightMap', 'unstashMap']) wrap(L, n, 'light-map')
             }
             if (G) {
-                for (const n of ['litTile', 'holdStartFrame', 'stepLitView', 'queueLitTiles', 'setLitView', 'litLayerStep', 'drawLitLayerRaster', 'renderLitCellSprites']) wrap(G, n, 'lit-tiles')
+                for (const n of ['litTile', 'holdStartFrame', 'holdLoadFrame', 'stepLitView', 'queueLitTiles', 'setLitView', 'litLayerStep', 'drawLitLayerRaster', 'renderLitCellSprites']) wrap(G, n, 'lit-tiles')
                 for (const n of ['surfaceCacheBuildStep', 'surfaceSplitStep', 'surfacePatchStep', 'standInPreviewStep', 'patchSurfaceCache', 'startSurfaceCacheBuild']) wrap(G, n, 'surface-cache')
                 for (const n of ['buildUnitSector']) wrap(G, n, 'sector-main')
             }
@@ -422,10 +422,10 @@
                 for (const n of ['rebuild', 'buildFaces', 'ensureGeometry', 'renderUnderlay', 'createUnderlayCache', 'drawCacheRegion', 'drawUnderlay',
                         'renderAtmosphericSides', 'createAtmosphericShadow', 'drawAtmosphericShadow', 'renderRim', 'drawRim'])
                     wrap(MapDepth.prototype, n, 'underlay')
-                for (const n of ['buildRockSprite', 'rockSpriteOf', 'rockWorkerDone', 'requestRockSprites']) wrap(MapDepth, n, 'underlay')
+                for (const n of ['buildRockSprite', 'rockSpriteOf', 'rockWorkerDone', 'requestRockSprites', 'underlayWorkerDone']) wrap(MapDepth, n, 'underlay')
             }
             if (G) {
-                for (const n of ['litTile', 'holdStartFrame', 'stepLitView', 'queueLitTiles', 'setLitView', 'litLayerStep', 'drawLitLayerRaster', 'renderLitCellSprites'])
+                for (const n of ['litTile', 'holdStartFrame', 'holdLoadFrame', 'stepLitView', 'queueLitTiles', 'setLitView', 'litLayerStep', 'drawLitLayerRaster', 'renderLitCellSprites'])
                     wrap(G, n, 'lit-tiles')
                 for (const n of ['surfaceCacheBuildStep', 'surfaceSplitStep', 'surfacePatchStep', 'standInPreviewStep', 'patchSurfaceCache', 'startSurfaceCacheBuild'])
                     wrap(G, n, 'surface-cache')
@@ -1161,7 +1161,8 @@
         sectorCounters.wrap(proto)
         // TASK-1614: the holds drawAll returns at before drawing (holdStartFrame: a new board's first frame kept while its lit
         // tiles are built; holdZoomFrame: a zoom gesture's raster made in steps), and whether grid.draw ran (renderPathOf).
-        for (const [name, label] of [['holdStartFrame', 'start-held'], ['holdZoomFrame', 'zoom-held']]) {
+        // TASK-1633: holdLoadFrame (a frame after the start hold that would draw the board partial, kept while its builds run).
+        for (const [name, label] of [['holdStartFrame', 'start-held'], ['holdZoomFrame', 'zoom-held'], ['holdLoadFrame', 'load-held']]) {
             const hold = proto[name]
             if (!hold) continue
             proto[name] = function(...args) {
