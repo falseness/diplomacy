@@ -1,7 +1,7 @@
 {
   "format": 1,
   "algorithm": "sha256(path NUL bytes NUL ...)",
-  "rulesVersion": "5a1af73245e21ecdbcb684fe65e8037a7e1a62dab9a2b89ca8c028d542f58b7c",
+  "rulesVersion": "55d6984911c37a3808d7ef0be02c66576fe2632afb053daf9a88b0288ffb0dae",
   "scripts": [
     {
       "path": "options/assert.js",
@@ -265,8 +265,8 @@
     },
     {
       "path": "sprites/border.js",
-      "sha256": "a271c72d37964b92ce9122e95c5684ddbf33acb846e4028b78376aa559799555",
-      "bytes": 107532
+      "sha256": "c01d463054840ee528cbb9e347d75f10296b5126feaa0e5bd6265b379d0f3751",
+      "bytes": 108131
     },
     {
       "path": "events/geteventpos.js",
@@ -325,8 +325,8 @@
     },
     {
       "path": "sprites/entities/units/unit/interactionWithUnit.js",
-      "sha256": "def6c67f27d159f3f2156a894887c285bce86c1b4f449b3caec63e39043e87fd",
-      "bytes": 32376
+      "sha256": "36573f4bc339e3df65ad1890acdcb890797a2ddf11191026b3931bd108a6b16a",
+      "bytes": 32952
     },
     {
       "path": "sprites/entities/units/unit/unit.js",
@@ -365,8 +365,8 @@
     },
     {
       "path": "sprites/entities/units/range/rangeUnit/interactionWithRangeUnit.js",
-      "sha256": "df866c4de2d364d471f6d908d9f164737cce594b051cbaffde6e4f4d76c32d0d",
-      "bytes": 6129
+      "sha256": "08a62a2132dbeb723056827dc015b5f847f6bc239fb0845125534aaf16ad228d",
+      "bytes": 6491
     },
     {
       "path": "sprites/entities/units/range/rangeUnit/rangeUnit.js",
@@ -395,8 +395,8 @@
     },
     {
       "path": "sprites/entities/units/range/catapult/interactionWithCatapult.js",
-      "sha256": "f966db5860a539c53585675977568be80756435cb2555a721c898e0ccd570277",
-      "bytes": 8075
+      "sha256": "8c3864163ed78afa73731e8e951a13e508890d6b019f08b3e679b3906596a2d8",
+      "bytes": 8165
     },
     {
       "path": "sprites/entities/units/range/catapult/catapult.js",

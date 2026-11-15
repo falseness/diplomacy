@@ -71,6 +71,7 @@ class InteractionWithCatapult extends InteractionWithRangeUnit {
     // Siege never damages units: an open-ground unit is not a target, a hidden
     // unit in fog is unharmed and a garrisoned town/building only loses hp.
     hitUnit() {}
+    attackTarget() { return 'building' } // TASK-1638: siege only ever damages buildings.
     demonShieldsPortal() { return false } // A demon never shields its portal.
     hitBuilding(cell, catapult) {
         this.noteAttack(cell.coord, catapult)

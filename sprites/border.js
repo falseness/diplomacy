@@ -1534,6 +1534,12 @@ class SelectionOverlay {
                     targetsNow.add(k)
             }
         }
+        // TASK-1638: what the attack on each hit-now cell would hit (the interaction's own attackTarget).
+        const targetKinds = new Map()
+        for (const k of targetsNow) {
+            const coord = SelectionOverlay.coordOf(k)
+            targetKinds.set(k, interaction.attackTarget(grid.arr[coord.x][coord.y], unit))
+        }
         // TASK-1437: a melee unit stands on the cell it hits when the hit leaves it standable (a last hit): that cell is
         // part of the move plate and keeps its hit-now emblem. Ranged and siege units never move onto their target.
         if (!ranged) {
@@ -1565,7 +1571,7 @@ class SelectionOverlay {
         const rangeSet = new Set([...rangeCells, key(unit.coord)])
         return {
             coord: {x: unit.coord.x, y: unit.coord.y}, moves: interaction.moves, radius, ranged: rangeShown, siege,
-            range: interaction.range, moveCells, rangeCells, rangeExcluded, targetsNow, targetsAfterStep,
+            range: interaction.range, moveCells, rangeCells, rangeExcluded, targetsNow, targetKinds, targetsAfterStep,
             moveLoops: SelectionOverlay.edgeLoops(moveSet),
             rangeLoops: rangeShown ? SelectionOverlay.edgeLoops(rangeSet) : []
         }
@@ -1858,13 +1864,18 @@ class SelectionOverlay {
         ctx.stroke()
         ctx.restore()
     }
+    // TASK-1638: the siege icon on a target the attack would hit as a building, the unit type's icon on a unit.
+    static targetIcon(data, k) {
+        if (data.siege || data.targetKinds.get(k) === 'building')
+            return 'statBuildingDmg'
+        return SelectionOverlay.isRanged(data.unit.interaction) ? 'statRange' : 'statDmg'
+    }
     drawTargets(ctx, data) {
-        const icon = data.siege ? 'statBuildingDmg' : SelectionOverlay.isRanged(data.unit.interaction) ? 'statRange' : 'statDmg'
         for (const k of data.targetsAfterStep.keys())
             if (!data.targetsNow.has(k))
                 this.stepRing(ctx, SelectionOverlay.targetPos(k))
         for (const k of data.targetsNow)
-            this.emblem(ctx, SelectionOverlay.targetPos(k), icon)
+            this.emblem(ctx, SelectionOverlay.targetPos(k), SelectionOverlay.targetIcon(data, k))
     }
     static targetPos(key) {
         const coord = SelectionOverlay.coordOf(key), p = grid.arr[coord.x][coord.y].hexagon.calcPos()

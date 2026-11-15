@@ -77,6 +77,14 @@ class InteractionWithRangeUnit extends InterationWithUnit {
         return !rangeUnit.player.ignoresCell(cell) && !this.cantRangeInteract(cell.coord, rangeUnit) &&
             (this.cellHasAttackableBuilding(cell, rangeUnit) || this.cellHasEnemyUnit(cell, rangeUnit))
     }
+    // TASK-1638: sendInstructions' order: static nature is never hit, then the melee order (a priority building,
+    // else an enemy unit), then an enemy production.
+    attackTarget(cell, rangeUnit) {
+        if (cell.building.isStaticNature)
+            return undefined
+        return super.attackTarget(cell, rangeUnit) ||
+            (this.cellHasEnemyBuildingProduction(cell, rangeUnit) ? 'building' : undefined)
+    }
     sendInstructions(cell, rangeUnit) {
         if (rangeUnit.player.ignoresCell(cell)) return true
         let coord = cell.coord
@@ -93,8 +101,7 @@ class InteractionWithRangeUnit extends InterationWithUnit {
             //this.removeSelect()
             return super.sendInstructions(cell, rangeUnit)
         }
-        if (this.cellHasEnemyBuilding(cell, rangeUnit) &&
-                !this.demonShieldsPortal(cell, rangeUnit)) {
+        if (this.buildingTakesHit(cell, rangeUnit)) {
             let result = this.buildingAttack(cell, rangeUnit)
             if (result)
                 return true

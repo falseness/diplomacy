@@ -259,9 +259,19 @@ class InterationWithUnit {
         this.addHittedBuildingUndo(cell)
         cell.building.wasHitted = true
     }
+    // The building is the priority target of an attack on cell, except a demon-held portal.
+    buildingTakesHit(cell, unit) {
+        return this.cellHasEnemyBuilding(cell, unit) && !this.demonShieldsPortal(cell, unit)
+    }
+    // TASK-1638: what an attack on cell would hit, in hitIfCellHasEnemy's order: 'building' (a hitable priority
+    // building; an unhitable one only when no enemy unit takes the hit instead), 'unit', or undefined.
+    attackTarget(cell, unit) {
+        if (this.buildingTakesHit(cell, unit) && (cell.building.isHitable || !this.cellHasEnemyUnit(cell, unit)))
+            return 'building'
+        return this.cellHasEnemyUnit(cell, unit) ? 'unit' : undefined
+    }
     hitIfCellHasEnemy(cell, unit) {
-        // the building is the priority target, except a demon-held portal
-        if (this.cellHasEnemyBuilding(cell, unit) && !this.demonShieldsPortal(cell, unit)) {
+        if (this.buildingTakesHit(cell, unit)) {
             if (cell.building.isHitable) {
                 this.hitBuilding(cell, unit)
                 return false
