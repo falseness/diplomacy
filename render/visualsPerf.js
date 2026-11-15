@@ -352,7 +352,7 @@
     // TASK-1631 (LEVEL LOAD 1/5): main-thread ms per level-load phase, exclusive (a nested phase's time is its own), on a stack
     // of its own (taskSources' sources unchanged). Phases: rules (the game set up: GameManager.start / load, a save's
     // unpacking, TutorialManager.start, co-op map generation; Grid's constructor and the phases below excluded), grid-build
-    // (Grid's constructor), tile-variants (the atmospheric neutral / fog / owned tile variants: atmosphericLighting.tileVariant,
+    // (Grid's constructor), tile-variants (the atmospheric neutral / fog / owned tile variants: atmosphericLighting.tileVariant, stoneVariant,
     // fogVariant, tileDetail, ownedTile, prewarmOwnedTiles), underlay (MapDepth: geometry, underlay cache, atmospheric sides,
     // rim, shadow, rock sprites), lit-tiles (the lit view's tiles and the start hold: taskSources' lit-tiles methods), sectors
     // (unit sectors and lit tile sectors built / stored / received from the Worker), sprites (SpriteCache, supersampled
@@ -414,7 +414,7 @@
                 target.loadPhase = 'grid-build'
             }
             if (L) {
-                for (const n of ['tileVariant', 'fogVariant', 'tileDetail', 'ownedTile', 'prewarmOwnedTiles']) wrap(L, n, 'tile-variants')
+                for (const n of ['tileVariant', 'stoneVariant', 'fogVariant', 'tileDetail', 'ownedTile', 'prewarmOwnedTiles']) wrap(L, n, 'tile-variants')
                 for (const n of ['spillSprite', 'liftSprite']) wrap(L, n, 'sprites')
                 for (const n of ['stepLightMap', 'lightMap', 'build', 'updateMapRegion', 'prewarmGlows', 'finishLightMap', 'unstashMap']) wrap(L, n, 'light-map')
             }

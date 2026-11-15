@@ -124,8 +124,8 @@ const atmosphericLighting = {
     KEY_ANGLE: -120,
     // Tile look (TASK-1580): weathered carved warm-tan sandstone slabs set in thin brass trim (TASK-1582). Each visible
     // cell is inset by half the grout (trim) width over a grout fill of the visible cells, so there are no outlines or
-    // seams. Neutral tiles draw one of a few procedurally generated, cached sandstone variants (tileVariant); owned tiles
-    // their colour with the same stone detail, under a faint sheen.
+    // seams. Neutral tiles draw one of a few procedurally generated, cached variants (tileVariant: TASK-1640's soft worn
+    // slabs, TILE.slab); owned tiles their colour with the carved sandstone's detail (stoneVariant), under a faint sheen.
     TILE: {
         variants: 8,
         rasterScale: 1.5,
@@ -173,10 +173,34 @@ const atmosphericLighting = {
             // from the middle (hex distance from, of the inset tile's apothem) to its rim (to), more on the side away from the
             // key light (x (1 + lean x the pixel's offset along the light, -1..1)), so each slab is lit on its crown.
             dome: {from: 0.56, to: 0.95, mul: [0.86, 0.6, 0.63], lean: 0.55}
+        },
+        // TASK-1640: the neutral tile (tileVariant), as the concept's: one soft worn slab of muted peach stone (stone, each
+        // slab's shade +- shade). Relief: soft rounded lumps (a smooth bump per seed of a jittered grid of cell hex radii,
+        // radius of the cell wide, height 1 +- vary, joined by a smooth maximum of sharpness smooth) lit by the upper-left key
+        // light: slopes facing it towards glow, the others towards dusk (slope gain, light / shadow strengths), the hollows
+        // between lumps a little darker (hollow).
+        // Mottle: soft blended light and dark patches, a value noise of octaves [cell (hex radii), weight] towards light
+        // (above 0) or dark (below), times gain. Cracks [min, max] per slab: fine faint lines (crack: width (hex radii),
+        // alpha, colour). Dome: the slab lit on its crown (lift, lean along the key light), its rim multiplied towards rim
+        // (from, to of the apothem). Bevel: a thin soft lit lip on the edges facing the light, a shadowed one on the others.
+        slab: {
+            stone: [255, 174, 102],
+            shade: 0.035,
+            relief: {cell: 0.5, radius: 0.85, vary: 0.45, smooth: 9, slope: 0.37, light: 0.8, shadow: 0.6, hollow: 0.06,
+                glow: [255, 234, 150], dusk: [184, 122, 94]},
+            light: [255, 214, 146],
+            dark: [212, 144, 104],
+            mottle: {octaves: [[0.7, 0.6], [0.35, 0.3]], gain: 0.9},
+            cracks: [1, 3],
+            crack: {width: 0.012, alpha: 0.28, color: [112, 70, 50]},
+            dome: {lift: 0.05, lean: 0.4, from: 0.4, to: 1, rim: [0.84, 0.76, 0.74]},
+            bevel: {width: 0.07, lit: 0.35, shadow: 0.3}
         }
     },
     tileVariants: null,
     tileVariantBuilds: 0,
+    stoneVariants: null,
+    stoneVariantBuilds: 0,
     tileDetails: null,
     tileDetailBuilds: 0,
     ownedTiles: null,
@@ -1403,12 +1427,156 @@ const atmosphericLighting = {
     // lower-right wall lit by the upper-left key light), a few fine cracks and chips at the rim, and a bevel: a lit lip
     // along the upper-left edges and a darker band along the lower-right ones, so each cell reads as a carved slab. No
     // veins, no polished highlight. Clipped to the inset tile, centred in the raster.
+    // TASK-1640: a soft value noise over a size x size raster: a jittered lattice of random values every step pixels,
+    // smoothstep-interpolated (no creases), -0.5..0.5.
+    valueNoise(rand, size, step) {
+        const n = Math.ceil(size / step) + 2, lattice = new Float32Array(n * n), out = new Float32Array(size * size)
+        for (let i = 0; i < lattice.length; i++) lattice[i] = rand() - 0.5
+        const ox = rand() * step, oy = rand() * step
+        for (let y = 0; y < size; y++) {
+            const fy = (y + oy) / step, j = Math.floor(fy), ty = fy - j, sy = ty * ty * (3 - 2 * ty)
+            for (let x = 0; x < size; x++) {
+                const fx = (x + ox) / step, i = Math.floor(fx), tx = fx - i, sx = tx * tx * (3 - 2 * tx), k = j * n + i
+                const top = lattice[k] + (lattice[k + 1] - lattice[k]) * sx
+                const bottom = lattice[k + n] + (lattice[k + n + 1] - lattice[k + n]) * sx
+                out[y * size + x] = top + (bottom - top) * sy
+            }
+        }
+        return out
+    },
+    // TASK-1640: neutral tile variants, built once per hex radius (TILE.slab), as the concept's tiles: one soft worn slab of
+    // muted peach stone with soft blended light and dark patches (value noise) over broad soft lumps lit by the key light
+    // (no facet creases, pits or chips), a few fine faint cracks, a gentle dome lit on its crown by the upper-left key light, and a thin soft bevel.
+    // Clipped to the inset tile, centred in the raster; fog variants are made from them (fogVariant).
     tileVariant(index) {
         if (!this.tileVariants || this.tileVariants.radius !== basis.r) {
             this.tileVariants = Object.assign(new Array(this.TILE.variants), {radius: basis.r})
             ++this.tileVariantBuilds
         }
         if (this.tileVariants[index]) return this.tileVariants[index]
+        const r = basis.r, s = this.TILE.rasterScale, size = Math.ceil(2 * r * s) + 4, T = this.TILE.slab
+        const surface = document.createElement('canvas')
+        surface.width = surface.height = size
+        const g = surface.getContext('2d')
+        g.setTransform(s, 0, 0, s, size / 2, size / 2)
+        const R = this.tileRadius()
+        g.beginPath()
+        this.hexagonPath(g, 0, 0, R)
+        g.fillStyle = '#fff'
+        g.fill()
+        const rand = this.random(0x9e3779b9 * (index + 1))
+        const shade = 1 - T.shade + 2 * T.shade * rand()
+        const stone = T.stone.map(v => v * shade)
+        // Mottle: octaves of soft value noise.
+        const mottle = new Float32Array(size * size)
+        for (const [cell, weight] of T.mottle.octaves) {
+            const noise = this.valueNoise(rand, size, cell * r * s)
+            for (let i = 0; i < mottle.length; i++) mottle[i] += weight * noise[i]
+        }
+        // Relief: rounded lumps (a smooth compact bump each, radius of the cell), splatted over the raster and joined by a
+        // smooth maximum (smooth), so each lump keeps its own crown with soft hollows between.
+        const F = T.relief, step = F.cell * r * s, rho = F.radius * step, reach = Math.ceil(rho), K = F.smooth
+        const sum = new Float32Array(size * size).fill(1), cells = Math.ceil(size / step) + 2
+        for (let j = 0; j < cells; j++)
+            for (let i = 0; i < cells; i++) {
+                const sx = (i - 1 + 0.15 + 0.7 * rand()) * step, sy = (j - 1 + 0.15 + 0.7 * rand()) * step
+                const amp = 1 + (rand() * 2 - 1) * F.vary
+                for (let y = Math.max(0, Math.floor(sy - reach)); y < Math.min(size, Math.ceil(sy + reach)); y++)
+                    for (let x = Math.max(0, Math.floor(sx - reach)); x < Math.min(size, Math.ceil(sx + reach)); x++) {
+                        const q = ((x - sx) ** 2 + (y - sy) ** 2) / (rho * rho)
+                        if (q < 1) sum[y * size + x] += Math.exp(K * amp * (1 - q) ** 3) - 1
+                    }
+            }
+        const height = sum.map(v => Math.log(v) / K)
+        let hmin = Infinity, hmax = -Infinity
+        for (const v of height) {
+            if (v < hmin) hmin = v
+            if (v > hmax) hmax = v
+        }
+        const image = g.getImageData(0, 0, size, size), d = image.data, c = size / 2, apothem = R * s * Math.sqrt(3) / 2
+        const a = T.dome, la = this.TILE.sandstone.lightAngle * Math.PI / 180, lx = Math.cos(la), ly = Math.sin(la)
+        const col = new Float32Array(3)
+        for (let y = 1; y < size - 1; y++)
+            for (let x = 1; x < size - 1; x++) {
+                const i = y * size + x, p = 4 * i
+                if (!d[p + 3]) continue
+                // Slope towards the light: positive where the surface rises away from it (faces it).
+                const gx = (height[i + 1] - height[i - 1]) / 2, gy = (height[i + size] - height[i - size]) / 2
+                const lit = -(gx * lx + gy * ly) * step * F.slope, hn = (height[i] - hmin) / (hmax - hmin)
+                const m = mottle[i] * T.mottle.gain
+                for (let ch = 0; ch < 3; ch++) {
+                    let v = stone[ch]
+                    v += m > 0 ? (T.light[ch] - v) * Math.min(1, m) : (T.dark[ch] - v) * Math.min(1, -m)
+                    v *= 1 - F.hollow * (1 - hn)
+                    v += lit > 0 ? (F.glow[ch] - v) * Math.min(1, lit * F.light) : (F.dusk[ch] - v) * Math.min(1, -lit * F.shadow)
+                    col[ch] = v
+                }
+                // Dome: hex distance from the centre (of the apothem), lit along the key light.
+                const dx = x + 0.5 - c, dy = y + 0.5 - c
+                const h = Math.max(Math.abs(dy), Math.abs(dx) * Math.sqrt(3) / 2 + Math.abs(dy) / 2) / apothem
+                let k = Math.min(1, Math.max(0, (h - a.from) / (a.to - a.from)))
+                k = k * k * (3 - 2 * k)
+                const toward = Math.max(-1, Math.min(1, (dx * lx + dy * ly) / apothem))
+                const lift = 1 + a.lift * (1 - h * h) * (1 + a.lean * toward), rimK = k * (1 - a.lean * toward)
+                for (let ch = 0; ch < 3; ch++) d[p + ch] = col[ch] * lift * (1 - (1 - a.rim[ch]) * Math.max(0, rimK))
+            }
+        g.putImageData(image, 0, 0)
+        g.save()
+        g.beginPath()
+        this.hexagonPath(g, 0, 0, R)
+        g.clip()
+        const rgba = (col, alpha) => `rgba(${col.join(',')},${alpha.toFixed(3)})`
+        // Cracks: fine faint jagged lines, sometimes from the rim.
+        g.lineCap = g.lineJoin = 'round'
+        const cracks = T.cracks[0] + Math.floor(rand() * (T.cracks[1] - T.cracks[0] + 1))
+        for (let n = 0; n < cracks; n++) {
+            const angle = rand() * 2 * Math.PI, from = (0.35 + 0.6 * rand()) * R, length = (0.25 + 0.3 * rand()) * r, segments = 6
+            let heading = angle + Math.PI + (rand() - 0.5) * 1.2
+            const points = [{x: Math.cos(angle) * from, y: Math.sin(angle) * from}]
+            for (let q = 0; q < segments; q++) {
+                heading += (rand() - 0.5) * 1.0
+                const last = points[points.length - 1]
+                points.push({x: last.x + Math.cos(heading) * length / segments, y: last.y + Math.sin(heading) * length / segments})
+            }
+            g.strokeStyle = rgba(T.crack.color, T.crack.alpha * (0.6 + 0.4 * rand()))
+            g.lineWidth = T.crack.width * r
+            g.beginPath()
+            points.forEach((pt, q) => q ? g.lineTo(pt.x, pt.y) : g.moveTo(pt.x, pt.y))
+            g.stroke()
+        }
+        // Bevel: a thin soft lip, lit on the edges facing the key light, shadowed on the others.
+        const B = T.bevel, lip = this.TILE.sandstone.lip, hollow = this.TILE.sandstone.hollow
+        const inner = (R * Math.sqrt(3) / 2 - B.width * r) / (R * Math.sqrt(3) / 2)
+        const corner = (q, f) => ({x: Math.cos(q * Math.PI / 3) * R * f, y: Math.sin(q * Math.PI / 3) * R * f})
+        for (let q = 0; q < 6; q++) {
+            const normal = (q + 0.5) * Math.PI / 3, facing = Math.cos(normal - la)
+            const color = facing > 0 ? lip : hollow, alpha = (facing > 0 ? B.lit : B.shadow) * Math.abs(facing)
+            if (alpha < 0.01) continue
+            const nx = Math.cos(normal), ny = Math.sin(normal), ap = R * Math.sqrt(3) / 2
+            const band = g.createLinearGradient(nx * ap, ny * ap, nx * ap * inner, ny * ap * inner)
+            band.addColorStop(0, rgba(color, alpha))
+            band.addColorStop(1, rgba(color, 0))
+            g.fillStyle = band
+            const [p0, p1, p2, p3] = [corner(q, 1.02), corner(q + 1, 1.02), corner(q + 1, inner), corner(q, inner)]
+            g.beginPath()
+            g.moveTo(p0.x, p0.y)
+            g.lineTo(p1.x, p1.y)
+            g.lineTo(p2.x, p2.y)
+            g.lineTo(p3.x, p3.y)
+            g.closePath()
+            g.fill()
+        }
+        g.restore()
+        return this.tileVariants[index] = surface
+    },
+    // TASK-1640: no longer the neutral tile (tileVariant): kept, unchanged, as the source of the owned tiles' stone detail
+    // (tileDetail) and shape (ownedTile), so owned tiles look as before.
+    stoneVariant(index) {
+        if (!this.stoneVariants || this.stoneVariants.radius !== basis.r) {
+            this.stoneVariants = Object.assign(new Array(this.TILE.variants), {radius: basis.r})
+            ++this.stoneVariantBuilds
+        }
+        if (this.stoneVariants[index]) return this.stoneVariants[index]
         const r = basis.r, s = this.TILE.rasterScale, size = Math.ceil(2 * r * s) + 4, T = this.TILE.sandstone
         const surface = document.createElement('canvas')
         surface.width = surface.height = size
@@ -1529,7 +1697,7 @@ const atmosphericLighting = {
         }
         // TASK-1585: the slab's dome (multiply leaves the transparent outside of the tile as it is: the dome is transparent there).
         this.applyDome(g)
-        return this.tileVariants[index] = surface
+        return this.stoneVariants[index] = surface
     },
     // TASK-1585: TILE.sandstone.dome as a multiply raster the size of a variant (opaque over the inset tile, transparent
     // outside it), built once per hex radius: the sandstone variants (so fog too) and the owned tiles are multiplied
@@ -1849,7 +2017,7 @@ const atmosphericLighting = {
     // DETAIL_STEP_PIXELS pixels of either pass, the menu's prebuild runs it in steps; tileDetail runs it through).
     DETAIL_STEP_PIXELS: 32768,
     *tileDetailSteps(index) {
-        const tile = this.tileVariant(index), box = this.tileBox(tile.width)
+        const tile = this.stoneVariant(index), box = this.tileBox(tile.width)
         const {data} = tile.getContext('2d').getImageData(box.x, box.y, box.w, box.h)
         yield
         const offset = new Float32Array(data.length / 4), step = this.DETAIL_STEP_PIXELS
@@ -1926,6 +2094,10 @@ const atmosphericLighting = {
             if (!this.tileVariants || this.tileVariants.radius !== basis.r || !this.tileVariants[i]) {
                 this.tileVariant(i)
                 yield 'tileVariant ' + i
+            }
+            if (!this.stoneVariants || this.stoneVariants.radius !== basis.r || !this.stoneVariants[i]) {
+                this.stoneVariant(i)
+                yield 'stoneVariant ' + i
             }
             if (!this.tileDetailArray()[i]) {
                 const steps = this.tileDetailSteps(i)
@@ -2114,7 +2286,7 @@ const atmosphericLighting = {
             invert()
             g.setTransform(1, 0, 0, 1, 0, 0)
             g.globalCompositeOperation = 'destination-in'
-            g.drawImage(this.tileVariant(index), 0, 0)
+            g.drawImage(this.stoneVariant(index), 0, 0)
             g.globalCompositeOperation = 'source-over'
             yield OWNED_TILE_PIECE
         } else {
@@ -2128,7 +2300,7 @@ const atmosphericLighting = {
             g.putImageData(image, box.x, box.y)
         }
         // TASK-1585: the slab's dome, as the stone's.
-        this.applyDome(g, this.tileVariant(index))
+        this.applyDome(g, this.stoneVariant(index))
         g.setTransform(this.TILE.rasterScale, 0, 0, this.TILE.rasterScale, size / 2, size / 2)
         g.globalCompositeOperation = 'source-atop'
         this.drawSheen(g, 0, 0, this.TILE.sheen)

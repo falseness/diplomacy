@@ -11160,7 +11160,7 @@ class Grid extends SpritesGroup {
         // Each piece's kind (startPieces) and whether it is heavy to rasterize (holdStartFrame).
         for (const piece of atmosphericLighting.ownedFillSteps([...fills])) {
             const kind = piece.split(' ')[0]
-            yield [kind, kind === 'tileVariant' || kind === 'ownedTile']
+            yield [kind, kind === 'tileVariant' || kind === 'stoneVariant' || kind === 'ownedTile']
         }
         for (;;) {
             const done = atmosphericLighting.stepLightMap(this, undefined, true)
