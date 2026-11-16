@@ -6,9 +6,17 @@ ROOT = Path(__file__).resolve().parents[1]
 NAMES = ('town', 'farm', 'barrack', 'wall', 'bastion', 'tower', 'goldmine',
          'demonPortalMelee', 'demonPortalRanged', 'demonPortalSiege',
          'demonPortalHeavy', 'demonPortalCavalry', 'demonPortalChaos', 'demonPortalMage')
+# GPT portal art (TASK-1645) ships pre-lit: its atmospheric variant is the
+# sprite verbatim, no relight (like build-atmospheric-nature.py's VERBATIM).
+VERBATIM = ('demonPortalMelee', 'demonPortalRanged', 'demonPortalSiege',
+            'demonPortalHeavy', 'demonPortalCavalry', 'demonPortalChaos',
+            'demonPortalMage')
 DEST = ROOT / 'assets/atmosphere/buildings'
 DEST.mkdir(parents=True, exist_ok=True)
 for name in NAMES:
+    if name in VERBATIM:
+        (DEST / (name+'.svg')).write_bytes((ROOT / 'assets/sprites' / (name+'.svg')).read_bytes())
+        continue
     source = (ROOT / 'assets/sprites' / (name + '.svg')).read_text()
     def gradient(m):
         block = m[0]
