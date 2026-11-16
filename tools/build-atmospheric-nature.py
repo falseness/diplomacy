@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 """Relight existing painted surfaces; never alter geometry, opacity or anchors.
 
-bush, lake and mountain are the polished hand-built vectors (TASK-1588): the
-atmospheric variant is the sprite verbatim, no relight. hill and sea keep the
+bush, lake, mountain and sea are the GPT light vectors (TASK-1646): the
+atmospheric variant is the sprite verbatim, no relight. hill keeps the
 relight below."""
 from pathlib import Path
 import re
 
 ROOT = Path(__file__).resolve().parents[1]
-VERBATIM = ('bush', 'lake', 'mountain')
+VERBATIM = ('bush', 'lake', 'mountain', 'sea')
 
 
 def paint(hex_color, delta):
