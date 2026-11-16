@@ -160,6 +160,110 @@ function drawSupersampledImage(ctx, image, x, y, w, h) {
     for (const temp of temps)
         temp.width = temp.height = 0
 }
+// TASK-1649: the sprite outline is drawn by the game, not baked into the asset files: a crisp #1E0F06 line of
+// OUTLINE_WIDTH_FRAC of the drawn sprite size (1.5 px at 128, 2.6 px at 219, 21.4 px at 911) under the art of every
+// polished unit body and demon portal, painted once per cache paint (board cache, so the team-colour variants inherit
+// it; the unit panel portrait at its own size). Buildings, nature, spritesOld/ and undead/ get none.
+const OUTLINE_WIDTH_FRAC = 6 / 512
+const OUTLINE_COLOUR = Object.freeze({r: 0x1E, g: 0x0F, b: 0x06})
+const OUTLINED = Object.freeze(['noob', 'archer', 'archerLeft', 'KOHb', 'KOHbLeft', 'normchel', 'catapult', 'catapultLeft',
+    'imp', 'clawling', 'hound', 'houndLeft', 'brute', 'bulwark', 'spitter', 'emberArcher', 'hexcaster', 'ravager',
+    'ravagerLeft', 'demonLord', 'bombard', 'bombardLeft', 'mortar', 'mortarLeft', 'demonQueen',
+    'demonPortalMelee', 'demonPortalRanged', 'demonPortalSiege', 'demonPortalHeavy', 'demonPortalCavalry',
+    'demonPortalChaos', 'demonPortalMage'])
+function spriteOutlined(name) {
+    return otherSettings.usePolishedSprites && OUTLINED.includes(name)
+}
+// 1D squared distance transform (Felzenszwalb and Huttenlocher) of f[0..n) into d, with scratch v and z.
+function outlineDistance1d(f, n, d, v, z) {
+    let k = 0
+    v[0] = 0
+    z[0] = -Infinity
+    z[1] = Infinity
+    for (let q = 1; q < n; ++q) {
+        if (f[q] === Infinity)
+            continue
+        if (f[v[k]] === Infinity) {
+            v[k] = q
+            continue
+        }
+        let s = ((f[q] + q * q) - (f[v[k]] + v[k] * v[k])) / (2 * q - 2 * v[k])
+        while (s <= z[k]) {
+            --k
+            s = ((f[q] + q * q) - (f[v[k]] + v[k] * v[k])) / (2 * q - 2 * v[k])
+        }
+        ++k
+        v[k] = q
+        z[k] = s
+        z[k + 1] = Infinity
+    }
+    k = 0
+    for (let q = 0; q < n; ++q) {
+        while (z[k + 1] < q)
+            ++k
+        d[q] = f[v[k]] === Infinity ? Infinity : (q - v[k]) * (q - v[k]) + f[v[k]]
+    }
+}
+// Paints the outline under the art already on canvas (size: the drawn sprite size): each pixel gets the outline colour
+// with the coverage of a band of the given width around the silhouette (alpha >= 128), from its exact Euclidean
+// distance to the silhouette (about 1 px of anti-aliasing, no blur), and the art is composited over it (source-over).
+// Opaque art pixels are unchanged.
+function paintSpriteOutline(canvas, size) {
+    const width = canvas.width, height = canvas.height, ctx = canvas.getContext('2d')
+    const w = OUTLINE_WIDTH_FRAC * size
+    if (!ctx || !width || !height || !(w > 0))
+        return
+    const data = ctx.getImageData(0, 0, width, height), px = data.data
+    const n = width * height, grid = new Float64Array(n)
+    for (let i = 0; i < n; ++i)
+        grid[i] = px[i * 4 + 3] >= 128 ? 0 : Infinity
+    const len = Math.max(width, height)
+    const f = new Float64Array(len), d = new Float64Array(len), v = new Int32Array(len), z = new Float64Array(len + 1)
+    for (let x = 0; x < width; ++x) {
+        for (let y = 0; y < height; ++y) f[y] = grid[y * width + x]
+        outlineDistance1d(f, height, d, v, z)
+        for (let y = 0; y < height; ++y) grid[y * width + x] = d[y]
+    }
+    for (let y = 0; y < height; ++y) {
+        const row = y * width
+        for (let x = 0; x < width; ++x) f[x] = grid[row + x]
+        outlineDistance1d(f, width, d, v, z)
+        for (let x = 0; x < width; ++x) grid[row + x] = d[x]
+    }
+    // The band: the pixels the outline shows under (not opaque, coverage > 0), with their art before the outline,
+    // kept on the canvas (spriteOutline) so the team-colour variants recolour the art alone (compositeSpriteOutline).
+    let count = 0
+    for (let i = 0; i < n; ++i)
+        if (px[i * 4 + 3] !== 255 && w + 1 - Math.sqrt(grid[i]) > 0)
+            ++count
+    const band = {index: new Int32Array(count), coverage: new Float32Array(count), art: new Uint8ClampedArray(count * 4)}
+    for (let i = 0, k = 0; i < n; ++i) {
+        if (px[i * 4 + 3] === 255)
+            continue
+        // Pixel centre to silhouette edge is the distance to the nearest silhouette pixel centre less half a pixel.
+        const coverage = Math.min(1, w + 1 - Math.sqrt(grid[i]))
+        if (!(coverage > 0))
+            continue
+        band.index[k] = i
+        band.coverage[k] = coverage
+        band.art.set(px.subarray(i * 4, i * 4 + 4), k * 4)
+        ++k
+    }
+    compositeSpriteOutline(px, band)
+    canvas.spriteOutline = band
+    ctx.putImageData(data, 0, 0)
+}
+// Puts each band pixel of px (straight-alpha RGBA) over the outline colour at the band's coverage (source-over).
+function compositeSpriteOutline(px, band) {
+    const {r, g, b} = OUTLINE_COLOUR
+    for (let k = 0; k < band.index.length; ++k) {
+        const j = band.index[k] * 4, sa = px[j + 3] / 255, oa = band.coverage[k] * (1 - sa), ra = sa + oa
+        px[j] = Math.round((px[j] * sa + r * oa) / ra)
+        px[j + 1] = Math.round((px[j + 1] * sa + g * oa) / ra)
+        px[j + 2] = Math.round((px[j + 2] * sa + b * oa) / ra)
+        px[j + 3] = Math.round(ra * 255)
+    }
+}
 function cacheImage(image) {
     let tmpCanvas = document.createElement('canvas')
     paintCachedImage(tmpCanvas, image)
@@ -184,8 +288,12 @@ function paintCachedImage(tmpCanvas, image) {
         x: width / 2,
         y: height / 2
     }
-    if (!failedImages.has(image))
+    tmpCanvas.spriteOutline = null
+    if (!failedImages.has(image)) {
         drawSupersampledImage(tmpCtx, assets[image], pos.x - width / 2, pos.y - height / 2, width, height)
+        if (spriteOutlined(image))
+            paintSpriteOutline(tmpCanvas, width)
+    }
     tmpCanvas.contentVersion = (tmpCanvas.contentVersion || 0) + 1 // TASK-1554 (InterfaceRecorder)
 }
 // Repaints the existing cached canvases in place, so the grid surface cache image refs
@@ -290,6 +398,8 @@ function teamColourPortrait(name, rgb, size, slot = name) {
     const base = document.createElement('canvas')
     base.width = base.height = size
     drawSupersampledImage(base.getContext('2d'), image, 0, 0, size, size)
+    if (spriteOutlined(name))
+        paintSpriteOutline(base, size)
     const canvas = kept ? kept.canvas : document.createElement('canvas')
     paintTeamColourImage(canvas, base, key, name)
     teamColourPortraits.set(slot, {name, key, size, src: image.src, canvas})
@@ -385,6 +495,11 @@ function paintTeamColourImage(variant, base, key, name) {
         return
     const data = base.getContext('2d').getImageData(0, 0, width, height)
     const px = data.data
+    // TASK-1649: an outlined base: recolour the art under the outline band, then put the outline back under it.
+    const band = base.spriteOutline
+    if (band)
+        for (let k = 0; k < band.index.length; ++k)
+            px.set(band.art.subarray(k * 4, k * 4 + 4), band.index[k] * 4)
     const pr = ((key >> 16) & 255) / 255, pg = ((key >> 8) & 255) / 255, pb = (key & 255) / 255
     const [ph, ps] = teamColourHsv(pr, pg, pb)
     // The player's colour at full value: the cloth hue target (r, g, b sum to its own luminance below).
@@ -420,6 +535,8 @@ function paintTeamColourImage(variant, base, key, name) {
         px[i + 1] = Math.round(cg * 255)
         px[i + 2] = Math.round(cb * 255)
     }
+    if (band)
+        compositeSpriteOutline(px, band)
     variant.getContext('2d').putImageData(data, 0, 0)
     variant.contentVersion = (variant.contentVersion || 0) + 1
 }
