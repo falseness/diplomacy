@@ -6,9 +6,12 @@ ROOT = Path(__file__).resolve().parents[1]
 NAMES = ('town', 'farm', 'barrack', 'wall', 'bastion', 'tower', 'goldmine',
          'demonPortalMelee', 'demonPortalRanged', 'demonPortalSiege',
          'demonPortalHeavy', 'demonPortalCavalry', 'demonPortalChaos', 'demonPortalMage')
-# GPT portal art (TASK-1645) ships pre-lit: its atmospheric variant is the
-# sprite verbatim, no relight (like build-atmospheric-nature.py's VERBATIM).
-VERBATIM = ('demonPortalMelee', 'demonPortalRanged', 'demonPortalSiege',
+# GPT building (TASK-1646) and portal (TASK-1645) art ships pre-lit: its
+# atmospheric variant is the sprite verbatim, no relight (like
+# build-atmospheric-nature.py's VERBATIM). The relight below is kept for
+# non-verbatim sprites.
+VERBATIM = ('town', 'farm', 'barrack', 'wall', 'bastion', 'tower', 'goldmine',
+            'demonPortalMelee', 'demonPortalRanged', 'demonPortalSiege',
             'demonPortalHeavy', 'demonPortalCavalry', 'demonPortalChaos',
             'demonPortalMage')
 DEST = ROOT / 'assets/atmosphere/buildings'
