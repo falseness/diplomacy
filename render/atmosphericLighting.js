@@ -322,6 +322,9 @@ const atmosphericLighting = {
         this.mapState = null
         this.mapOwners = null
         this.staged = null
+        // TASK-1657: a shadow build's canvases kept for the next.
+        if (this.shadowSpare) this.shadowSpare.map.width = this.shadowSpare.map.height = this.shadowSpare.gain.width = this.shadowSpare.gain.height = 0
+        this.shadowSpare = null
         // TASK-1572: the map kept aside (MAP_STASH) released too.
         if (this.mapStash) this.mapStash.map.width = this.mapStash.map.height = this.mapStash.gain.width = this.mapStash.gain.height = 0
         this.mapStash = null
@@ -595,33 +598,133 @@ const atmosphericLighting = {
         if (!bounds || bounds.right <= bounds.left || bounds.bottom <= bounds.top) return null
         const key = JSON.stringify(bounds)
         const scale = this.resolution(bounds, cap)
-        const zooming = this.zooming()
-        // Only the camera's map (no cap: what the frame and its lit view draw), never a cache's bake of the whole board.
-        const trusted = cap === undefined && this.trusts(board, key, scale)
-        if (trusted && (trusted !== 2 || this.syncOwners(board, cap, true))) {
-            ++this.work.trusted
+        if (this.mapAsIs(board, cap, key, scale))
             return this.vouch(board, cap, key, scale)
-        }
-        // With the cell layer (ownerFree) the map is brought up to the owners now where they differ (syncOwners) before it is
-        // drawn from, the light state holding none.
-        if (this.map && this.mapKey === key && this.sameLightState(board, this.mapState) &&
-                (this.mapScale === scale || zooming) && (this.mapScale !== scale || this.syncOwners(board, cap, true)))
-            return this.vouch(board, cap, key, scale)
-        // A staged build of this very map is finished at once, another is dropped (canvasFor resets its canvases).
+        // A staged build of this very map is finished at once, another is dropped (canvasFor resets its canvases; a shadow
+        // build's own canvases kept as the next one's, dropStaged).
         const staged = this.staged && this.stagedFor(board, key, scale) ? this.staged : null
         // TASK-1572 (MAP_STASH): the map kept aside for this resolution taken back, else the one replaced kept.
         if (!staged && this.unstashMap(board, key, scale))
             return this.vouch(board, cap, key, scale)
-        if (!staged)
+        if (!staged) {
+            this.dropStaged()
             this.stashMap(key, scale)
+        }
         this.staged = null
         const owners = staged ? staged.owners : this.ownerState(board).slice()
-        if (staged)
+        if (staged) {
             while (!staged.steps.next().done);
+            this.installShadow(staged, key, scale)
+        }
         else
             this.build(this.collect(board), bounds, scale)
         this.finishLightMap(board, key, scale, owners)
         return this.vouch(board, cap, key, scale)
+    },
+    // Whether lightMap(board, cap) returns the map it has without a build (key, scale: the map's bounds key and resolution
+    // there), after what it does then: the trust's owners or the owners brought up (syncOwners).
+    mapAsIs(board, cap, key, scale) {
+        // Only the camera's map (no cap: what the frame and its lit view draw), never a cache's bake of the whole board.
+        const trusted = cap === undefined && this.trusts(board, key, scale)
+        if (trusted && (trusted !== 2 || this.syncOwners(board, cap, true))) {
+            ++this.work.trusted
+            return true
+        }
+        // With the cell layer (ownerFree) the map is brought up to the owners now where they differ (syncOwners) before it is
+        // drawn from, the light state holding none.
+        return !!(this.map && this.mapKey === key && this.sameLightState(board, this.mapState) &&
+            (this.mapScale === scale || this.zooming()) && (this.mapScale !== scale || this.syncOwners(board, cap, true)))
+    },
+    // TASK-1657 (Grid.litTileShadowMap): A LIT TILE'S LIGHT MAP BUILT IN STEPS BESIDE THE MAP IT REPLACES. A lit tile's build
+    // takes the camera's light map (lightTile -> lightMap); after a zoom (another resolution) or a light change that map was
+    // built whole in one step of the tile (TASK-1656: 140-160 ms on the co-op replay) and its canvases rasterized at that
+    // frame's end (CanvasRenderingContext2D::FinalizeFrame 250-460 ms, artifacts/TASK-1657/diag): the largest slow frames left
+    // after a zoom. stepShadowMap(board) is a step of that build (buildSteps' fine steps, the same calls in the same order as
+    // build: the same pixels) drawn on canvases of its own (shadowSteps), each step's drawing rasterized in its step
+    // (STEP_FLUSH), while the map it replaces stays the map (its key, state, raster: what frames and other builds draw meanwhile);
+    // the last step makes it the map (installShadow: the replaced one kept aside as stashMap would, else its canvases kept for
+    // the next shadow build) as lightMap would have. A lightMap call meanwhile for the same map finishes it at once (as a
+    // staged build); for another drops it. Returns true when lightMap(board) gives the map now without a build.
+    stepShadowMap(board) {
+        this.endRegionSteps()
+        mapDepth.ensureGeometry(board)
+        const bounds = mapDepth.surfaceBounds
+        if (!bounds || bounds.right <= bounds.left || bounds.bottom <= bounds.top) return true
+        const key = JSON.stringify(bounds), scale = this.resolution(bounds)
+        if (this.mapAsIs(board, undefined, key, scale)) {
+            this.vouch(board, undefined, key, scale)
+            return true
+        }
+        let staged = this.staged && this.stagedFor(board, key, scale) ? this.staged : null
+        if (!staged) {
+            if (this.unstashMap(board, key, scale)) {
+                this.vouch(board, undefined, key, scale)
+                return true
+            }
+            const canvases = this.dropStaged() || this.shadowSpare || {map: null, gain: null}
+            this.shadowSpare = null
+            staged = this.staged = {key, scale, state: this.lightState(board).slice(), owners: this.ownerState(board).slice(),
+                fine: true, shadow: canvases, steps: this.shadowSteps(this.buildSteps(this.collect(board), bounds, scale, false, true), canvases)}
+            ++this.shadowBuilds
+        }
+        const done = staged.steps.next().done
+        ++this.mapSteps
+        ++this.shadowStepCount
+        if (!done) return false
+        this.staged = null
+        this.installShadow(staged, key, scale)
+        this.finishLightMap(board, key, scale, staged.owners)
+        this.vouch(board, undefined, key, scale)
+        return true
+    },
+    shadowBuilds: 0,
+    shadowStepCount: 0,
+    shadowSpare: null,
+    // steps (buildSteps) run with canvases ({map, gain}: canvasFor makes them when null) as the map's for each step, the map's
+    // own put back after it (mapEdits too: the map did not change); a step's drawing rasterized in it (STEP_FLUSH).
+    *shadowSteps(steps, canvases) {
+        for (;;) {
+            const own = {map: this.map, gain: this.gain, edits: this.mapEdits}
+            this.map = canvases.map
+            this.gain = canvases.gain
+            let step
+            try {
+                step = steps.next()
+                if (this.STEP_FLUSH && (step.value === RASTER_STEP || step.done))
+                    this.flushMapCanvases()
+            } finally {
+                canvases.map = this.map
+                canvases.gain = this.gain
+                this.map = own.map
+                this.gain = own.gain
+                this.mapEdits = own.edits
+            }
+            if (step.done)
+                return
+            yield step.value
+        }
+    },
+    // A staged shadow build given up: its canvases (to reuse), else null.
+    dropStaged() {
+        const job = this.staged
+        if (!job || !job.shadow)
+            return null
+        this.staged = null
+        job.steps.return()
+        return job.shadow
+    },
+    // A finished staged build (job) made the map: a shadow build's canvases become the map's; the map they replace kept aside
+    // (stashMap's rule: the same bounds at another resolution), else its canvases kept for the next shadow build.
+    installShadow(job, key, scale) {
+        if (!job.shadow)
+            return
+        const canvases = job.shadow
+        if (this.MAP_STASH && this.map && this.gain && this.mapState && this.mapOwners && this.mapKey === key && this.mapScale !== scale)
+            this.mapStash = {map: this.map, gain: this.gain, key: this.mapKey, scale: this.mapScale, state: this.mapState, owners: this.mapOwners}
+        else if (this.map && this.gain && this.mapStash?.map !== this.map)
+            this.shadowSpare = {map: this.map, gain: this.gain}
+        this.map = canvases.map
+        this.gain = canvases.gain
     },
     // TASK-1572 (atmosphericLighting.MAP_STASH): THE CAMERA'S LIGHT MAP AT THE OTHER RESOLUTION KEPT. The map's resolution follows
     // the camera's scale below its size bounds (resolution), so a lit view at a far scale (the board drawn as the lit view at or
@@ -716,6 +819,7 @@ const atmosphericLighting = {
             // TASK-1572 (MAP_STASH): the map kept aside for this resolution taken back, else the one replaced kept.
             if (this.unstashMap(board, key, scale))
                 return true
+            this.dropStaged()
             this.stashMap(key, scale)
             this.mapKey = ''
             this.mapState = null
@@ -732,8 +836,9 @@ const atmosphericLighting = {
         // zoom, artifacts/TASK-1656/diag). The same drawing in the same order.
         if (this.STEP_FLUSH && (this.stagedRaster || done)) this.flushMapCanvases()
         if (!done) return false
-        const owners = this.staged.owners
+        const owners = this.staged.owners, job = this.staged
         this.staged = null
+        this.installShadow(job, key, scale)
         this.finishLightMap(board, key, scale, owners)
         return true
     },
@@ -2608,7 +2713,7 @@ const atmosphericLighting = {
     // TASK-1544: whether the light map there is (at any scale) is the board's (its bounds and light state): what
     // bakeStandIn lights with.
     standInLightReady(board) {
-        if (!otherSettings.atmosphericVisuals || !this.map || !this.gain || this.staged) return false
+        if (!otherSettings.atmosphericVisuals || !this.map || !this.gain || this.staged && !this.staged.shadow) return false
         mapDepth.ensureGeometry(board)
         const bounds = mapDepth.surfaceBounds
         return !!bounds && this.mapKey === JSON.stringify(bounds) && this.sameLightState(board, this.mapState)

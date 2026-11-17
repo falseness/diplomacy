@@ -10027,7 +10027,19 @@ class Grid extends SpritesGroup {
             // (flushMapCanvases), so the light's step finds them made: a whole map built and rasterized inside the tile's last
             // step was 420-520 ms in one task on the co-op replay (artifacts/TASK-1656/diag). The same map, built where it
             // was (the tile's build); the tile job holds over the rebuild it made itself (litTileStep: LIT_MAP_STEP).
-            if (Grid.litTileMapSteps && otherSettings.atmosphericVisuals && view.outline.length) {
+            // TASK-1657 (Grid.litTileShadowMap): that map built a fine step a step beside the map it replaces
+            // (atmosphericLighting.stepShadowMap: each step's drawing rasterized in it, the replaced map drawn meanwhile), then
+            // made the map: the build step and its raster at the frame's end were the largest slow frames after a zoom.
+            if (Grid.litTileShadowMap && otherSettings.atmosphericVisuals && view.outline.length) {
+                let built = false
+                while (!atmosphericLighting.stepShadowMap(this)) {
+                    built = true
+                    yield LIT_MAP_STEP
+                }
+                if (built)
+                    yield LIT_MAP_STEP
+            }
+            else if (Grid.litTileMapSteps && otherSettings.atmosphericVisuals && view.outline.length) {
                 const rebuilds = atmosphericLighting.rebuilds
                 atmosphericLighting.lightMap(this)
                 if (atmosphericLighting.rebuilds !== rebuilds) {
@@ -14453,6 +14465,9 @@ Grid.standInLampSteps = true
 // TASK-1656: a lit tile's build makes the light map it lights with (when not made) and its raster in steps of their own
 // before its light step (Grid.litTileSteps; LIT_MAP_STEP their yield); false: inside the light's step.
 Grid.litTileMapSteps = true
+// TASK-1657: a lit tile's light map built in fine steps beside the map it replaces (atmosphericLighting.stepShadowMap), each
+// step's raster in it, before its light step; false: Grid.litTileMapSteps (built whole in one step).
+Grid.litTileShadowMap = true
 const LIT_MAP_STEP = 'lit-map'
 // TASK-1617: the spare quarters of every board (Grid.prototype.litTilePool), and the quarters lent to tiles the Worker is making
 // (they come back to the pool when the tile does: the rest's top-up leaves room for them, else the pool overflowed when they
