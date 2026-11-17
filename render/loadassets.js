@@ -112,54 +112,6 @@ for (let i = 0; i < images.length; ++i) {
     }
 }
 
-// TASK-1606: an SVG drawn straight into a small canvas loses its edge anti-aliasing (the browser rasterizes it at the
-// target size). Draw it at 4x the target size (capped at SUPERSAMPLE_MAX px) into a temporary canvas, then halve step
-// by step with high-quality smoothing down to the target; the temporary canvases are released afterwards.
-const SUPERSAMPLE_FACTOR = 4
-const SUPERSAMPLE_MAX = 1024
-function drawSupersampledImage(ctx, image, x, y, w, h) {
-    const scale = Math.min(SUPERSAMPLE_FACTOR, SUPERSAMPLE_MAX / Math.max(w, h, 1))
-    let srcW = Math.round(w * scale), srcH = Math.round(h * scale)
-    if (scale <= 1 || !(srcW > w) || !(srcH > h)) {
-        ctx.drawImage(image, x, y, w, h)
-        return
-    }
-    const temps = []
-    let src = document.createElement('canvas')
-    src.width = srcW
-    src.height = srcH
-    let srcCtx = src.getContext('2d')
-    if (!srcCtx) {
-        ctx.drawImage(image, x, y, w, h)
-        return
-    }
-    temps.push(src)
-    srcCtx.drawImage(image, 0, 0, srcW, srcH)
-    // Halve while the next half is still at least the target size.
-    while (srcW / 2 >= w && srcH / 2 >= h && (srcW / 2 > w || srcH / 2 > h)) {
-        const halfW = Math.max(Math.round(srcW / 2), w), halfH = Math.max(Math.round(srcH / 2), h)
-        const half = document.createElement('canvas')
-        half.width = halfW
-        half.height = halfH
-        const halfCtx = half.getContext('2d')
-        halfCtx.imageSmoothingEnabled = true
-        halfCtx.imageSmoothingQuality = 'high'
-        halfCtx.drawImage(src, 0, 0, halfW, halfH)
-        temps.push(half)
-        src = half
-        srcW = halfW
-        srcH = halfH
-    }
-    const smoothing = ctx.imageSmoothingEnabled, quality = ctx.imageSmoothingQuality
-    ctx.imageSmoothingEnabled = true
-    ctx.imageSmoothingQuality = 'high'
-    ctx.drawImage(src, 0, 0, srcW, srcH, x, y, w, h)
-    ctx.imageSmoothingEnabled = smoothing
-    if (quality !== undefined)
-        ctx.imageSmoothingQuality = quality
-    for (const temp of temps)
-        temp.width = temp.height = 0
-}
 // TASK-1649: the sprite outline is drawn by the game, not baked into the asset files: a crisp #1E0F06 line of
 // OUTLINE_WIDTH_FRAC of the drawn sprite size (1.5 px at 128, 2.6 px at 219, 21.4 px at 911) under the art of every
 // polished unit body and demon portal, painted once per cache paint (board cache, so the team-colour variants inherit
@@ -292,7 +244,7 @@ function paintCachedImage(tmpCanvas, image) {
     }
     tmpCanvas.spriteOutline = null
     if (!failedImages.has(image)) {
-        drawSupersampledImage(tmpCtx, assets[image], pos.x - width / 2, pos.y - height / 2, width, height)
+        drawImage(tmpCtx, image, pos, width, height) // TASK-1666: direct raster again (TASK-1606's 4x chain reverted)
         if (spriteOutlined(image))
             paintSpriteOutline(tmpCanvas, width)
     }
@@ -452,7 +404,7 @@ function teamColourPortrait(name, rgb, size, slot = name) {
         return kept.canvas
     const base = document.createElement('canvas')
     base.width = base.height = size
-    drawSupersampledImage(base.getContext('2d'), image, 0, 0, size, size)
+    base.getContext('2d').drawImage(image, 0, 0, size, size)
     if (spriteOutlined(name))
         paintSpriteOutline(base, size)
     const canvas = kept ? kept.canvas : document.createElement('canvas')

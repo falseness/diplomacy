@@ -270,7 +270,7 @@
             const L = typeof atmosphericLighting !== 'undefined' ? atmosphericLighting : null
             if (typeof SpriteCache !== 'undefined') for (const n of ['build', 'restockAtRest', 'beginFrame', 'makeRoom']) wrap(SpriteCache, n, 'sprite')
             // (a global function declaration called by name sees the window property)
-            for (const n of ['drawSupersampledImage', 'loadSprites', 'whenGameSpritesReady']) wrap(window, n, 'sprite')
+            for (const n of ['loadSprites', 'whenGameSpritesReady']) wrap(window, n, 'sprite')
             if (L) {
                 for (const n of ['spillSprite', 'liftSprite', 'tileVariant']) wrap(L, n, 'sprite')
                 for (const n of ['ownedTile', 'prewarmOwnedTiles', 'tileFill']) wrap(L, n, 'owned-tiles')
@@ -355,7 +355,7 @@
     // (Grid's constructor), tile-variants (the atmospheric neutral / fog / owned tile variants: atmosphericLighting.tileVariant, stoneVariant,
     // fogVariant, tileDetail, ownedTile, prewarmOwnedTiles), underlay (MapDepth: geometry, underlay cache, atmospheric sides,
     // rim, shadow, rock sprites), lit-tiles (the lit view's tiles and the start hold: taskSources' lit-tiles methods), sectors
-    // (unit sectors and lit tile sectors built / stored / received from the Worker), sprites (SpriteCache, supersampled
+    // (unit sectors and lit tile sectors built / stored / received from the Worker), sprites (SpriteCache, sprite
     // images, spill / lift sprites, an <img> drawn), surface-cache, light-map and sky (named apart: not phases of the
     // ticket's list; the tool counts them under other with their own figures). Time no wrapper sees (the frame's other
     // drawing, update, browser raster / GC / layout) is other: the tool takes it from the main thread's busy time.
@@ -435,7 +435,7 @@
             }
             if (typeof SectorWorker !== 'undefined') wrap(SectorWorker, 'receive', 'sectors')
             if (typeof SpriteCache !== 'undefined') for (const n of ['build', 'restockAtRest', 'beginFrame', 'makeRoom']) wrap(SpriteCache, n, 'sprites')
-            for (const n of ['drawSupersampledImage', 'loadSprites']) wrap(window, n, 'sprites')
+            for (const n of ['loadSprites']) wrap(window, n, 'sprites')
             if (typeof atmosphericBackground !== 'undefined') for (const n of ['rasterSteps', 'decorateSteps', 'syncKey']) wrap(atmosphericBackground, n, 'sky')
             for (const proto of [CanvasRenderingContext2D.prototype, typeof OffscreenCanvasRenderingContext2D !== 'undefined' && OffscreenCanvasRenderingContext2D.prototype]) {
                 if (!proto) continue
