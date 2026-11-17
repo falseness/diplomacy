@@ -197,7 +197,14 @@ class MapDepth {
         edge: {flat: 0.15, width: 0.1, reach: 1.0, alpha: 0.3},
         crease: {width: [0.012, 0.03], dark: [0.05, 0.25], band: 0.012},
         lip: {solid: 0.13, width: 0.1, dark: 1.0},
-        rimLight: {color: [255, 175, 95], alpha: 2.3, falloff: 0.15, tail: 0.12, base: 0.5, reach: 1.0, tint: [1.05, 1.0, 0.92], tintReach: 1.4}
+        rimLight: {color: [255, 175, 95], alpha: 2.3, falloff: 0.15, tail: 0.12, base: 0.5, reach: 1.0, tint: [1.05, 1.0, 0.92], tintReach: 1.4},
+        // TASK-1662: the board's left and right walls (an open face's rock past its open vertex, rockPixelSteps sideOutline):
+        // solid rock just past the side vertices as the concept's, out hex radii (the left wall's past an open face's end
+        // vertex, the right wall's past its begin vertex: the concept's right wall is the thicker, 0.071 vs 0.060 hex
+        // widths, TASK-1660 targets.json), with a rounded stone per boulder row stepping out by stones[row % 3] more (row 0
+        // right under a side vertex: the rock under the corners, row 1 at the notch; an uneven stone wall, not a clipped
+        // line, at 27 px hexes too)
+        wall: {out: {left: 0.015, right: 0.05}, stones: [0.06, 0.3, 0.0]}
     }
     static rockSprites = null
     static rockBuilds = 0
@@ -1050,6 +1057,7 @@ class MapDepth {
     // TASK-1612: how far an open face's rock reaches past its open vertex (world units): the dome (chunk.dome) of a boulder
     // across the boulder grid's column (the period's width over its chunk count, buildRockSprite's sx), as far as a boulder
     // at the vertex column bulges past it; the side outline's lumps (buildRockSprite sideOutline) reach up to it.
+    // (TASK-1662: the side walls (ROCK.wall) reach less far; this stays the bound the slab's box and the faces' culling take.)
     static rockSideReach(r = basis.r) {
         const R = MapDepth.ROCK, PX = R.period.columns * 1.5 * r, nx = Math.max(1, Math.round(PX / (R.chunk.x * r)))
         return R.chunk.dome * PX / nx
@@ -1138,20 +1146,20 @@ class MapDepth {
         // Chunks: a jittered grid of seeds dividing the period, each with its tone and its foot's hang.
         const nx = Math.max(1, Math.round(PX / (C.x * r))), ny = Math.max(1, Math.round(PY / (C.y * r))), sx = PX / nx, sy = PY / ny
         const unit = Math.min(sx, sy), bevel = C.bevel * unit
-        const pad = R.pad * r, sideReach = openB || openE ? MapDepth.rockSideReach(r) + 1 / k : 0
-        // (the side outline's reach past the vertex at field height wy (world units): a rounded chunk per boulder row (sy, the
+        // TASK-1662: an open end's rock reaches past its vertex to the wall's outline (sideOutline), at most this far
+        const WL = R.wall, pad = R.pad * r, sideReach = openB || openE ? (Math.max(WL.out.left, WL.out.right) + Math.max(...WL.stones)) * r + 1 / k : 0
+        // (the side outline's reach past the vertex at field height wy (world units): a rounded stone per boulder row (sy, the
         // field's period rows; three a cell's height), counted from the side's vertices (the field's rows ky * h, 2h apart
-        // down a side): under each vertex a small, a large and a middling one (0.45, 1, 0.7 of rockSideReach; the third
-        // reaches into the face's dark foot), so the rock steps out and back in along every cell; in the field's frame, so
-        // the faces down a side agree)
-        const sideOutline = wy => {
+        // down a side), stepping out by wall.stones[row % 3] past the wall's flush face (wall.out, left or right); in the field's frame, so the
+        // faces down a side agree. TASK-1612 had lumps of 0.45, 1 and 0.7 of rockSideReach: a fringe, not the concept's wall)
+        const sideOutline = (wy, out) => {
             const u = wy - (((ky % 2) + 2) % 2) * h, j0 = Math.floor(u / sy)
             let e = 0
             for (let j = j0 - 1; j <= j0 + 1; ++j) {
                 const t = (u - (j + 0.5) * sy) / (0.5 * sy)
-                if (Math.abs(t) < 1) e = Math.max(e, [0.45, 1, 0.7][((j % 3) + 3) % 3] * Math.sqrt(1 - t * t))
+                if (Math.abs(t) < 1) e = Math.max(e, WL.stones[((j % 3) + 3) % 3] * Math.sqrt(1 - t * t))
             }
-            return e * (sideReach - 1 / k)
+            return (out + e) * r
         }
         const x0 = Math.min(0, end.x) - pad - (openE ? sideReach : 0), x1 = Math.max(0, end.x) + pad + (openB ? sideReach : 0)
         const y0 = Math.min(0, end.y) - 2 * pad, y1 = upper + (S.depth + S.amplitude + S.jag) * r + 2 / k
@@ -1284,7 +1292,7 @@ class MapDepth {
         for (let n = 0; n < seeds; ++n) seedTone[n] = 2 * hash(n, 4) - 1
         for (let py = 0; py < H; ++py) {
             const y = y0 + (py + 0.5) / k, wy = oy + y, gy = Math.floor((oy + y) * k)
-            const band = Math.abs((((oy + y) % sy) + sy) % sy - sy / 2), rowSide = openB || openE ? sideOutline(oy + y) : 0
+            const band = Math.abs((((oy + y) % sy) + sy) % sy - sy / 2), rowLeft = openE ? sideOutline(oy + y, WL.out.left) : 0, rowRight = openB ? sideOutline(oy + y, WL.out.right) : 0
             rowSegments = segItems.filter(q => y >= q.box[2] && y <= q.box[3])
             for (let px = 0; px < W; ++px) {
                 const i = py * W + px, x = colX[px]
@@ -1297,7 +1305,7 @@ class MapDepth {
                 const gap = sGap, n1 = sN1, tilt = sTilt, d1 = sD1
                 alpha[i] = Math.max(0, Math.min(1, (y - top) * k + 0.5, (foot - y) * k + 0.5))
                 // (TASK-1612: past an open vertex, within the side outline)
-                if (colOut[px] && !((alpha[i] = Math.max(0, Math.min(alpha[i], (rowSide - colOutX[px]) * k + 0.5))) > 0))
+                if (colOut[px] && !((alpha[i] = Math.max(0, Math.min(alpha[i], ((colX[px] > 0 ? rowRight : rowLeft) - colOutX[px]) * k + 0.5))) > 0))
                     continue
                 // (a rounded boulder: a dome around its seed (chunk.dome of the cell size), falling into the gap at its edge)
                 const e = Math.min(1, gap / bevel), dome = Math.sqrt(Math.max(0, 1 - (d1 / (C.dome * unit)) ** 2))
