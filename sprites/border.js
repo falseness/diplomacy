@@ -189,7 +189,11 @@ class MapDepth {
         rim: {width: 0.15, steps: 8, colors: ['#ffe2a0', '#fff4d4', '#ffcc70', '#eea448', '#c88032'], groove: 'rgba(30, 16, 6, 0.25)', grooveWidth: 0.03,
             // TASK-1661: the upper rim (upperRuns): its width (of the lower rim's) and colours from its outer side to the outline,
             // sampled off the concept's top rim (a yellow highlight, then saturated gold)
-            upper: 1.0, upperColors: ['#fff14a', '#f8c830', '#f2c03a', '#e4a838', '#b07a3c']},
+            upper: 0.82,
+            // TASK-1663: the side walls' rim (over the slab faces) side times the lower rim's width (the concept's heavy frame)
+            side: 1.6, sideColors: {left: ['#ffd36a', '#faba4a', '#fa9521', '#f4790f', '#c85a14'], right: ['#f0c070', '#d99d5a', '#c2954f', '#bf7439', '#8a5a30']},
+            upperEdge: {width: 0.024, color: '#4a3418'},
+            upperColors: ['#ffd25a', '#f6b938', '#eb9a30', '#d07a30', '#a85a24']},
         crack: {spacing: 0.6, share: 0.45, at: [0.5, 0.75], steps: [5, 8], step: 0.14, branch: 0.5, line: 0.035, halo: 0.08, snap: 0.09,
             path: 0.03, seed: 20, color: [20, 200, 235], alpha: {line: 1.5, halo: 0.06, path: 1.3}, cast: {reach: 0.5, amount: 0.04}},
         // A warm highlight down the protruding corners of the outline (flat within flat of the corner, so the vertex
@@ -204,7 +208,17 @@ class MapDepth {
         // widths, TASK-1660 targets.json), with a rounded stone per boulder row stepping out by stones[row % 3] more (row 0
         // right under a side vertex: the rock under the corners, row 1 at the notch; an uneven stone wall, not a clipped
         // line, at 27 px hexes too)
-        wall: {out: {left: 0.015, right: 0.05}, stones: [0.06, 0.3, 0.0]}
+        wall: {out: {left: 0.015, right: 0.05}, stones: [0.06, 0.3, 0.0]},
+        // TASK-1663: the side walls as the concept's (artifacts/TASK-1663/diag-concept-left.png, -right.png): under each lower
+        // side edge (markOpenFaces 's') the hex prism's side face, hanging from the edge down to depth hex heights below its
+        // outer vertex (a level bottom), its outer side from that vertex leaning out by lean per unit of drop (the face seen
+        // from above the board), sky below it down to the next cell's vertex and none past the side otherwise. The left face
+        // lit warm gold, the right one shaded blue-grey (colours from the face's top, under the rim, to its foot), with
+        // vertical streaks (streak hex radii wide, +- amount), a lit outer corner (left) and a dark lip at the foot. (The left
+        // face's gold keeps green at ~0.7 of red: the sky's orange nebulae behind the board's sides are ~0.52.)
+        slab: {depth: 1.2, lean: {left: 0.35, right: 0.4}, lip: 0.06, round: 0.12,
+            streak: {width: 0.11, amount: 0.12}, corner: {width: 0.05, gain: {left: 0.35, right: 0.12}},
+            colors: {left: [[246, 178, 84], [214, 150, 64], [188, 132, 56], [140, 96, 42]], right: [[104, 110, 116], [74, 78, 82], [56, 58, 60], [36, 37, 40]]}}
     }
     static rockSprites = null
     static rockBuilds = 0
@@ -309,13 +323,28 @@ class MapDepth {
                     run = null
                     continue
                 }
-                if (!run) runs.push(run = [edge.begin])
+                if (!run) {
+                    runs.push(run = [edge.begin])
+                    run.before = orderedEdges[(start + i - 1 + orderedEdges.length) % orderedEdges.length]
+                    run.first = edge
+                }
                 run.push(edge.end)
+                run.after = orderedEdges[(start + i + 1) % orderedEdges.length]
+                run.last = edge
             }
             return runs
         }
         this.lowerRuns = runsOf(lower)
         this.upperRuns = runsOf(edge => !lower(edge))
+        // (TASK-1663: an upper run's end at a side wall's slab edge (a lower run of one slanted edge) of the same cell (a side
+        // vertex, not a notch) turns round that vertex (upperRimPoint's mitre with that edge): the rim wraps the vertex as the
+        // concept's)
+        const slabEdge = edge => edge && lower(edge) && edge.side !== 3 && this.lowerRuns.some(run => run.length === 2 &&
+            this.pointKey(run[0]) === this.pointKey(edge.begin) && this.pointKey(run[1]) === this.pointKey(edge.end))
+        for (const run of this.upperRuns) {
+            if (slabEdge(run.before) && run.before.cell === run.first.cell) run.from = run.before.begin
+            if (slabEdge(run.after) && run.after.cell === run.last.cell) run.to = run.after.end
+        }
         this.rimRibbons = this.createRimRibbons()
     }
     // TASK-1612: a lower face at an end of a lower run (lowerRuns) where the outline turns up round its own cell's corner
@@ -335,6 +364,10 @@ class MapDepth {
             const prev = byEnd.get(this.pointKey(face.begin)), next = byBegin.get(this.pointKey(face.end))
             const corner = edge => edge && !lower(edge) && edge.cell === face.cell
             face.open = (corner(prev) ? 'b' : '') + (corner(next) ? 'e' : '')
+            // TASK-1663: a slanted lower face that is a lower run of its own between two upper edges (a side cell's lower
+            // left / lower right edge: the board's left and right walls) is a slab face ('s', slabPixelSteps)
+            if ((face.side === 2 || face.side === 4) && face.open && prev && next && !lower(prev) && !lower(next))
+                face.open += 's'
         }
     }
     // TASK-1583: the brass rim under the lower edges as ribbons of the runs (lowerRuns), each the run and the run moved down
@@ -359,9 +392,23 @@ class MapDepth {
             }
             ribbons.push({path, color})
         }
-        ribbon(this.lowerRuns, rw + R.grooveWidth * basis.r, R.groove)
-        for (let i = R.steps - 1; i >= 0; --i) ribbon(this.lowerRuns, rw * (i + 1) / R.steps, MapDepth.rimColor(i / (R.steps - 1)))
+        // (TASK-1663: a run of one slanted edge between upper edges, a side wall's slab face (markOpenFaces 's'), has the
+        // heavier side rim: ROCK.rim.side of the width)
+        const slab = points => points.length === 2 && points[0].x !== points[1].x && points[0].y !== points[1].y
+        // (its colours: ROCK.rim.sideColors, the concept's lit left / shaded right side rim; left = a run rising to the left)
+        const leftward = points => (points[1].x - points[0].x) * (points[1].y - points[0].y) > 0
+        const groups = [[this.lowerRuns.filter(points => !slab(points)), rw, R.colors],
+            [this.lowerRuns.filter(points => slab(points) && leftward(points)), R.side * rw, R.sideColors.left],
+            [this.lowerRuns.filter(points => slab(points) && !leftward(points)), R.side * rw, R.sideColors.right]]
+        for (const [runs, width, colors] of groups) {
+            if (!runs.length) continue
+            ribbon(runs, width + R.grooveWidth * basis.r, R.groove)
+            for (let i = R.steps - 1; i >= 0; --i) ribbon(runs, width * (i + 1) / R.steps, MapDepth.rimColor(i / (R.steps - 1), colors))
+        }
         const uw = R.upper * rw
+        // (TASK-1663: a thin dark bronze line outside it, the concept's rim edge against the sky: ROCK.rim.upperEdge)
+        if (this.upperRuns?.length)
+            ribbon(this.upperRuns, uw + R.upperEdge.width * basis.r, R.upperEdge.color, MapDepth.upperRimPoint)
         if (this.upperRuns?.length)
             for (let i = R.steps - 1; i >= 0; --i)
                 ribbon(this.upperRuns, uw * (i + 1) / R.steps, MapDepth.rimColor(1 - i / (R.steps - 1), R.upperColors), MapDepth.upperRimPoint)
@@ -377,6 +424,13 @@ class MapDepth {
             return {x: dy / length, y: -dx / length}
         }
         const p = points[i]
+        // (TASK-1663: a run's end turning round a side vertex, run.from / run.to: a joint with that edge)
+        const turn = i === 0 ? points.from : i === points.length - 1 ? points.to : undefined
+        if (turn) {
+            const n1 = i === 0 ? normal(turn, p) : normal(points[i - 1], p), n2 = i === 0 ? normal(p, points[1]) : normal(p, turn)
+            const mx = n1.x + n2.x, my = n1.y + n2.y, dot = (mx * n1.x + my * n1.y) || 1
+            return {x: p.x + mx * thickness / dot, y: p.y + my * thickness / dot}
+        }
         if (i === 0 || i === points.length - 1) {
             const n = i === 0 ? normal(p, points[1]) : normal(points[i - 1], p)
             // (on the vertical through p: the moved line n.(q - p) = thickness)
@@ -1100,6 +1154,7 @@ class MapDepth {
     // main thread can make a sprite over several frames (rockSpriteSteps). Pure JS (no canvas, no page globals): it runs in a
     // Worker too.
     static *rockPixelSteps(side, kx, ky, open, r) {
+        if (open.includes('s')) return yield* MapDepth.slabPixelSteps(side, kx, ky, r)
         const R = MapDepth.ROCK, C = R.chunk, S = R.scallop, X = R.crack, k = R.raster, h = r * Math.sqrt(3) / 2
         const hash = MapDepth.rockHash
         // The outline around a face (getVertices; the bottom row from right to left: side 2 down to a protruding cell's
@@ -1373,6 +1428,57 @@ class MapDepth {
                 d[p + 2] = rgb[2]
                 d[p + 3] = 255 * alpha[i]
             }
+        return {data: d, width: W, height: H, x: x0, y: y0, k}
+    }
+    // TASK-1663: a side wall's slab face (ROCK.slab; markOpenFaces 's'), rockPixelSteps' pixels for a lower left (side 4, the
+    // board's left side) or lower right (side 2, its right side) edge between upper edges; local to the face's begin as
+    // rockPixelSteps'. Pure JS (a worker runs it too).
+    static *slabPixelSteps(side, kx, ky, r) {
+        const R = MapDepth.ROCK, S = R.slab, k = R.raster, h = r * Math.sqrt(3) / 2, hash = MapDepth.rockHash
+        const left = side == 4, which = left ? 'left' : 'right'
+        // (the outer vertex v, the inner one (the notch) n, local x growing outward d(x) = distance past v)
+        const v = left ? {x: -r / 2, y: -h} : {x: 0, y: 0}, n = left ? {x: 0, y: 0} : {x: -r / 2, y: h}, out = left ? -1 : 1
+        const lean = S.lean[which], depth = S.depth * h, bottom = v.y + depth, round = S.round * r
+        const edgeY = x => v.y + (n.y - v.y) * (x - v.x) / (n.x - v.x)
+        const reach = lean * depth + 1 / k, pad = 2 / k
+        const x0 = Math.min(v.x, n.x) - (left ? reach : pad), x1 = Math.max(v.x, n.x) + (left ? pad : reach)
+        const y0 = v.y - pad, y1 = bottom + pad
+        const W = Math.ceil((x1 - x0) * k), H = Math.ceil((y1 - y0) * k), d = new Uint8ClampedArray(W * H * 4)
+        const C = S.colors[which], colorAt = (t, c) => {
+            const q = Math.max(0, Math.min(1, t)) * (C.length - 1), i = Math.min(C.length - 2, Math.floor(q))
+            return C[i][c] + (C[i + 1][c] - C[i][c]) * (q - i)
+        }
+        // (streaks: value noise along the face, in the field's frame so the side's faces differ)
+        const sw = S.streak.width * r, base = kx * 1.5 * r + ky * 7.3 * r
+        const streak = x => {
+            const t = (base + x) / sw, j = Math.floor(t), f = t - j, g = f * f * (3 - 2 * f)
+            const a = hash(j & 1023, 31), b = hash((j + 1) & 1023, 31)
+            return (2 * (a + (b - a) * g) - 1) * S.streak.amount
+        }
+        const clamp = t => Math.max(0, Math.min(1, t))
+        for (let py = 0; py < H; ++py, yield) {
+            const y = y0 + (py + 0.5) / k, drop = y - v.y
+            if (drop < -pad) continue
+            // (the outer side: from v, leaning out; rounded into the level bottom over round)
+            const below = Math.max(0, y - (bottom - round)), cut = round - Math.sqrt(Math.max(0, round * round - below * below))
+            const outer = v.x + out * (lean * Math.max(0, drop) - cut)
+            for (let px = 0; px < W; ++px) {
+                const x = x0 + (px + 0.5) / k
+                const past = (x - outer) * out
+                const a = clamp(Math.min((y - edgeY(x)) * k + 0.5, (bottom - y) * k + 0.5, -past * k + 0.5, (left ? -x : x - n.x) * k + 1.5))
+                if (!(a > 0)) continue
+                // (t: 0 under the edge .. 1 at the foot, over the face's height at this column)
+                const top = edgeY(x), t = clamp((y - top) / Math.max(1e-6, bottom - top))
+                const lip = clamp(1 - (bottom - y) / (S.lip * r)), lit = Math.exp(-(((-past) / (S.corner.width * r)) ** 2)) * S.corner.gain[which]
+                const gain = (1 + streak(x)) * (1 - 0.5 * lip)
+                const p = 4 * (py * W + px)
+                for (let c = 0; c < 3; ++c) {
+                    const col = colorAt(t, c) * gain
+                    d[p + c] = col + (255 - col) * lit * (1 - t)
+                }
+                d[p + 3] = 255 * a
+            }
+        }
         return {data: d, width: W, height: H, x: x0, y: y0, k}
     }
     releaseAtmosphericShadow() {
