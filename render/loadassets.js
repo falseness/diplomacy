@@ -267,9 +267,11 @@ function compositeSpriteOutline(px, band) {
 function cacheImage(image) {
     let tmpCanvas = document.createElement('canvas')
     paintCachedImage(tmpCanvas, image)
+    if (!tabCanary)
+        paintTabCanary()
     // The browser may drop an offscreen canvas backing store (backgrounded mobile tab).
     if (typeof tmpCanvas.addEventListener == 'function') {
-        tmpCanvas.addEventListener('contextlost', () => requestAnimationFrame(restoreImageCaches))
+        tmpCanvas.addEventListener('contextlost', imageCacheContextLost)
         tmpCanvas.addEventListener('contextrestored', restoreImageCaches)
     }
 
@@ -299,6 +301,7 @@ function paintCachedImage(tmpCanvas, image) {
 // Repaints the existing cached canvases in place, so the grid surface cache image refs
 // stay valid, then makes the next frame rebuild the surface cache.
 function restoreImageCaches() {
+    imageCacheLossSeen = false
     atmosphericBackground.invalidate()
     // TASK-1554: the interface's cache is drawn again (InterfaceLayer).
     if (typeof interfaceLayer != 'undefined' && interfaceLayer)
@@ -315,6 +318,57 @@ function restoreImageCaches() {
         grid.clearUnitSectors?.('images')
     }
     restoreCameraTransform()
+    paintTabCanary()
+}
+// A lost context's canvas: its caches are repainted on the next frame (as before), and a tab return before that frame
+// repaints them too (imageCacheLossSeen).
+let imageCacheLossSeen = false
+function imageCacheContextLost() {
+    imageCacheLossSeen = true
+    requestAnimationFrame(restoreImageCaches)
+}
+// TASK-1665: the tab-return canary. A phone may wipe a backgrounded tab's canvases (TASK-569), but most tab switches
+// lose nothing, and rebuilding every sprite cache and the board on each return showed the grey ground for seconds. The
+// canary is a canvas made like the sprite caches (same size, painted opaque with the first of them and again by every
+// cacheAllImages and restore), so a wipe that empties them empties it too; on return it is read back through a 1x1
+// probe (drawImage, so the canary itself is never read with getImageData and keeps the sprite caches' backing).
+// Intact: nothing was lost, nothing is rebuilt. Wiped (or no canary yet): restoreImageCaches as before.
+// contextlost/contextrestored keep their own restore.
+const TAB_CANARY_COLOUR = Object.freeze([255, 0, 255])
+let tabCanary = null, tabCanaryProbe = null
+function paintTabCanary() {
+    if (typeof document.createElement != 'function')
+        return
+    if (!tabCanary)
+        tabCanary = document.createElement('canvas')
+    tabCanary.width = tabCanary.height = assets.size || 128
+    const ctx = tabCanary.getContext && tabCanary.getContext('2d')
+    if (!ctx)
+        return
+    ctx.fillStyle = `rgb(${TAB_CANARY_COLOUR.join(',')})`
+    ctx.fillRect(0, 0, tabCanary.width, tabCanary.height)
+}
+function tabCanaryIntact() {
+    if (!tabCanary || !tabCanary.width || !tabCanary.height)
+        return false
+    try {
+        if (!tabCanaryProbe) {
+            tabCanaryProbe = document.createElement('canvas')
+            tabCanaryProbe.width = tabCanaryProbe.height = 1
+        }
+        const ctx = tabCanaryProbe.getContext('2d', {willReadFrequently: true})
+        ctx.clearRect(0, 0, 1, 1)
+        const c = Math.floor(tabCanary.width / 2)
+        ctx.drawImage(tabCanary, c, c, 1, 1, 0, 0, 1, 1)
+        const px = ctx.getImageData(0, 0, 1, 1).data
+        return px[3] === 255 && TAB_CANARY_COLOUR.every((v, i) => Math.abs(px[i] - v) <= 2)
+    } catch (e) {
+        return false
+    }
+}
+function restoreImageCachesIfWiped() {
+    if (imageCacheLossSeen || !tabCanaryIntact())
+        restoreImageCaches()
 }
 // A restored main context comes back with the identity transform, and events/screen.js only ever
 // applies the camera incrementally (translate/scale), so set it again from canvas.scale and offset.
@@ -327,15 +381,16 @@ function restoreCameraTransform() {
 if (typeof document.addEventListener == 'function') {
     document.addEventListener('visibilitychange', () => {
         if (document.visibilityState == 'visible')
-            restoreImageCaches()
+            restoreImageCachesIfWiped()
     })
 }
 if (typeof window.addEventListener == 'function')
-    window.addEventListener('pageshow', restoreImageCaches)
+    window.addEventListener('pageshow', () => restoreImageCachesIfWiped())
 function cacheAllImages() {
     for (let i = 0; i < images.length; ++i) {
         cachedImages[images[i]] = cacheImage(images[i])
     }
+    paintTabCanary()
 }
 let cachedImages = {}
 
@@ -360,7 +415,7 @@ function teamColourImage(name, rgb) {
         variant = document.createElement('canvas')
         variant.rgbKey = key
         if (typeof variant.addEventListener == 'function') {
-            variant.addEventListener('contextlost', () => requestAnimationFrame(restoreImageCaches))
+            variant.addEventListener('contextlost', imageCacheContextLost)
             variant.addEventListener('contextrestored', restoreImageCaches)
         }
         variants.set(key, variant)
@@ -682,7 +737,7 @@ function waitForImagesLoad() {
         return
     }
     if (typeof mainCanvas.addEventListener == 'function') {
-        mainCanvas.addEventListener('contextlost', () => requestAnimationFrame(restoreImageCaches))
+        mainCanvas.addEventListener('contextlost', imageCacheContextLost)
         mainCanvas.addEventListener('contextrestored', restoreImageCaches)
     }
     // The first menu frame waits for the menu fonts (they load in parallel with the images). The other game sprites
