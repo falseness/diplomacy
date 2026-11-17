@@ -186,7 +186,10 @@ class MapDepth {
         tone: {2: 0.72, 3: 1.0, 4: 1.35, notch: 0.82},
         chunk: {x: 0.7, y: 0.55, tone: 0.14, tilt: 0.3, grain: 0.03, bevel: 0.35, dome: 0.85, slope: 0.05, face: 0.5, plain: 0.7, lightMax: 0.22, shadow: 0.1,
             glow: [236, 172, 110], shade: [70, 68, 68]},
-        rim: {width: 0.15, steps: 8, colors: ['#ffe2a0', '#fff4d4', '#ffcc70', '#eea448', '#c88032'], groove: 'rgba(30, 16, 6, 0.25)', grooveWidth: 0.03},
+        rim: {width: 0.15, steps: 8, colors: ['#ffe2a0', '#fff4d4', '#ffcc70', '#eea448', '#c88032'], groove: 'rgba(30, 16, 6, 0.25)', grooveWidth: 0.03,
+            // TASK-1661: the upper rim (upperRuns): its width (of the lower rim's) and colours from its outer side to the outline,
+            // sampled off the concept's top rim (a yellow highlight, then saturated gold)
+            upper: 1.0, upperColors: ['#fff14a', '#f8c830', '#f2c03a', '#e4a838', '#b07a3c']},
         crack: {spacing: 0.6, share: 0.45, at: [0.5, 0.75], steps: [5, 8], step: 0.14, branch: 0.5, line: 0.035, halo: 0.08, snap: 0.09,
             path: 0.03, seed: 20, color: [20, 200, 235], alpha: {line: 1.5, halo: 0.06, path: 1.3}, cast: {reach: 0.5, amount: 0.04}},
         // A warm highlight down the protruding corners of the outline (flat within flat of the corner, so the vertex
@@ -253,6 +256,7 @@ class MapDepth {
             this.outlineLoop = undefined
             this.rim = undefined
             this.lowerRuns = []
+            this.upperRuns = []
             this.rimRibbons = undefined
             return
         }
@@ -286,19 +290,25 @@ class MapDepth {
         }
         // TASK-1583: the lower edges (the rock skirt's sides 2-4) as runs along the outline, from an edge that is not one
         // (so no run is split at the loop's start), and the brass rim on them (rimRibbons).
+        // TASK-1661: and the upper edges (sides 5, 0, 1: the top and the side columns' upper edges) as runs of their own
+        // (upperRuns), for the rim along the whole outline as the concept's.
         const lower = edge => edge.side >= 2 && edge.side <= 4
-        const start = Math.max(0, orderedEdges.findIndex(edge => !lower(edge)))
-        this.lowerRuns = []
-        let run = null
-        for (let i = 0; i < orderedEdges.length; ++i) {
-            const edge = orderedEdges[(start + i) % orderedEdges.length]
-            if (!lower(edge)) {
-                run = null
-                continue
+        const runsOf = (inRun) => {
+            const start = Math.max(0, orderedEdges.findIndex(edge => !inRun(edge))), runs = []
+            let run = null
+            for (let i = 0; i < orderedEdges.length; ++i) {
+                const edge = orderedEdges[(start + i) % orderedEdges.length]
+                if (!inRun(edge)) {
+                    run = null
+                    continue
+                }
+                if (!run) runs.push(run = [edge.begin])
+                run.push(edge.end)
             }
-            if (!run) this.lowerRuns.push(run = [edge.begin])
-            run.push(edge.end)
+            return runs
         }
+        this.lowerRuns = runsOf(lower)
+        this.upperRuns = runsOf(edge => !lower(edge))
         this.rimRibbons = this.createRimRibbons()
     }
     // TASK-1612: a lower face at an end of a lower run (lowerRuns) where the outline turns up round its own cell's corner
@@ -324,21 +334,50 @@ class MapDepth {
     // by its thickness (a vertical thickness on every edge, so at a corner both edges' bands cover the same rows): the
     // groove under the rim (rim width + groove), then ROCK.rim.steps ribbons from the rim's whole width (its foot colour)
     // to the narrowest (the edge's colour), filled widest first (renderAtmosphericSides). [{path, color}]
+    // TASK-1661: and the rim over the upper edges (upperRuns), the runs moved up (outside the outline, over the sky), lit
+    // from above: ROCK.rim.upperColors, the bright highlight at the rim's outer (upper) side, the gold's foot along the
+    // outline (the concept's top rim); ROCK.rim.upper of the lower rim's width, no groove.
     createRimRibbons() {
         const R = MapDepth.ROCK.rim, rw = R.width * basis.r, ribbons = []
-        const ribbon = (thickness, color) => {
+        const ribbon = (runs, thickness, color, offset = (points, i) => ({x: points[i].x, y: points[i].y + thickness})) => {
             const path = typeof SectorPath === 'function' ? new SectorPath() : new Path2D()
-            for (const points of this.lowerRuns) {
+            for (const points of runs) {
                 path.moveTo(points[0].x, points[0].y)
                 for (let i = 1; i < points.length; ++i) path.lineTo(points[i].x, points[i].y)
-                for (let i = points.length - 1; i >= 0; --i) path.lineTo(points[i].x, points[i].y + thickness)
+                for (let i = points.length - 1; i >= 0; --i) {
+                    const point = offset(points, i, thickness)
+                    path.lineTo(point.x, point.y)
+                }
                 path.closePath()
             }
             ribbons.push({path, color})
         }
-        ribbon(rw + R.grooveWidth * basis.r, R.groove)
-        for (let i = R.steps - 1; i >= 0; --i) ribbon(rw * (i + 1) / R.steps, MapDepth.rimColor(i / (R.steps - 1)))
+        ribbon(this.lowerRuns, rw + R.grooveWidth * basis.r, R.groove)
+        for (let i = R.steps - 1; i >= 0; --i) ribbon(this.lowerRuns, rw * (i + 1) / R.steps, MapDepth.rimColor(i / (R.steps - 1)))
+        const uw = R.upper * rw
+        if (this.upperRuns?.length)
+            for (let i = R.steps - 1; i >= 0; --i)
+                ribbon(this.upperRuns, uw * (i + 1) / R.steps, MapDepth.rimColor(1 - i / (R.steps - 1), R.upperColors), MapDepth.upperRimPoint)
         return ribbons
+    }
+    // TASK-1661: a point of an upper run (points, i) moved out by thickness at right angles to its edges (the rim as wide
+    // on the slanted upper edges as on the top ones): at a joint the meeting point of both edges' moved lines (mitre), at a
+    // run's end where its moved edge line crosses the vertical through the end (a lower run's rim hangs straight down from it).
+    static upperRimPoint(points, i, thickness) {
+        // (the outward normal of the edge a -> b: the outline runs clockwise on screen, outside on the left of its way)
+        const normal = (a, b) => {
+            const dx = b.x - a.x, dy = b.y - a.y, length = Math.hypot(dx, dy) || 1
+            return {x: dy / length, y: -dx / length}
+        }
+        const p = points[i]
+        if (i === 0 || i === points.length - 1) {
+            const n = i === 0 ? normal(p, points[1]) : normal(points[i - 1], p)
+            // (on the vertical through p: the moved line n.(q - p) = thickness)
+            return {x: p.x, y: p.y + thickness / (n.y || -1)}
+        }
+        const n1 = normal(points[i - 1], p), n2 = normal(p, points[i + 1])
+        const mx = n1.x + n2.x, my = n1.y + n2.y, dot = (mx * n1.x + my * n1.y) || 1
+        return {x: p.x + mx * thickness / dot, y: p.y + my * thickness / dot}
     }
     rebuild(_grid) {
         // TASK-1633: a second rebuild of the same board with the same map edge (GameManager.start's map.start, then its
@@ -729,9 +768,9 @@ class MapDepth {
         }
         ctx.restore()
     }
-    // The rim's colour at t (0 at the edge .. 1 at its foot), between ROCK.rim.colors.
-    static rimColor(t) {
-        const colors = MapDepth.ROCK.rim.colors, x = t * (colors.length - 1), i = Math.min(colors.length - 2, Math.floor(x)), f = x - i
+    // The rim's colour at t (0 at the edge .. 1 at its foot), between ROCK.rim.colors (or the colours given).
+    static rimColor(t, colors = MapDepth.ROCK.rim.colors) {
+        const x = t * (colors.length - 1), i = Math.min(colors.length - 2, Math.floor(x)), f = x - i
         const rgb = c => [1, 3, 5].map(k => parseInt(c.slice(k, k + 2), 16)), a = rgb(colors[i]), b = rgb(colors[i + 1])
         return 'rgb(' + a.map((v, k) => Math.round(v + (b[k] - v) * f)).join(', ') + ')'
     }
