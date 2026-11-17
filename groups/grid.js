@@ -9445,6 +9445,11 @@ class Grid extends SpritesGroup {
         const t0 = performance.now(), step = job.steps.next()
         job.ms += performance.now() - t0
         ++job.count
+        // TASK-1656: a light map the tile's own step made (litTileSteps' LIT_MAP_STEP): the job draws on with it.
+        if (step.value === LIT_MAP_STEP) {
+            job.rebuilds = atmosphericLighting.rebuilds
+            job.mapScale = atmosphericLighting.mapScale
+        }
         if (!step.done)
             return false
         this.litTileJob = undefined
@@ -10016,6 +10021,22 @@ class Grid extends SpritesGroup {
                     if (x0 < x1 && y0 < y1) g.rect(x0, y0, x1 - x0, y1 - y0)
                 }
                 g.clip('evenodd')
+            }
+            // TASK-1656 (Grid.litTileMapSteps): the light map lightTile takes (the camera's) made first in a step of its own when it
+            // is not made yet (lightMap: a light state the map was not built for), then its canvases' raster a step each
+            // (flushMapCanvases), so the light's step finds them made: a whole map built and rasterized inside the tile's last
+            // step was 420-520 ms in one task on the co-op replay (artifacts/TASK-1656/diag). The same map, built where it
+            // was (the tile's build); the tile job holds over the rebuild it made itself (litTileStep: LIT_MAP_STEP).
+            if (Grid.litTileMapSteps && otherSettings.atmosphericVisuals && view.outline.length) {
+                const rebuilds = atmosphericLighting.rebuilds
+                atmosphericLighting.lightMap(this)
+                if (atmosphericLighting.rebuilds !== rebuilds) {
+                    yield LIT_MAP_STEP
+                    for (const name of ['map', 'gain']) {
+                        atmosphericLighting.flushMapCanvases(name)
+                        yield LIT_MAP_STEP
+                    }
+                }
             }
             each(g => atmosphericLighting.lightTile(g, this, view.outline))
             done = true
@@ -13576,6 +13597,12 @@ function* standInPreviewSteps(grid, p) {
         grid.drawEntityBodies(g, {k, n: STANDIN_BODY_STEPS})
     }
     yield RASTER_STEP
+    // TASK-1656 (Grid.standInLampSteps): the lamps' overlays its bloom draws built first, a step each (lampOverlaySteps: the
+    // cave grade in its row steps), not all at once inside the bake's bloom (~500 ms in one task after the co-op capture's
+    // first zoom-out: the lamps off the start's canvas, artifacts/TASK-1656/diag). The same builders and caches.
+    if (Grid.standInLampSteps && atmosphericLighting.standInLightReady(grid))
+        for (const _ of atmosphericLighting.lampOverlaySteps(grid))
+            yield
     p.lit = atmosphericLighting.bakeStandIn(g, grid)
 }
 // The context whose gradients the lit canvases draw with (gradientContext): the camera canvas's, so a lit tile, the rest
@@ -14420,6 +14447,13 @@ Grid.startEdgeTiles = true
 Grid.startPieceSplits = true
 // TASK-1655: the start hold's first frame (right after the start's task) runs no piece (Grid.holdStartFrame).
 Grid.startFirstFrameEmpty = true
+// TASK-1656: a stand-in preview's lamps' overlays built a step each before its bake (standInPreviewSteps); false: in the
+// bake's bloom at once.
+Grid.standInLampSteps = true
+// TASK-1656: a lit tile's build makes the light map it lights with (when not made) and its raster in steps of their own
+// before its light step (Grid.litTileSteps; LIT_MAP_STEP their yield); false: inside the light's step.
+Grid.litTileMapSteps = true
+const LIT_MAP_STEP = 'lit-map'
 // TASK-1617: the spare quarters of every board (Grid.prototype.litTilePool), and the quarters lent to tiles the Worker is making
 // (they come back to the pool when the tile does: the rest's top-up leaves room for them, else the pool overflowed when they
 // came back and new ones were made at the next rest, ~900 a tutorial replay).

@@ -672,6 +672,18 @@ const atmosphericLighting = {
         ++this.mapEdits
         ++this.rebuilds
     },
+    // TASK-1656: stepLightMap's steps rasterized as they are drawn (flushMapCanvases); false: at the map's first read.
+    STEP_FLUSH: true,
+    // The map's and gain's recorded drawing rasterized now (only: 'map' or 'gain' that one): a pixel of each drawn on a 1x1
+    // canvas (made once).
+    flushMapCanvases(only) {
+        const flush = this.mapFlush ||= Object.assign(document.createElement('canvas'), {width: 1, height: 1})
+        const g = flush.getContext('2d')
+        for (const name of ['map', 'gain']) {
+            const canvas = this[name]
+            if ((!only || only === name) && canvas && canvas.width && canvas.height) g.drawImage(canvas, 0, 0, 1, 1, 0, 0, 1, 1)
+        }
+    },
     // Whether lightMap(board, cap) returns the map it has (no rebuild), outside a zoom gesture.
     lightMapReady(board, cap) {
         mapDepth.ensureGeometry(board)
@@ -714,6 +726,11 @@ const atmosphericLighting = {
         ++this.mapSteps
         // TASK-1518: whether the step was heavy to rasterize (RASTER_STEP).
         this.stagedRaster = step.value === RASTER_STEP
+        // TASK-1656 (STEP_FLUSH): a step's drawing rasterized in its own step (as Grid.flushSurfaceBuild a surface build's), and
+        // the last's with it: else the whole build's recorded drawing was rasterized at the map's first read, which is a lit
+        // tile step's (SectorWorker.prepare: createImageBitmap of the map and the gain, 80-160 ms in one step after each
+        // zoom, artifacts/TASK-1656/diag). The same drawing in the same order.
+        if (this.STEP_FLUSH && (this.stagedRaster || done)) this.flushMapCanvases()
         if (!done) return false
         const owners = this.staged.owners
         this.staged = null
@@ -2548,13 +2565,31 @@ const atmosphericLighting = {
         }
         for (const op of ['multiply', 'color-dodge']) {
             yield* wait()
-            const map = this.lightMap(board, scale)
+            let map = this.lightMap(board, scale)
             if (!map) return false
+            const cells = this.inClipWindow(this.collect(board, false).cells)
+            // TASK-1656 (BAKE_PATH_STEPS): the clip's path (~3000 hexagons, 130 ms with the draw's raster in one step on the
+            // co-op replay, artifacts/TASK-1656/diag) traced BAKE_PATH_STEP_CELLS cells a step, the draw in the step after:
+            // the same path and draw (the build's canvas is its own: nothing else draws on it between its steps; the path
+            // is not part of the state save keeps, so it is traced before the save: a build given up meanwhile leaves no
+            // save behind on its canvas).
+            if (this.BAKE_PATH_STEPS) {
+                ctx.beginPath()
+                for (let i = 0; i < cells.length; i += this.BAKE_PATH_STEP_CELLS) {
+                    this.addHexagons(ctx, cells.slice(i, i + this.BAKE_PATH_STEP_CELLS))
+                    yield
+                }
+                // (the map at the cache's scale taken again: a frame between the steps may have made the camera's)
+                if (!(map = this.lightMap(board, scale))) return false
+                ctx.save()
+            }
+            else {
+                ctx.save()
+                this.hexPath(ctx, cells)
+            }
+            ctx.clip()
             const bounds = mapDepth.surfaceBounds
             const w = bounds.right - bounds.left, h = bounds.bottom - bounds.top
-            ctx.save()
-            this.hexPath(ctx, this.inClipWindow(this.collect(board, false).cells))
-            ctx.clip()
             ctx.globalCompositeOperation = op
             ctx.drawImage(op === 'multiply' ? map : this.gain, bounds.left, bounds.top, w, h)
             ctx.restore()
@@ -2565,6 +2600,9 @@ const atmosphericLighting = {
         this.bloom(ctx, board)
         return true
     },
+    // TASK-1656: bakeSteps' clip path traced BAKE_PATH_STEP_CELLS cells a step; false: with its draw.
+    BAKE_PATH_STEPS: true,
+    BAKE_PATH_STEP_CELLS: 400,
     // TASK-1544: true while a stand-in preview draws its cells' tiles (drawTile).
     flatOwnedTiles: false,
     // TASK-1544: whether the light map there is (at any scale) is the board's (its bounds and light state): what
