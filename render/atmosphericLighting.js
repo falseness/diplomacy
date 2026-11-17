@@ -1294,14 +1294,24 @@ const atmosphericLighting = {
             const s = raster / Math.max(w, h), W = Math.max(1, Math.ceil(w * s)), H = Math.max(1, Math.ceil(h * s))
             const r = basis.r * s
             const strength = d => d <= inner * r ? 1 : Math.exp(-(((d - inner * r) / (fall * r)) ** 2))
+            // TASK-1655: the fill's factors a column (x) and a row (y) each computed once, not for every pixel of both
+            // surfaces (the same values and products: 40-70 ms of the start's light map steps here).
+            const colStrength = new Float64Array(W), colSmooth = new Float64Array(W), rowStrength = new Float64Array(H), rowSmooth = new Float64Array(H)
+            for (let x = 0; x < W; ++x) {
+                colStrength[x] = strength(W - x - 0.5)
+                colSmooth[x] = smooth(((x + 0.5) / W - f0) / (f1 - f0))
+            }
+            for (let y = 0; y < H; ++y) {
+                rowStrength[y] = strength(H - y - 0.5)
+                rowSmooth[y] = smooth(((y + 0.5) / H - r0) / (r1 - r0))
+            }
             for (const [name, color, a] of [['rimRaster', map, alpha], ['rimGain', gain, gainAlpha]]) {
                 const surface = this[name] || document.createElement('canvas')
                 surface.width = W
                 surface.height = H
                 const g = surface.getContext('2d'), image = g.createImageData(W, H), d = image.data
                 for (let y = 0; y < H; ++y) for (let x = 0; x < W; ++x) {
-                    const v = Math.max(right * strength(W - x - 0.5) * smooth(((y + 0.5) / H - r0) / (r1 - r0)),
-                        bottom * strength(H - y - 0.5) * smooth(((x + 0.5) / W - f0) / (f1 - f0)))
+                    const v = Math.max(right * colStrength[x] * rowSmooth[y], bottom * rowStrength[y] * colSmooth[x])
                     const i = 4 * (y * W + x)
                     d.set(color, i)
                     d[i + 3] = Math.round(255 * a * v)
@@ -3403,10 +3413,11 @@ const atmosphericLighting = {
     // TASK-1473: the board's lamps' overlays (lampOverlay, with the cave grade, gradeSteps) built in steps (a generator, each
     // yield ending one), for the surface cache's build to run between frames ahead of its bake (Grid.surfaceCacheBuildStep),
     // so the bake's bloom finds them built. Each sprite image once; the same builders and caches as bloom's.
-    *lampOverlaySteps(board) {
+    // TASK-1655: sources: those lamps only (the start hold's: the lamps its tiles draw), else every lamp of the board.
+    *lampOverlaySteps(board, sources = null) {
         if (!otherSettings.atmosphericVisuals) return
         const seen = new Set()
-        for (const source of this.collect(board, false, false).sources) {
+        for (const source of sources || this.collect(board, false, false).sources) {
             const building = this.lampBuilding(board, source)
             const image = building && cachedImages[board.getEntityBodyImageName(building)]
             if (!image || !image.width || !building.pos || seen.has(image)) continue

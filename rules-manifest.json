@@ -1,7 +1,7 @@
 {
   "format": 1,
   "algorithm": "sha256(path NUL bytes NUL ...)",
-  "rulesVersion": "5242b6d304f5b3304559516ad8a62bb9363b262e5d6dae883b81318902c13fc8",
+  "rulesVersion": "17969178580f0cb5703c8cda3ee3b4c432f58597bdad7897b603fecb776a7e6f",
   "scripts": [
     {
       "path": "options/assert.js",
@@ -115,13 +115,13 @@
     },
     {
       "path": "ai/generateMap.js",
-      "sha256": "fe996af7b62c7b48f0cf226f9a8cf71d70d07796b5b62379c7b16c182cacec15",
-      "bytes": 180463
+      "sha256": "2c0fd1be2440971588c512f1cbe7bfa4b9ddc7fb80a427cf339d54e4ed847199",
+      "bytes": 188847
     },
     {
       "path": "render/loadassets.js",
-      "sha256": "369892033b8e7645a6584892b3ffbd15919b2eba2fef0c83039f114b83b7acd9",
-      "bytes": 33738
+      "sha256": "75757a80771e57df0cdcb58145f39c4e251ae06bd55c3c21be93070abc9163f0",
+      "bytes": 35338
     },
     {
       "path": "render/staticons.js",
@@ -300,8 +300,8 @@
     },
     {
       "path": "menu/menu.js",
-      "sha256": "0530fb0e356f2d7c5643abcaec0c29ebd43ad9a1759347ac328946c1d668396a",
-      "bytes": 186710
+      "sha256": "7e1af4d3024ef6d6c9f71f84dec696400267e5fa285bff889b74f9f4ce70a11e",
+      "bytes": 188352
     },
     {
       "path": "sprites/hexagon.js",
@@ -310,8 +310,8 @@
     },
     {
       "path": "groups/grid.js",
-      "sha256": "9d9e4bff261f0c4cbc8896052f1f55ee1cf8a292bacf23c698c6aea3b16f3d2d",
-      "bytes": 880485
+      "sha256": "1d35d280e6ae385a34000c8a4a21e19c0794e2b3594db1e025df0b53c8318e23",
+      "bytes": 885017
     },
     {
       "path": "sprites/entities/hpBar.js",

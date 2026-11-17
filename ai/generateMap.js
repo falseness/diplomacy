@@ -1,3 +1,7 @@
+// TASK-1655: this file loaded as the co-op generation Worker (coopMapWorker below): the generation's other files first, in
+// index.html's order (the server and the tests load them as scripts: no Worker scope there).
+if (typeof document === 'undefined' && typeof window === 'undefined' && typeof importScripts === 'function' && typeof self !== 'undefined')
+    importScripts('coop-hex-geometry.js', 'coop-map-scaling.js', 'coop-circle-plan.js')
 // [l, r]
 function randomInt(min, max) {
     return Math.floor(Math.random() * (max - min + 1)) + min;
@@ -5440,3 +5444,191 @@ function generateTinyOnlyBlue() {
         [],
         [])
 }
+
+
+// TASK-1655 (PERF 2/5): generateCoopGame off the main thread. A co-op hot seat start generated its map inside the start's
+// click task (generateCoopGame: ~150 ms of the user's 150 ms first gap, 500-640 ms here, seconds for a big 12-human map),
+// before its first frame. coopMapWorker runs the same function, with the same arguments, in a Worker (this file loaded as
+// one: the generation's files only, GameMap's own class source and the board's neighborhood table given by the page) and
+// returns its result as data (structured clone: a GameMap's own fields; coopMapFromData gives it GameMap's prototype back),
+// so the page's menu keeps its frames while it runs. The hot seat co-op screen asks for its map ahead (coopMapPrefetch: the
+// sliders' values as they change, the latest only) and the start takes it (generateCoopGameAsync): at once when made,
+// else when the Worker answers. Without a Worker (the server, the tests' runtimes, ?coopMapWorker=0) or when it fails,
+// generateCoopGame runs as before. Same seed, same map (the generation draws no Math.random).
+const coopMapWorker = {
+    on: true,
+    state: 'off',
+    worker: null,
+    serial: 0,
+    // key -> job {key, playerCount, options, state: queued | sent | done | failed, data, waiters, awaited, id}
+    jobs: new Map(),
+    sent: null,
+    kept: 4,
+    counters: {posted: 0, done: 0, failed: 0, taken: 0, takenReady: 0, dropped: 0, sync: 0},
+    key(playerCount, options) {
+        return playerCount + '|' + (options.seed === undefined ? 1 : options.seed) + '|' + (options.size === undefined ? 'normal' : options.size)
+    },
+    available() {
+        if (this.state === 'on')
+            return true
+        if (this.state === 'failed' || !this.on || typeof Worker !== 'function' || typeof document === 'undefined' ||
+                typeof GameMap !== 'function' || typeof neighborhood === 'undefined' ||
+                typeof location !== 'undefined' && typeof URLSearchParams !== 'undefined' &&
+                new URLSearchParams(location.search).get('coopMapWorker') === '0')
+            return false
+        const own = [...document.scripts].find(script => /ai\/generateMap\.js(\?|$)/.test(script.src))
+        try {
+            const worker = new Worker(own ? own.src : 'ai/generateMap.js')
+            worker.onmessage = e => this.answered(e.data)
+            worker.onerror = e => {
+                e.preventDefault?.()
+                this.fail()
+            }
+            this.worker = worker
+        } catch (error) {
+            this.fail()
+            return false
+        }
+        this.state = 'on'
+        return true
+    },
+    // The Worker gone (an error): every job not made yet is made by generateCoopGame when taken.
+    fail() {
+        this.state = 'failed'
+        this.worker?.terminate?.()
+        this.worker = null
+        this.sent = null
+        for (const job of this.jobs.values())
+            if (job.state !== 'done')
+                this.settle(job, 'failed')
+    },
+    // job for these arguments (a new one queued); awaited: a start waits for it.
+    want(playerCount, options, awaited) {
+        const key = this.key(playerCount, options)
+        let job = this.jobs.get(key)
+        if (job && job.state === 'failed' && this.state === 'on')
+            job = undefined
+        if (!job) {
+            // A prefetch replaces the queued ones no start waits for (the screen's earlier values).
+            for (const [k, other] of this.jobs)
+                if (other.state === 'queued' && !other.awaited) {
+                    this.jobs.delete(k)
+                    ++this.counters.dropped
+                }
+            job = {key, playerCount, options: {...options}, state: 'queued', data: null, waiters: [], awaited: false, id: 0}
+            this.jobs.set(key, job)
+        }
+        else {
+            // most recently wanted last (the kept ones are the latest)
+            this.jobs.delete(key)
+            this.jobs.set(key, job)
+        }
+        job.awaited ||= awaited
+        this.trim()
+        this.pump()
+        return job
+    },
+    trim() {
+        for (const [k, job] of this.jobs) {
+            if (this.jobs.size <= this.kept)
+                break
+            if (job.state === 'done' || job.state === 'failed')
+                this.jobs.delete(k)
+        }
+    },
+    // One job in the Worker at a time: the latest a start waits for, else the latest wanted.
+    pump() {
+        if (this.sent || this.state !== 'on')
+            return
+        const queued = [...this.jobs.values()].filter(job => job.state === 'queued')
+        const job = queued.filter(j => j.awaited).at(-1) || queued.at(-1)
+        if (!job)
+            return
+        job.state = 'sent'
+        job.id = ++this.serial
+        this.sent = job
+        ++this.counters.posted
+        const first = this.serial === 1
+        this.worker.postMessage({id: job.id, playerCount: job.playerCount, options: job.options,
+            ...(first ? {gameMap: GameMap.toString(), neighborhood} : {})})
+    },
+    answered(message) {
+        const job = this.sent
+        if (!job || job.id !== message.id)
+            return
+        this.sent = null
+        if (message.error === undefined) {
+            job.data = message.map
+            ++this.counters.done
+            this.settle(job, 'done')
+        }
+        else {
+            ++this.counters.failed
+            this.settle(job, 'failed')
+        }
+        this.pump()
+    },
+    settle(job, state) {
+        job.state = state
+        const waiters = job.waiters
+        job.waiters = []
+        for (const resolve of waiters)
+            resolve()
+    },
+}
+// A GameMap from the Worker's data: a copy (each start gets its own: map.start keeps references to its arrays) with
+// GameMap's prototype.
+function coopMapFromData(data) {
+    return Object.setPrototypeOf(structuredClone(data), GameMap.prototype)
+}
+// TASK-1655: the hot seat co-op screen's map made ahead by the Worker (nothing without one).
+function coopMapPrefetch(playerCount, options = {}) {
+    if (!coopMapWorker.available())
+        return
+    const job = coopMapWorker.jobs.get(coopMapWorker.key(playerCount, options))
+    if (job && (job.state !== 'failed'))
+        return
+    coopMapWorker.want(playerCount, options, false)
+}
+// TASK-1655: the co-op map for a start: run(map) at once when the Worker has made it, else when it has (the page's frames
+// go on meanwhile), else (no Worker, it failed) generateCoopGame's map now. Returns whether run was called at once.
+function generateCoopGameAsync(playerCount, options, run) {
+    const sync = () => {
+        ++coopMapWorker.counters.sync
+        run(generateCoopGame(playerCount, options))
+    }
+    if (!coopMapWorker.available()) {
+        sync()
+        return true
+    }
+    const job = coopMapWorker.want(playerCount, options, true)
+    ++coopMapWorker.counters.taken
+    const done = () => {
+        if (job.state === 'done')
+            run(coopMapFromData(job.data))
+        else
+            sync()
+    }
+    if (job.state === 'done' || job.state === 'failed') {
+        if (job.state === 'done')
+            ++coopMapWorker.counters.takenReady
+        done()
+        return true
+    }
+    job.waiters.push(done)
+    return false
+}
+// The Worker's side: GameMap's class and the neighborhood table from the page's first message, then generateCoopGame.
+if (typeof document === 'undefined' && typeof window === 'undefined' && typeof importScripts === 'function' && typeof self !== 'undefined')
+    self.onmessage = e => {
+        const q = e.data
+        try {
+            if (q.gameMap !== undefined) {
+                self.GameMap = (0, eval)('(' + q.gameMap + ')')
+                self.neighborhood = q.neighborhood
+            }
+            self.postMessage({id: q.id, map: generateCoopGame(q.playerCount, q.options)})
+        } catch (error) {
+            self.postMessage({id: q.id, error: String(error && error.message || error)})
+        }
+    }

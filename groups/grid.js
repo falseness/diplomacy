@@ -10983,6 +10983,13 @@ class Grid extends SpritesGroup {
                 start: performance.now(), last: undefined, allow: 1}
             this.startRestFirst = true
             this.startRestFirstAt = undefined
+            // TASK-1655 (Grid.startFirstFrameEmpty): the frame right after the start's task (GameManager.start: its gap holds
+            // the whole task) runs no piece; they start with the next frame.
+            if (Grid.startFirstFrameEmpty) {
+                ++job.frames
+                ++this.startHeldFrames
+                return true
+            }
         }
         // (The start's moveTo marks the camera as moving, Screen.surfaceMoving, though it does not: its transform is compared.)
         const t = mainCtx.getTransform(), screen = gameEvent.screen
@@ -11151,19 +11158,55 @@ class Grid extends SpritesGroup {
             return true
         return !!MapDepth.rockWorker?.pending?.size
     }
+    // TASK-1655: the board's lamps' overlays (atmosphericLighting.lampOverlaySteps) and the crop boxes of their shade and glow
+    // (atmosphericLighting.cropBox, read by the tiles' bloom: drawCropped), a step or box a piece of the start hold.
+    // Only the lamps the canvas's tiles can draw: within the bloom's radius and a tile (the tiles cover the canvas in whole
+    // LIT_TILE squares) of the camera's canvas.
+    *startLampSteps() {
+        const L = atmosphericLighting, t = mainCtx.getTransform()
+        const sources = L.visibleSources(mainCtx, L.collect(this, false, false).sources, basis.r * L.BLOOM.radius + 2 * LIT_TILE / t.a,
+            basis.r * 0.23)
+        for (const _ of L.lampOverlaySteps(this, sources))
+            yield ['lamps', false]
+        const seen = new Set()
+        for (const source of sources) {
+            const building = L.lampBuilding(this, source)
+            const image = building && cachedImages[this.getEntityBodyImageName(building)]
+            if (!image || !image.width || !building.pos || seen.has(image))
+                continue
+            seen.add(image)
+            const {shade, glow} = L.lampOverlay(image, source.name)
+            for (const overlay of [shade, glow]) {
+                L.cropBox(overlay)
+                yield ['lamps', false]
+            }
+        }
+    }
     // The board's first lit view at camera t (as planLitView makes it, newLitView) and what it draws, a piece a step (a
     // generator): the owned tiles of the board's colours (as its first frame built them: prebuildOwnedSteps, the menu's
     // pieces), the light map at the camera's scale (stepLightMap's steps), the view, then its tiles on the canvas, nearest
     // the canvas's centre first (as queueLitTiles orders them).
     *startBuildSteps(t) {
+        // TASK-1655 (Grid.startPieceSplits): the work of the first held frames in smaller pieces (each its own piece, so a
+        // held frame runs as many as START_STEP_MS allows): the prologue's three parts, the team-colour images of the units
+        // the view's board state takes (captureSurfaceState made them all in the 'view' piece: 90-200 ms here, the user's
+        // 263-275 ms held frame), the lamps' overlays and their crop boxes (the first tile's bloom read them: 50-90 ms) and
+        // the tiles a step at a time (litTileStep, the steps litTile runs at once). The same builders, calls and order.
+        const splits = Grid.startPieceSplits
         // The sky's key and board first: its first draw for a new board releases the light map (atmosphericBackground.syncKey).
         atmosphericBackground.syncKey()
+        if (splits)
+            yield ['prologue', false]
         // TASK-1615: the board's rock sprites (its tiles' slab sides draw them) asked of the rock workers first, made while the
         // owned tiles, light map and view are; the tiles wait for them ('rock' pieces, MapDepth.rockSpriteSteps), so no tile
         // makes a sprite inside its frame (without workers they are made here a pixel row a piece).
         mapDepth.ensureGeometry(this)
+        if (splits)
+            yield ['prologue', false]
         const rocks = mapDepth.rockKeys()
         MapDepth.requestRockSprites(rocks)
+        if (splits)
+            yield ['prologue', false]
         // The owned tiles the cells drawn at t show (drawTile); the other owners' are built a tile a task after the first
         // frame (prewarmOwnedTiles), as before a fill a task after it.
         const fills = new Set(), drawn = this.drawRange(mainCtx)
@@ -11188,6 +11231,25 @@ class Grid extends SpritesGroup {
         const cw = mainCanvas.width, ch = mainCanvas.height
         if (t.b !== 0 || t.c !== 0 || t.a <= 0 || t.d <= 0 || this.constructionInView(mainCtx))
             return
+        if (splits) {
+            // TASK-1655: the units' body images (getEntityBodyImage: a polished unit's owner-colour variant, teamColourImage)
+            // captureSurfaceState takes, an image a piece; then the lamps' overlays (lampOverlaySteps' steps) and the crop
+            // boxes the tiles' bloom draws them from (cropBox), a box a piece.
+            const seen = new Set()
+            for (const column of this.arr)
+                for (const cell of column) {
+                    const unit = this.getStillUnit(cell)
+                    if (!unit)
+                        continue
+                    const key = unit.isDemonPortal ? unit.imageName : unit.bodyImageName + '|' + unit.playerColor
+                    if (seen.has(key))
+                        continue
+                    seen.add(key)
+                    this.getEntityBodyImage(unit)
+                    yield ['units', false]
+                }
+            yield* this.startLampSteps()
+        }
         // TASK-1633: the board's underlay raster from its worker (MapDepth.createUnderlayCache) before the view and its tiles
         // read it ('underlay' pieces wait; a read before it comes makes it on the main thread).
         for (const since = performance.now(); mapDepth.underlayJob && performance.now() - since < START_WAIT_MS;)
@@ -11235,6 +11297,21 @@ class Grid extends SpritesGroup {
         for (const {u, v} of tiles) {
             if (view !== this.litView)
                 return
+            // TASK-1655: a step a piece (litTileStep: litTile's build in its steps; the tile stored or posted to the Worker
+            // at its last), as litTile only for a tile not built or posted yet.
+            if (splits) {
+                if (this.litHas(view, u, v) || this.litPending(view, u, v))
+                    continue
+                while (!atmosphericLighting.checkedOnce(this, () => this.litTileStep(view, u, v))) {
+                    if (view !== this.litView) {
+                        this.dropLitTileJob()
+                        return
+                    }
+                    yield ['tileStep', false]
+                }
+                yield ['tile', true]
+                continue
+            }
             atmosphericLighting.checkedOnce(this, () => this.litTile(view, u, v))
             yield ['tile', true]
         }
@@ -14339,6 +14416,10 @@ const LIT_TILE_SPARE_PARTS = 192
 const LIT_TILE_KEEP_PARTS = 320
 // TASK-1617: the start hold copies the first lit frame's edge tiles ahead (startBuildSteps, atmosphericLighting.edgeTilesAheadSteps).
 Grid.startEdgeTiles = true
+// TASK-1655: the start hold's heavy pieces split (Grid.startBuildSteps: units' images, lamps, tiles a step a piece).
+Grid.startPieceSplits = true
+// TASK-1655: the start hold's first frame (right after the start's task) runs no piece (Grid.holdStartFrame).
+Grid.startFirstFrameEmpty = true
 // TASK-1617: the spare quarters of every board (Grid.prototype.litTilePool), and the quarters lent to tiles the Worker is making
 // (they come back to the pool when the tile does: the rest's top-up leaves room for them, else the pool overflowed when they
 // came back and new ones were made at the next rest, ~900 a tutorial replay).

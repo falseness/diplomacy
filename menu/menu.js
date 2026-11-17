@@ -35,6 +35,26 @@ function menuTouchEnd(event) {
 function start(_slot) {
     let game_mode = menu.previousTree
     return whenGameSpritesReady(() => {
+        // TASK-1655: a co-op map from the generation Worker (generateCoopGameAsync: at once when made ahead, else when it
+        // answers, 'Loading…' over the pressed control meanwhile; a later entry replaces this one, as a sprite wait's).
+        const coop = game_mode.coopGeneration
+        if (coop) {
+            const fog = game_mode.isFogOfWar, timer = game_mode.isDynamicTimer
+            const waiting = {control: Button.pressed, since: performance.now()}
+            let now = true
+            now = generateCoopGameAsync(coop.playerCount, coop.options, map => {
+                if (!now) {
+                    if (gameSpritesWaiting !== waiting)
+                        return
+                    gameSpritesWaiting = null
+                }
+                gameSlot = _slot
+                GameManager.start(map, fog, timer)
+            })
+            if (!now)
+                gameSpritesWaiting = waiting
+            return
+        }
         gameSlot = _slot
         GameManager.start(game_mode.selectedMap, game_mode.isFogOfWar, game_mode.isDynamicTimer)
     })
@@ -932,6 +952,11 @@ class SetupSettingsTree extends GameSettingsTree {
             ? generateCoopGame(this.playersSlider.value, {seed: this.mapSlider.value, size: this.sizeSlider.realValue.toLowerCase()})
             : super.selectedMap
     }
+    // TASK-1655: selectedMap's generateCoopGame arguments (null when not co-op).
+    get coopGeneration() {
+        return this.isCoop ? {playerCount: this.playersSlider.value,
+            options: {seed: this.mapSlider.value, size: this.sizeSlider.realValue.toLowerCase()}} : null
+    }
     draw(ctx) {
         const layout = this.setup
         setupDrawFrame(ctx, layout, this.title)
@@ -948,6 +973,14 @@ class HotseatSettingsTree extends SetupSettingsTree {
             primary: {label: 'Start', clickFunc: _menu.setTree, parameters: _menu.startGame, callThis: _menu},
             option: {key: 'timerCheckBox', text: 'dynamic timer', name: 'Dynamic timer',
                 hint: 'Turn time from your units, towns and gold'}})
+    }
+    // TASK-1655: the co-op map of the values shown made ahead by the generation Worker (coopMapPrefetch: the latest values;
+    // nothing without a Worker), so the start does not generate it.
+    draw(ctx) {
+        const coop = typeof coopMapPrefetch === 'function' && this.coopGeneration
+        if (coop)
+            coopMapPrefetch(coop.playerCount, coop.options)
+        super.draw(ctx)
     }
 }
 

@@ -453,26 +453,58 @@ function teamColourInPolygon(poly, x, y) {
     return inside
 }
 // Per pixel hue limit of a region-classified image (0 = never cloth), or null for the colour-only rule.
+// TASK-1655: kept per name and size (a pure function of them: every owner colour's variant of a sprite reads the same
+// limits), and each row's polygon edge crossings found once (teamColourRowCrossings: the same expression and comparison as
+// teamColourInPolygon, so the same pixels inside), not every polygon edge tested for every pixel (~110 ms an archer
+// variant on this host, inside the start's first held frames).
+const teamColourLimitsKept = new Map()
 function teamColourRegionLimits(name, width, height) {
     const of = name && TEAM_COLOUR_REGION_OF[name]
     if (!of)
         return null
+    const memo = name + '|' + width + 'x' + height
+    const kept = teamColourLimitsKept.get(memo)
+    if (kept)
+        return kept
     const art = TEAM_COLOUR_REGIONS[of.art]
     const limits = new Float32Array(width * height)
     for (let y = 0; y < height; ++y) {
         const fy = (y + 0.5) / height
+        const face = teamColourRowCrossings(art.face.poly, fy)
+        const regions = art.regions.map(region => teamColourRowCrossings(region.poly, fy))
+        if (!face.length && regions.every(c => !c.length))
+            continue
         for (let x = 0; x < width; ++x) {
             const fx = of.mirror ? 1 - (x + 0.5) / width : (x + 0.5) / width
             let hmax = 0
-            if (teamColourInPolygon(art.face.poly, fx, fy))
+            if (teamColourCrossed(face, fx))
                 hmax = art.face.hmax
-            else for (const region of art.regions)
-                if (teamColourInPolygon(region.poly, fx, fy))
-                    hmax = Math.max(hmax, region.hmax)
+            else for (let k = 0; k < regions.length; ++k)
+                if (teamColourCrossed(regions[k], fx))
+                    hmax = Math.max(hmax, art.regions[k].hmax)
             limits[y * width + x] = hmax
         }
     }
+    teamColourLimitsKept.set(memo, limits)
     return limits
+}
+// TASK-1655: the x of each edge of poly the row at y crosses (teamColourInPolygon's test and value, in its edge order).
+function teamColourRowCrossings(poly, y) {
+    const out = []
+    for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+        const [x1, y1] = poly[i], [x2, y2] = poly[j]
+        if ((y1 > y) != (y2 > y))
+            out.push((x2 - x1) * (y - y1) / (y2 - y1) + x1)
+    }
+    return out
+}
+// TASK-1655: teamColourInPolygon(poly, x, y) from the row's crossings: inside when x is left of an odd number of them.
+function teamColourCrossed(crossings, x) {
+    let inside = false
+    for (let k = 0; k < crossings.length; ++k)
+        if (x < crossings[k])
+            inside = !inside
+    return inside
 }
 function teamColourIsRegionCloth(h, s, mx, hmax) {
     return hmax > 0 && (h < hmax || h > 0.93) && s > 0.45 && mx > 0.12
