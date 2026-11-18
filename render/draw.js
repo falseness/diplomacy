@@ -453,7 +453,8 @@ function drawDebugFps(ctx) {
 // buttons. When red has no moves left on its own turn, a big red arrow points at the next-turn
 // button (drawTutorialArrow). The boxes drawn last are kept in drawTutorialHints.boxes, the arrow
 // in drawTutorialHints.arrow (null when none is drawn). Nothing is drawn while Retry or Next tutorial
-// switches tutorials (TutorialManager.switching).
+// switches tutorials (TutorialManager.switching). TASK-1679: until red's first unit selection in the game
+// only the 'click to control' arrow to a red unit is drawn (drawTutorialClickHint).
 function drawTutorialHints(ctx) {
     drawTutorialHints.boxes = []
     drawTutorialHints.arrow = null
@@ -482,6 +483,20 @@ function drawTutorialHints(ctx) {
     ctx.save()
     ctx.textAlign = 'left'
     ctx.textBaseline = 'middle'
+
+    // TASK-1679: until red's first unit selection in this game (TutorialManager.clickHint, set by
+    // TutorialManager.start) only the 'click to control' arrow to a red unit is drawn.
+    if (TutorialManager.clickHint) {
+        const selected = gameEvent.selected
+        if (selected && selected.isUnit && selected.playerColor === TUTORIAL_HUMAN_SLOT)
+            TutorialManager.clickHint = false
+        else {
+            if (whooseTurn === TUTORIAL_HUMAN_SLOT && !gameEvent.waitingMode && !tutorialResultInterface.visible)
+                drawTutorialClickHint(ctx, unit, gap, box, drawLine)
+            ctx.restore()
+            return
+        }
+    }
 
     // The goal box, shrunk if needed to fit between the menu and i buttons.
     const goal = [
@@ -625,6 +640,106 @@ function drawTutorialArrow(ctx, unit, gap, font, obstacles, label, box, drawLine
     drawTutorialHints.arrow = {tip: arrow.tip, tail: arrow.tail, points: arrow.points, bounds: arrow.bounds,
         caption: arrow.caption, ring, size: arrow.size, angle: arrow.angle, fits: arrow.fits, target: {
             x: rect.x, y: rect.y, width: rect.width, height: rect.height}}
+}
+
+// TASK-1679: tutorial 0's first hint, a red arrow in drawTutorialArrow's style pointing at red's unit nearest the
+// screen centre (kept while its hex stays on screen), with a red 'click to control' caption box at its tail. The arrow points straight at the hex centre
+// across the middle of one of the hex's six edges, its tip (the white outline's round join) touching that edge, so
+// the whole arrow stays outside the hex: the unit's click area is never covered. The first direction (from
+// up-left first) and size (largest first) whose arrow and caption are on screen, clear of the HUD buttons, and whose
+// caption is clear of the arrow and the hex, is drawn; it is laid out again every frame, so it follows the camera.
+// drawTutorialHints.arrow keeps it with kind 'click' and the unit's hex as target.
+function drawTutorialClickHint(ctx, unit, gap, box, drawLine) {
+    const units = players[TUTORIAL_HUMAN_SLOT].units.filter(u => !u.killed && u.coord)
+    if (!units.length)
+        return
+    const hexOf = u => {
+        const t = biasToTransition(u.coord.x, u.coord.y)
+        const x = (t.x * basis.offset.x - canvas.offset.x) * canvas.scale
+        const y = (t.y * basis.offset.y - canvas.offset.y) * canvas.scale
+        const r = basis.r * canvas.scale, apothem = r * Math.sqrt(3) / 2
+        return {unit: u, x, y, r, apothem, bounds: {x: x - r, y: y - apothem, width: 2 * r, height: 2 * apothem}}
+    }
+    // The unit pointed at last frame while its hex stays on screen, else the one nearest the screen centre.
+    const distance = h => Math.hypot(h.x - WIDTH / 2, h.y - HEIGHT / 2)
+    const kept = units.includes(TutorialManager.clickHintUnit) && hexOf(TutorialManager.clickHintUnit)
+    const hex = kept && kept.bounds.x >= 0 && kept.bounds.y >= 0 && kept.bounds.x + kept.bounds.width <= WIDTH &&
+        kept.bounds.y + kept.bounds.height <= HEIGHT ? kept :
+        units.map(hexOf).reduce((best, h) => distance(h) < distance(best) ? h : best)
+    TutorialManager.clickHintUnit = hex.unit
+    const font = unit * 0.045
+    ctx.font = 'bold ' + font + 'px Arial'
+    const text = 'click to control'
+    const lineWidth = Math.max(2, unit * 0.006)
+    const captionWidth = ctx.measureText(text).width + font * 0.8
+    const captionHeight = font * 1.5
+    const buttons = [backToMenuButton, iButton, undoButton, nextTurnButton].map(button => button.rect)
+    const overlaps = (a, b) => a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height
+    const onScreen = a => a.x >= gap && a.y >= gap && a.x + a.width <= WIDTH - gap && a.y + a.height <= HEIGHT - gap
+    const layOut = (size, angle, obstacles) => {
+        const length = size * 1.6, head = size * 0.5, halfHead = size * 0.33, halfShaft = size * 0.12
+        const cos = Math.cos(angle), sin = Math.sin(angle)
+        // angle is the arrow's direction, tail to tip: it enters the hex through the middle of the edge facing it.
+        const tip = {x: hex.x - cos * hex.apothem, y: hex.y - sin * hex.apothem}
+        const origin = {x: tip.x - cos * lineWidth / 2, y: tip.y - sin * lineWidth / 2}
+        const points = [[0, 0], [-head, halfHead], [-head, halfShaft], [-length, halfShaft],
+            [-length, -halfShaft], [-head, -halfShaft], [-head, -halfHead]]
+            .map(([x, y]) => ({x: origin.x + x * cos - y * sin, y: origin.y + x * sin + y * cos}))
+        const xs = points.map(p => p.x), ys = points.map(p => p.y)
+        const bounds = {x: Math.min(...xs) - lineWidth / 2, y: Math.min(...ys) - lineWidth / 2}
+        bounds.width = Math.max(...xs) + lineWidth / 2 - bounds.x
+        bounds.height = Math.max(...ys) + lineWidth / 2 - bounds.y
+        const tail = {x: origin.x - length * cos, y: origin.y - length * sin}
+        // The caption beyond the tail: above the arrow when it points down, below when it points up.
+        const caption = {x: Math.max(gap, Math.min(WIDTH - gap - captionWidth, tail.x - captionWidth / 2)),
+            y: sin > 0 ? bounds.y - gap - captionHeight : bounds.y + bounds.height + gap,
+            width: captionWidth, height: captionHeight}
+        const fits = [bounds, caption].every(part => onScreen(part) && !obstacles.some(o => overlaps(part, o))) &&
+            !overlaps(caption, bounds) && !overlaps(caption, hex.bounds)
+        return {tip, tail, points, bounds, caption, size, angle, fits}
+    }
+    const base = unit * 0.13
+    let arrow = null
+    search:
+    for (const obstacles of [buttons, []])
+        for (const scale of [1, 0.85, 0.7, 0.55, 0.4])
+            for (const degrees of [30, 150, -30, -150, 90, -90]) {
+                const candidate = layOut(base * scale, degrees * Math.PI / 180, obstacles)
+                arrow = arrow || candidate
+                if (candidate.fits) {
+                    arrow = candidate
+                    break search
+                }
+            }
+
+    ctx.save()
+    // The arrow, outlined in white, with a soft shadow.
+    ctx.beginPath()
+    arrow.points.forEach((p, i) => i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y))
+    ctx.closePath()
+    ctx.shadowColor = 'rgba(0, 0, 0, 0.5)'
+    ctx.shadowBlur = unit * 0.015
+    ctx.shadowOffsetY = unit * 0.006
+    ctx.fillStyle = 'rgb(230, 20, 20)'
+    ctx.fill()
+    ctx.shadowColor = 'transparent'
+    ctx.lineJoin = 'round'
+    ctx.lineWidth = lineWidth
+    ctx.strokeStyle = 'white'
+    ctx.stroke()
+    ctx.restore()
+    // The caption, in the hint box style but red.
+    const {x, y, width, height} = arrow.caption
+    box('clickCaption', x, y, width, height, [[{text, color: 'white'}]])
+    ctx.fillStyle = 'rgb(220, 25, 25)'
+    roundedRectPath(ctx, x, y, width, height, Math.min(width, height) * 0.15)
+    ctx.fill()
+    ctx.stroke()
+    drawLine([[text, 'white']], x + width / 2, y + height / 2)
+    drawTutorialHints.arrow = {kind: 'click', tip: arrow.tip, tail: arrow.tail, points: arrow.points,
+        bounds: arrow.bounds, caption: arrow.caption, size: arrow.size, angle: arrow.angle, fits: arrow.fits,
+        lineWidth, target: {coord: {x: hex.unit.coord.x, y: hex.unit.coord.y}, x: hex.x, y: hex.y, r: hex.r,
+            apothem: hex.apothem, bounds: hex.bounds}}
 }
 
 // TASK-1554: the interface (HUD buttons, timer, panels, hints) is drawn into a cached canvas of the main canvas's size and

@@ -15,6 +15,10 @@ class TutorialManager {
             throw new Error('Unknown tutorial ' + id)
         tutorialResultInterface.hide()
         TutorialManager.switching = false
+        // TASK-1679: tutorial 0 opens with the 'click to control' arrow (drawTutorialHints) until red's first unit
+        // selection; a start (the menu, Retry) brings it back, an undo does not.
+        TutorialManager.clickHint = id === 'tutorial-0'
+        TutorialManager.clickHintUnit = null
         const map = tutorial.map
         map.tutorial = {id: id}
         // 'surviveRounds' counts red's units only when the map gives red no town; 'coopVictory' and
