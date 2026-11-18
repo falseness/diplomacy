@@ -208,7 +208,10 @@ const atmosphericLighting = {
             levels: [1, 2, 4],
             seed: 0x5bd1e995,
             // A drawn hex up to fit x a level's hex width is drawn from that level (the smallest such), else from the largest.
-            fit: 1.02,
+            // TASK-1675: 0.5, so a cell is drawn from a level at least twice its drawn size: the canvas's bilinear sampling of
+            // a level drawn near its own size at a camera's sub-pixel phase blurred the concept's fine grain (in-game SSIM
+            // against the concept cells: red median 0.986, tan 0.994 at fit 1.02; 0.997 / 0.999 at 0.5).
+            fit: 0.5,
             // Game entries wait for the textures at most this long (ms), then start with the fallback until they load.
             wait: 20000,
             textures: [
@@ -1727,7 +1730,7 @@ const atmosphericLighting = {
         return ((h ^ (h >>> 16)) >>> 0) % this.TILE.cells.textures.length
     },
     // TASK-1673: the texture level a hex drawn px device pixels wide is drawn from: the smallest whose hex width (2 rx x
-    // level) is at least the drawn one (TILE.cells.fit), else the largest.
+    // level) times TILE.cells.fit is at least the drawn one, else the largest.
     cellLevel(index, px, row = this.TILE.cells.textures[index]) {
         const C = this.TILE.cells, w = 2 * row[3]
         for (const level of C.levels)
