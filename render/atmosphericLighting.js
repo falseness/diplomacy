@@ -1508,6 +1508,23 @@ const atmosphericLighting = {
     // towards the shade colour (times light, shadow; facet glow, shade), the creases a little darker (crease), each lump's stone a shade
     // (tone) of its own. Drawn as one image, so a variant costs one pass over its pixels.
     drawFacets(g, size, rand) {
+        this.runSteps(this.drawFacetsSteps(g, size, rand))
+    },
+    // TASK-1669: a generator's pieces run through (the work as it was before it was split).
+    runSteps(steps) {
+        for (;;) {
+            const step = steps.next()
+            if (step.done)
+                return step.value
+        }
+    },
+    // TASK-1669: pixels a piece of the variants' per-pixel passes (tileVariantSteps, stoneVariantSteps: the menu's prebuild
+    // builds a variant in pieces, a 250-950 ms task each before).
+    VARIANT_STEP_PIXELS: 16384,
+    // drawFacets' work in pieces (a yield after each VARIANT_STEP_PIXELS of either pass): the same operations in the same
+    // order (rand is drawn before the first), so the same pixels.
+    *drawFacetsSteps(g, size, rand) {
+        const rows = Math.max(1, Math.floor(this.VARIANT_STEP_PIXELS / size))
         const T = this.TILE.sandstone, F = T.facet, s = this.TILE.rasterScale, r = basis.r
         const step = F.spacing * r * s, cells = Math.ceil(size / step) + 2
         const seeds = new Float32Array(cells * cells * 3)
@@ -1536,10 +1553,14 @@ const atmosphericLighting = {
                 const h = Math.min(1, (d2 - d1) / edge)
                 height[y * size + x] = h * (2 - h)
                 tone[y * size + x] = t
+                if (x === size - 1 && (y + 1) % rows === 0)
+                    yield
             }
         const image = g.getImageData(0, 0, size, size), d = image.data
         const lx = Math.cos(T.lightAngle * Math.PI / 180), ly = Math.sin(T.lightAngle * Math.PI / 180)
-        for (let y = 1; y < size - 1; y++)
+        for (let y = 1; y < size - 1; y++) {
+            if (y % rows === 0)
+                yield
             for (let x = 1; x < size - 1; x++) {
                 const i = y * size + x, p = 4 * i
                 if (!d[p + 3]) continue
@@ -1553,6 +1574,7 @@ const atmosphericLighting = {
                     d[p + c] = v
                 }
             }
+        }
         g.putImageData(image, 0, 0)
     },
     // TASK-1580: sandstone variants, built once per hex radius: weathered carved warm-tan stone (TILE.stone, each slab a
@@ -1582,11 +1604,41 @@ const atmosphericLighting = {
     // (no facet creases, pits or chips), a few fine faint cracks, a gentle dome lit on its crown by the upper-left key light, and a thin soft bevel.
     // Clipped to the inset tile, centred in the raster; fog variants are made from them (fogVariant).
     tileVariant(index) {
+        return this.runSteps(this.tileVariantSteps(index))
+    },
+    // TASK-1669: a variant's build shared by whoever asks for it (one generator per kind, radius and index): a variant built
+    // in pieces (the menu's prebuild) and asked for at once meanwhile (a game's first frame) is finished, not started again.
+    variantJobs: new Map(),
+    *variantJobSteps(kind, variants, index, build) {
+        const key = kind + ' ' + variants.radius + ' ' + index
+        let job = this.variantJobs.get(key)
+        if (!job)
+            this.variantJobs.set(key, job = build())
+        for (;;) {
+            if (variants[index]) {
+                this.variantJobs.delete(key)
+                return variants[index]
+            }
+            const step = job.next()
+            if (step.done) {
+                this.variantJobs.delete(key)
+                return variants[index] || step.value
+            }
+            yield
+        }
+    },
+    // tileVariant's work in pieces (TASK-1669: a yield after each mottle octave, each VARIANT_STEP_PIXELS of relief lumps
+    // and of the shading pass): the same operations in the same order, so the same pixels.
+    *tileVariantSteps(index) {
         if (!this.tileVariants || this.tileVariants.radius !== basis.r) {
             this.tileVariants = Object.assign(new Array(this.TILE.variants), {radius: basis.r})
             ++this.tileVariantBuilds
         }
         if (this.tileVariants[index]) return this.tileVariants[index]
+        const variants = this.tileVariants
+        return yield* this.variantJobSteps('tile', variants, index, () => this.tileVariantBuild(variants, index))
+    },
+    *tileVariantBuild(variants, index) {
         const r = basis.r, s = this.TILE.rasterScale, size = Math.ceil(2 * r * s) + 4, T = this.TILE.slab
         const surface = document.createElement('canvas')
         surface.width = surface.height = size
@@ -1605,11 +1657,13 @@ const atmosphericLighting = {
         for (const [cell, weight] of T.mottle.octaves) {
             const noise = this.valueNoise(rand, size, cell * r * s)
             for (let i = 0; i < mottle.length; i++) mottle[i] += weight * noise[i]
+            yield
         }
         // Relief: rounded lumps (a smooth compact bump each, radius of the cell), splatted over the raster and joined by a
         // smooth maximum (smooth), so each lump keeps its own crown with soft hollows between.
         const F = T.relief, step = F.cell * r * s, rho = F.radius * step, reach = Math.ceil(rho), K = F.smooth
         const sum = new Float32Array(size * size).fill(1), cells = Math.ceil(size / step) + 2
+        let splatted = 0
         for (let j = 0; j < cells; j++)
             for (let i = 0; i < cells; i++) {
                 const sx = (i - 1 + 0.15 + 0.7 * rand()) * step, sy = (j - 1 + 0.15 + 0.7 * rand()) * step
@@ -1619,6 +1673,12 @@ const atmosphericLighting = {
                         const q = ((x - sx) ** 2 + (y - sy) ** 2) / (rho * rho)
                         if (q < 1) sum[y * size + x] += Math.exp(K * amp * (1 - q) ** 3) - 1
                     }
+                // TASK-1669: a yield after each VARIANT_STEP_PIXELS of lumps splatted.
+                splatted += 4 * reach * reach
+                if (splatted >= this.VARIANT_STEP_PIXELS) {
+                    splatted = 0
+                    yield
+                }
             }
         const height = sum.map(v => Math.log(v) / K)
         let hmin = Infinity, hmax = -Infinity
@@ -1628,8 +1688,11 @@ const atmosphericLighting = {
         }
         const image = g.getImageData(0, 0, size, size), d = image.data, c = size / 2, apothem = R * s * Math.sqrt(3) / 2
         const a = T.dome, la = this.TILE.sandstone.lightAngle * Math.PI / 180, lx = Math.cos(la), ly = Math.sin(la)
-        const col = new Float32Array(3)
-        for (let y = 1; y < size - 1; y++)
+        const col = new Float32Array(3), rows = Math.max(1, Math.floor(this.VARIANT_STEP_PIXELS / size))
+        yield
+        for (let y = 1; y < size - 1; y++) {
+            if (y % rows === 0)
+                yield
             for (let x = 1; x < size - 1; x++) {
                 const i = y * size + x, p = 4 * i
                 if (!d[p + 3]) continue
@@ -1653,7 +1716,9 @@ const atmosphericLighting = {
                 const lift = 1 + a.lift * (1 - h * h) * (1 + a.lean * toward), rimK = k * (1 - a.lean * toward)
                 for (let ch = 0; ch < 3; ch++) d[p + ch] = col[ch] * lift * (1 - (1 - a.rim[ch]) * Math.max(0, rimK))
             }
+        }
         g.putImageData(image, 0, 0)
+        yield
         g.save()
         g.beginPath()
         this.hexagonPath(g, 0, 0, R)
@@ -1700,16 +1765,24 @@ const atmosphericLighting = {
             g.fill()
         }
         g.restore()
-        return this.tileVariants[index] = surface
+        return variants[index] = surface
     },
     // TASK-1640: no longer the neutral tile (tileVariant): kept, unchanged, as the source of the owned tiles' stone detail
     // (tileDetail) and shape (ownedTile), so owned tiles look as before.
     stoneVariant(index) {
+        return this.runSteps(this.stoneVariantSteps(index))
+    },
+    // stoneVariant's work in pieces (TASK-1669: drawFacetsSteps' pieces): the same operations in the same order.
+    *stoneVariantSteps(index) {
         if (!this.stoneVariants || this.stoneVariants.radius !== basis.r) {
             this.stoneVariants = Object.assign(new Array(this.TILE.variants), {radius: basis.r})
             ++this.stoneVariantBuilds
         }
         if (this.stoneVariants[index]) return this.stoneVariants[index]
+        const variants = this.stoneVariants
+        return yield* this.variantJobSteps('stone', variants, index, () => this.stoneVariantBuild(variants, index))
+    },
+    *stoneVariantBuild(variants, index) {
         const r = basis.r, s = this.TILE.rasterScale, size = Math.ceil(2 * r * s) + 4, T = this.TILE.sandstone
         const surface = document.createElement('canvas')
         surface.width = surface.height = size
@@ -1738,7 +1811,9 @@ const atmosphericLighting = {
                 g.fillRect(x - radius, y - radius, 2 * radius, 2 * radius)
             }
         }
-        this.drawFacets(g, size, rand)
+        yield
+        yield* this.drawFacetsSteps(g, size, rand)
+        yield
         // Pits: a lit crescent offset to the lower right under a dark hollow.
         const pits = T.pits[0] + Math.floor(rand() * (T.pits[1] - T.pits[0] + 1))
         for (let i = 0; i < pits; i++) {
@@ -1830,7 +1905,7 @@ const atmosphericLighting = {
         }
         // TASK-1585: the slab's dome (multiply leaves the transparent outside of the tile as it is: the dome is transparent there).
         this.applyDome(g)
-        return this.stoneVariants[index] = surface
+        return variants[index] = surface
     },
     // TASK-1585: TILE.sandstone.dome as a multiply raster the size of a variant (opaque over the inset tile, transparent
     // outside it), built once per hex radius: the sandstone variants (so fog too) and the owned tiles are multiplied
@@ -2123,7 +2198,9 @@ const atmosphericLighting = {
             ctx.fill()
             return
         }
-        const marble = this.ownedTile(hexagon.tileHash % this.TILE.variants, fill)
+        // TASK-1669: singleTile (the menu's Play online emblem): this variant's tile alone (ownedTileSingle).
+        const index = hexagon.tileHash % this.TILE.variants
+        const marble = hexagon.singleTile ? this.ownedTileSingle(index, fill) : this.ownedTile(index, fill)
         const size = marble.width / this.TILE.rasterScale * shrink
         this.drawCropped(ctx, marble, c.x - size / 2, c.y - size / 2, size, this.cropOverlays && this.tileBox(marble.width))
     },
@@ -2215,22 +2292,32 @@ const atmosphericLighting = {
     // frame builds them (tileVariant, tileDetail in steps, buildOwnedTile; ownedDetail within it) while the menu is idle
     // (menuPrebuild), so the game finds them built. A generator: each yield ends a piece (what it built); a fill is kept
     // (ownedTiles) once all its variants are built, and skipped when kept already.
-    *prebuildOwnedSteps(colours) {
+    *prebuildOwnedSteps(colours, split = false) {
         const fills = []
         for (const colour of colours)
             for (const suburb of [false, true])
                 fills.push(this.colourFill(colour, suburb))
-        yield* this.ownedFillSteps(fills)
+        yield* this.ownedFillSteps(fills, split)
     },
-    // TASK-1518: prebuildOwnedSteps' pieces for the fills given (tileFill / colourFill keys).
-    *ownedFillSteps(fills) {
+    // TASK-1518: prebuildOwnedSteps' pieces for the fills given (tileFill / colourFill keys). TASK-1669: split (the menu's
+    // prebuild) builds the neutral and stone variants in their own pieces too (tileVariantSteps, stoneVariantSteps), each
+    // labelled as the variant's piece; without it a variant is one piece, as before (a game's start pieces).
+    *ownedFillSteps(fills, split = false) {
         for (let i = 0; i < this.TILE.variants; i++) {
             if (!this.tileVariants || this.tileVariants.radius !== basis.r || !this.tileVariants[i]) {
-                this.tileVariant(i)
+                if (split)
+                    for (const steps = this.tileVariantSteps(i); !steps.next().done;)
+                        yield 'tileVariant ' + i
+                else
+                    this.tileVariant(i)
                 yield 'tileVariant ' + i
             }
             if (!this.stoneVariants || this.stoneVariants.radius !== basis.r || !this.stoneVariants[i]) {
-                this.stoneVariant(i)
+                if (split)
+                    for (const steps = this.stoneVariantSteps(i); !steps.next().done;)
+                        yield 'stoneVariant ' + i
+                else
+                    this.stoneVariant(i)
                 yield 'stoneVariant ' + i
             }
             if (!this.tileDetailArray()[i]) {
@@ -2252,8 +2339,10 @@ const atmosphericLighting = {
         for (const fill of fills) {
             const tiles = []
             for (let i = 0; i < this.TILE.variants && !this.ownedTileMap().has(fill); i++) {
-                // TASK-1562: in pieces (ownedTileSteps), each a yield of its own.
-                tiles.push(yield* this.ownedTileSteps(i, fill))
+                // TASK-1562: in pieces (ownedTileSteps), each a yield of its own. TASK-1669: a tile built alone (the menu's
+                // emblem, ownedTileSingle) is taken as it is.
+                const single = this.ownedSingleMap().get(fill + ' ' + i)
+                tiles.push(single || (yield* this.ownedTileSteps(i, fill)))
                 yield 'ownedTile ' + fill + ' ' + i
             }
             if (!this.ownedTileMap().has(fill))
@@ -2263,8 +2352,47 @@ const atmosphericLighting = {
     buildOwnedFill(fill) {
         let tiles = this.ownedTiles.get(fill)
         if (!tiles)
-            this.ownedTiles.set(fill, tiles = Array.from({length: this.TILE.variants}, (_, i) => this.buildOwnedTile(i, fill)))
+            this.ownedTiles.set(fill, tiles = Array.from({length: this.TILE.variants},
+                (_, i) => this.ownedSingleMap().get(fill + ' ' + i) || this.buildOwnedTile(i, fill)))
         return tiles
+    },
+    // TASK-1669: owned tiles built alone, by fill and variant ('fill index'), at the hex radius now (a new map at a new
+    // radius): the menu's Play online emblem draws one variant of two colours, and building their fills' every variant
+    // (ownedTile) held its first frame for 1.6-2 s. The fills built later take them (buildOwnedFill, ownedFillSteps).
+    ownedSingleMap() {
+        if (!this.ownedSingles || this.ownedSingles.radius !== basis.r)
+            this.ownedSingles = Object.assign(new Map(), {radius: basis.r})
+        return this.ownedSingles
+    },
+    // The owned tile of variant index of fill, its fill's if built, else built alone (ownedSingleSteps run through).
+    ownedTileSingle(index, fill) {
+        const tiles = this.ownedTileMap().get(fill)
+        if (tiles) return tiles[index]
+        return this.ownedSingleMap().get(fill + ' ' + index) || this.runSteps(this.ownedSingleSteps(index, fill))
+    },
+    // ownedTileSingle's build in pieces (what buildOwnedTile takes of the variant first: its stone variant, detail and
+    // detail parts, then ownedTileSteps' pieces), so the menu can build it ahead in idle time (menuEmblemPrebuild).
+    *ownedSingleSteps(index, fill) {
+        const tiles = this.ownedTileMap().get(fill)
+        if (tiles) return tiles[index]
+        const singles = this.ownedSingleMap(), key = fill + ' ' + index
+        if (singles.has(key)) return singles.get(key)
+        yield* this.stoneVariantSteps(index)
+        if (!this.tileDetailArray()[index]) {
+            const steps = this.tileDetailSteps(index)
+            let step = steps.next()
+            for (; !step.done; step = steps.next())
+                yield
+            this.tileDetailArray()[index] ||= step.value
+        }
+        if (!this.tileDetail(index).parts) {
+            this.ownedDetail(index)
+            yield
+        }
+        const tile = yield* this.ownedTileSteps(index, fill)
+        if (singles === this.ownedSingleMap() && !singles.has(key))
+            singles.set(key, tile)
+        return singles.get(key) || tile
     },
     // TASK-1372: true builds the owned tiles of a fill a frame first draws (ownedTile) and those of every other owner on the
     // board (ownedFills, which can own a cell later) one fill a task after it; false builds them all at the first.

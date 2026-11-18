@@ -91,11 +91,13 @@ let failedImages = new Set()
 for (let i = 0; i < images.length; ++i) {
     assets[images[i]].onload = function() {
         failedImages.delete(images[i])
-        ++imagesCountLoaded
-        cachedImages[images[i]] = cacheImage(images[i])
-        settleGameSprites()
-        if ((atmosphericNatureImages.includes(images[i]) || atmosphericBuildingImages[images[i]]) && typeof grid != 'undefined' && grid)
-            grid.surfaceCacheState = undefined
+        spriteLoadDone(images[i])
+        // TASK-1669: until the game sprites are first settled, the cache is painted in idle pieces (queueSpriteCache).
+        if (spriteCacheDeferred()) {
+            queueSpriteCache(images[i])
+            return
+        }
+        spriteCached(images[i], cacheImage(images[i]))
     }
     assets[images[i]].onerror = function() {
         // A missing optional variant must not become a blank sprite.
@@ -105,6 +107,7 @@ for (let i = 0; i < images.length; ++i) {
             return
         }
         console.error('failed to load asset ' + images[i] + ': ' + assets[images[i]].src)
+        spriteLoadDone(images[i])
         failedImages.add(images[i])
         ++imagesCountLoaded
         cachedImages[images[i]] = cacheImage(images[i])
@@ -161,49 +164,155 @@ function outlineDistance1d(f, n, d, v, z) {
 // distance to the silhouette (about 1 px of anti-aliasing, no blur), and the art is composited over it (source-over).
 // Opaque art pixels are unchanged.
 function paintSpriteOutline(canvas, size) {
+    finishSteps(paintSpriteOutlineSteps(canvas, size))
+}
+// TASK-1669: a generator's pieces run through (the work as it was before it was split).
+function finishSteps(steps) {
+    for (;;) {
+        const step = steps.next()
+        if (step.done)
+            return step.value
+    }
+}
+// TASK-1669: pixels of the outline's distance passes a piece (paintSpriteOutlineSteps yields after about as many).
+const OUTLINE_STEP_PIXELS = 16384
+// paintSpriteOutline's work in pieces (a yield after the pixels are read, after each OUTLINE_STEP_PIXELS of either
+// distance pass): the same operations in the same order, so the same pixels. viaWorker (the queued sprite caches,
+// runSpriteCache): the band is computed by the outline worker (outlineWorkerPost: the same code), the generator yielding
+// SPRITE_CACHE_WAIT until it is back; without a worker (or after a worker error) it is computed here in pieces.
+function* paintSpriteOutlineSteps(canvas, size, viaWorker = false) {
     const width = canvas.width, height = canvas.height, ctx = canvas.getContext('2d')
     const w = OUTLINE_WIDTH_FRAC * size
     if (!ctx || !width || !height || !(w > 0))
         return
     const data = ctx.getImageData(0, 0, width, height), px = data.data
+    const n = width * height, alphaOf = () => {
+        const alpha = new Uint8Array(n)
+        for (let i = 0; i < n; ++i)
+            alpha[i] = px[i * 4 + 3]
+        return alpha
+    }
+    let found = null
+    if (viaWorker) {
+        const reply = {}
+        // The alpha posted is transferred to the worker (a failed worker's band is computed from a new copy below).
+        if (outlineWorkerPost(alphaOf(), width, height, w, reply)) {
+            yield SPRITE_CACHE_WAIT
+            while (!reply.band && !reply.failed)
+                yield SPRITE_CACHE_WAIT
+            found = reply.band || null
+        }
+    }
+    if (!found) {
+        yield
+        found = yield* outlineBandSteps(alphaOf(), width, height, w)
+    }
+    // The band: the pixels the outline shows under (not opaque, coverage > 0), with their art before the outline,
+    // kept on the canvas (spriteOutline) so the team-colour variants recolour the art alone (compositeSpriteOutline).
+    const band = {index: found.index, coverage: found.coverage, art: new Uint8ClampedArray(found.index.length * 4)}
+    for (let k = 0; k < band.index.length; ++k)
+        band.art.set(px.subarray(band.index[k] * 4, band.index[k] * 4 + 4), k * 4)
+    compositeSpriteOutline(px, band)
+    canvas.spriteOutline = band
+    ctx.putImageData(data, 0, 0)
+}
+// The outline band of a sprite of the given alpha (width x height) and outline width w: the pixels not opaque whose
+// coverage is above 0 (index) and that coverage, from each pixel's exact Euclidean distance to the silhouette (alpha >=
+// 128). In pieces (a yield after each OUTLINE_STEP_PIXELS of either distance pass). Self-contained but for
+// outlineDistance1d and OUTLINE_STEP_PIXELS: the outline worker runs this same source (outlineWorkerSource).
+function* outlineBandSteps(alpha, width, height, w) {
     const n = width * height, grid = new Float64Array(n)
     for (let i = 0; i < n; ++i)
-        grid[i] = px[i * 4 + 3] >= 128 ? 0 : Infinity
+        grid[i] = alpha[i] >= 128 ? 0 : Infinity
     const len = Math.max(width, height)
     const f = new Float64Array(len), d = new Float64Array(len), v = new Int32Array(len), z = new Float64Array(len + 1)
+    const columns = Math.max(1, Math.floor(OUTLINE_STEP_PIXELS / height)), rows = Math.max(1, Math.floor(OUTLINE_STEP_PIXELS / width))
     for (let x = 0; x < width; ++x) {
         for (let y = 0; y < height; ++y) f[y] = grid[y * width + x]
         outlineDistance1d(f, height, d, v, z)
         for (let y = 0; y < height; ++y) grid[y * width + x] = d[y]
+        if ((x + 1) % columns === 0)
+            yield
     }
     for (let y = 0; y < height; ++y) {
         const row = y * width
         for (let x = 0; x < width; ++x) f[x] = grid[row + x]
         outlineDistance1d(f, width, d, v, z)
         for (let x = 0; x < width; ++x) grid[row + x] = d[x]
+        if ((y + 1) % rows === 0)
+            yield
     }
-    // The band: the pixels the outline shows under (not opaque, coverage > 0), with their art before the outline,
-    // kept on the canvas (spriteOutline) so the team-colour variants recolour the art alone (compositeSpriteOutline).
     let count = 0
     for (let i = 0; i < n; ++i)
-        if (px[i * 4 + 3] !== 255 && w + 1 - Math.sqrt(grid[i]) > 0)
+        if (alpha[i] !== 255 && w + 1 - Math.sqrt(grid[i]) > 0)
             ++count
-    const band = {index: new Int32Array(count), coverage: new Float32Array(count), art: new Uint8ClampedArray(count * 4)}
+    const index = new Int32Array(count), coverage = new Float32Array(count)
     for (let i = 0, k = 0; i < n; ++i) {
-        if (px[i * 4 + 3] === 255)
+        if (alpha[i] === 255)
             continue
         // Pixel centre to silhouette edge is the distance to the nearest silhouette pixel centre less half a pixel.
-        const coverage = Math.min(1, w + 1 - Math.sqrt(grid[i]))
-        if (!(coverage > 0))
+        const c = Math.min(1, w + 1 - Math.sqrt(grid[i]))
+        if (!(c > 0))
             continue
-        band.index[k] = i
-        band.coverage[k] = coverage
-        band.art.set(px.subarray(i * 4, i * 4 + 4), k * 4)
+        index[k] = i
+        coverage[k] = c
         ++k
     }
-    compositeSpriteOutline(px, band)
-    canvas.spriteOutline = band
-    ctx.putImageData(data, 0, 0)
+    return {index, coverage}
+}
+// TASK-1669: the outline worker: a Worker running outlineBandSteps (its source, with outlineDistance1d's, as a Blob), so
+// the queued sprite caches' distance passes (most of a cache's 50-130 ms) leave the main thread. 'off' until first
+// asked, then 'on', or 'failed' (no Worker/Blob, a start or worker error: the bands are computed on the main thread).
+const outlineWorker = {state: 'off', worker: null, next: 0, pending: new Map()}
+function outlineWorkerMain(e) {
+    const {id, alpha, width, height, w} = e.data
+    const band = finishSteps(outlineBandSteps(alpha, width, height, w))
+    postMessage({id, index: band.index, coverage: band.coverage}, [band.index.buffer, band.coverage.buffer])
+}
+function outlineWorkerSource() {
+    return [outlineDistance1d, finishSteps, outlineBandSteps].map(f => f.toString()).join('\n') +
+        `\nconst OUTLINE_STEP_PIXELS = ${OUTLINE_STEP_PIXELS}\nonmessage = ${outlineWorkerMain.toString()}\n`
+}
+function outlineWorkerFail() {
+    outlineWorker.state = 'failed'
+    try {
+        outlineWorker.worker?.terminate()
+    } catch (e) {}
+    outlineWorker.worker = null
+    for (const reply of outlineWorker.pending.values())
+        reply.failed = true
+    outlineWorker.pending.clear()
+    spriteCacheWake()
+}
+// Posts a band to compute; reply.band is set when it is back (reply.failed on a worker error). False: no worker.
+function outlineWorkerPost(alpha, width, height, w, reply) {
+    if (outlineWorker.state === 'off') {
+        try {
+            if (typeof Worker !== 'function' || typeof Blob !== 'function' || typeof URL === 'undefined' ||
+                    typeof URL.createObjectURL !== 'function')
+                throw new Error('no worker')
+            const url = URL.createObjectURL(new Blob([outlineWorkerSource()], {type: 'application/javascript'}))
+            const worker = new Worker(url)
+            worker.onmessage = e => {
+                const reply = outlineWorker.pending.get(e.data.id)
+                outlineWorker.pending.delete(e.data.id)
+                if (reply)
+                    reply.band = {index: e.data.index, coverage: e.data.coverage}
+                spriteCacheWake()
+            }
+            worker.onerror = () => outlineWorkerFail()
+            outlineWorker.worker = worker
+            outlineWorker.state = 'on'
+        } catch (e) {
+            outlineWorker.state = 'failed'
+        }
+    }
+    if (outlineWorker.state !== 'on')
+        return false
+    const id = ++outlineWorker.next
+    outlineWorker.pending.set(id, reply)
+    outlineWorker.worker.postMessage({id, alpha, width, height, w}, [alpha.buffer])
+    return true
 }
 // Puts each band pixel of px (straight-alpha RGBA) over the outline colour at the band's coverage (source-over).
 function compositeSpriteOutline(px, band) {
@@ -217,8 +326,12 @@ function compositeSpriteOutline(px, band) {
     }
 }
 function cacheImage(image) {
+    return finishSteps(cacheImageSteps(image))
+}
+// cacheImage's work in pieces (paintCachedImageSteps), returning the cache canvas.
+function* cacheImageSteps(image, viaWorker = false) {
     let tmpCanvas = document.createElement('canvas')
-    paintCachedImage(tmpCanvas, image)
+    yield* paintCachedImageSteps(tmpCanvas, image, viaWorker)
     if (!tabCanary)
         paintTabCanary()
     // The browser may drop an offscreen canvas backing store (backgrounded mobile tab).
@@ -230,6 +343,10 @@ function cacheImage(image) {
     return tmpCanvas
 }
 function paintCachedImage(tmpCanvas, image) {
+    finishSteps(paintCachedImageSteps(tmpCanvas, image))
+}
+// paintCachedImage's work in pieces: the raster, then the outline's (paintSpriteOutlineSteps).
+function* paintCachedImageSteps(tmpCanvas, image, viaWorker = false) {
     let width = assets.size
     let height = assets.size
 
@@ -245,9 +362,13 @@ function paintCachedImage(tmpCanvas, image) {
     tmpCanvas.spriteOutline = null
     if (!failedImages.has(image)) {
         drawImage(tmpCtx, image, pos, width, height) // TASK-1666: direct raster again (TASK-1606's 4x chain reverted)
-        if (spriteOutlined(image))
-            paintSpriteOutline(tmpCanvas, width)
+        if (spriteOutlined(image)) {
+            yield
+            yield* paintSpriteOutlineSteps(tmpCanvas, width, viaWorker)
+        }
     }
+    // TASK-1669: what the cache was painted from (settleGameSprites repaints only a cache whose key changed since).
+    tmpCanvas.spriteKey = spriteCacheKey(image)
     tmpCanvas.contentVersion = (tmpCanvas.contentVersion || 0) + 1 // TASK-1554 (InterfaceRecorder)
 }
 // Repaints the existing cached canvases in place, so the grid surface cache image refs
@@ -344,6 +465,78 @@ function cacheAllImages() {
     }
     paintTabCanary()
 }
+// TASK-1669: what a sprite cache is painted from: the image's source, whether it failed, its outline and the size.
+function spriteCacheKey(name) {
+    return `${assets[name]?.src}|${failedImages.has(name)}|${spriteOutlined(name)}|${assets.size}`
+}
+// cacheAllImages for the caches not painted from what they would be now (missing, or the image, its failure, the
+// outline or the size changed since): the sprites settle without painting every cache a second time (each was painted
+// when its image loaded, the same pixels).
+function cacheStaleImages() {
+    for (let i = 0; i < images.length; ++i)
+        if (!cachedImages[images[i]] || cachedImages[images[i]].spriteKey !== spriteCacheKey(images[i]))
+            cachedImages[images[i]] = cacheImage(images[i])
+    paintTabCanary()
+}
+// A sprite's cache is ready (painted at its load, or by its queued pieces): it counts as loaded, and the board's
+// surface cache is drawn again for the atmospheric nature and buildings.
+function spriteCached(name, canvas) {
+    ++imagesCountLoaded
+    cachedImages[name] = canvas
+    settleGameSprites()
+    if ((atmosphericNatureImages.includes(name) || atmosphericBuildingImages[name]) && typeof grid != 'undefined' && grid)
+        grid.surfaceCacheState = undefined
+}
+// TASK-1669: the game sprites load behind the menu (waitForImagesLoad); painting each cache (its raster and outline,
+// 50-130 ms) in its load event held a menu frame per sprite. Until they first settle, a loaded sprite's cache is
+// painted in pieces (cacheImageSteps, the outline's distance passes in the outline worker) in idle callbacks instead:
+// SPRITE_CACHE_STEP_MS of pieces a callback (one at least; all there are while a game entry waits for them,
+// whenGameSpritesReady). A sprite counts as loaded (imagesCountLoaded) when its cache is ready, so the sprites settle
+// as before, once every cache is painted.
+const SPRITE_CACHE_STEP_MS = 12
+// What a cache's pieces yield while the outline worker computes its band (the job waits, spriteCacheWake resumes it).
+const SPRITE_CACHE_WAIT = 'spriteCacheWait'
+const spriteCacheJobs = []
+let spriteCacheScheduled = false
+function spriteCacheDeferred() {
+    return !gameSpritesLoaded && typeof requestIdleCallback == 'function' && typeof document.createElement == 'function'
+}
+function queueSpriteCache(name) {
+    spriteCacheJobs.push({name, steps: null, waiting: false})
+    scheduleSpriteCache()
+}
+function spriteCacheWake() {
+    for (const job of spriteCacheJobs)
+        job.waiting = false
+    scheduleSpriteCache()
+}
+function scheduleSpriteCache() {
+    if (spriteCacheScheduled || !spriteCacheJobs.some(job => !job.waiting))
+        return
+    spriteCacheScheduled = true
+    requestIdleCallback(runSpriteCache, {timeout: 50})
+}
+function runSpriteCache(deadline) {
+    spriteCacheScheduled = false
+    const start = performance.now()
+    const budget = deadline.didTimeout ? SPRITE_CACHE_STEP_MS : Math.min(SPRITE_CACHE_STEP_MS, Math.max(4, deadline.timeRemaining()))
+    for (;;) {
+        const job = spriteCacheJobs.find(job => !job.waiting)
+        if (!job)
+            return
+        job.steps ??= cacheImageSteps(job.name, true)
+        const step = job.steps.next()
+        if (step.done) {
+            spriteCacheJobs.splice(spriteCacheJobs.indexOf(job), 1)
+            // A size changed meanwhile: painted again at the size now.
+            spriteCached(job.name, step.value.spriteKey === spriteCacheKey(job.name) ? step.value : cacheImage(job.name))
+        } else if (step.value === SPRITE_CACHE_WAIT)
+            job.waiting = true
+        if (!gameSpritesWaiting && performance.now() - start >= budget)
+            break
+    }
+    scheduleSpriteCache()
+}
 let cachedImages = {}
 
 // TASK-1593: player-colour cloth variants of the polished player units. The polished art paints its cloth in fixed
@@ -393,23 +586,33 @@ function teamColourVariantMissing(name, rgb) {
 // blue swordsmen), so pictures drawn in the same frame do not repaint each other.
 const teamColourPortraits = new Map()
 function teamColourPortrait(name, rgb, size, slot = name) {
+    return finishSteps(teamColourPortraitSteps(name, rgb, size, slot))
+}
+// TASK-1669: teamColourPortrait's work in pieces (the raster, the outline's pieces, the recolour), so the menu builds its
+// pictures' portraits ahead (menuWarmSteps), viaWorker: the outline's band in the outline worker (paintSpriteOutlineSteps).
+function* teamColourPortraitSteps(name, rgb, size, slot = name, viaWorker = false) {
     const image = assets[name]
     if (!teamColourVariants.has(name) || !rgb || !otherSettings.usePolishedSprites || failedImages.has(name) ||
             !image || !image.complete || !image.naturalWidth)
         return null
     size = Math.max(1, Math.round(size))
-    const key = (rgb.r << 16) | (rgb.g << 8) | rgb.b
+    const key = (rgb.r << 16) | (rgb.g << 8) | rgb.b, src = image.src
     const kept = teamColourPortraits.get(slot)
-    if (kept && kept.key === key && kept.size === size && kept.src === image.src && kept.name === name)
+    if (kept && kept.key === key && kept.size === size && kept.src === src && kept.name === name)
         return kept.canvas
     const base = document.createElement('canvas')
     base.width = base.height = size
     base.getContext('2d').drawImage(image, 0, 0, size, size)
-    if (spriteOutlined(name))
-        paintSpriteOutline(base, size)
-    const canvas = kept ? kept.canvas : document.createElement('canvas')
+    if (spriteOutlined(name)) {
+        yield
+        yield* paintSpriteOutlineSteps(base, size, viaWorker)
+        yield
+    }
+    // Kept again: another portrait of the slot may have been kept meanwhile (its canvas is repainted in place).
+    const now = teamColourPortraits.get(slot)
+    const canvas = now ? now.canvas : document.createElement('canvas')
     paintTeamColourImage(canvas, base, key, name)
-    teamColourPortraits.set(slot, {name, key, size, src: image.src, canvas})
+    teamColourPortraits.set(slot, {name, key, size, src, canvas})
     return canvas
 }
 // Repaints every built variant from its (repainted) base; restoreImageCaches calls it after a context loss.
@@ -616,6 +819,9 @@ function loadMenuFonts(timeoutMs = 4000) {
 }
 function loadAssets() {
     menuFontsReady = loadMenuFonts()
+    // TASK-1669: the menu's Play online emblem tiles, built in idle time while the menu's fonts and images load.
+    if (typeof menuEmblemPrebuild == 'function')
+        menuEmblemPrebuild()
     assets.logo.src = "assets/logo.svg"
     assets.checkMark.src = "assets/checkMark.svg"
 
@@ -632,7 +838,39 @@ function loadAssets() {
     // The game sprites the menu draws now, the others once the menu has started (waitForImagesLoad).
     loadSprites(spriteImages.filter(name => MENU_CRITICAL_IMAGES.includes(name)))
 }
-function loadSprites(names = spriteImages) {
+// staggered (TASK-1669: the game sprites behind the menu): requested SPRITE_LOAD_CONCURRENCY at a time, the next an idle
+// callback after one has loaded (spriteLoadDone), so the browser's parse of each SVG document (50-100 ms for the large
+// unit sprites) falls between menu frames instead of all of them in one 1 s task when they all arrive at once.
+function loadSprites(names = spriteImages, staggered = false) {
+    if (staggered && typeof requestIdleCallback == 'function') {
+        spriteLoadQueue.push(...spriteImages.filter(name => names.includes(name) && !spriteLoadQueue.includes(name)))
+        pumpSpriteLoads()
+        return
+    }
+    // Requested now: none of them waits in the queue any more.
+    spriteLoadQueue = spriteLoadQueue.filter(name => !names.includes(name))
+    setSpriteSources(names)
+}
+const SPRITE_LOAD_CONCURRENCY = 3
+let spriteLoadQueue = []
+const spriteLoadsInFlight = new Set()
+let spriteLoadPumpScheduled = false
+function pumpSpriteLoads() {
+    spriteLoadPumpScheduled = false
+    while (spriteLoadsInFlight.size < SPRITE_LOAD_CONCURRENCY && spriteLoadQueue.length) {
+        const name = spriteLoadQueue.shift()
+        spriteLoadsInFlight.add(name)
+        setSpriteSources([name])
+    }
+}
+// A sprite's request settled (loaded, or failed for good): the next is requested an idle callback later.
+function spriteLoadDone(name) {
+    if (!spriteLoadsInFlight.delete(name) || spriteLoadPumpScheduled || !spriteLoadQueue.length)
+        return
+    spriteLoadPumpScheduled = true
+    requestIdleCallback(pumpSpriteLoads, {timeout: 100})
+}
+function setSpriteSources(names) {
     let spritesFolder = otherSettings.usePolishedSprites ? "sprites" : "spritesOld"
     for (let i = 0; i < spriteImages.length; ++i) {
         if (!names.includes(spriteImages[i]))
@@ -658,9 +896,12 @@ function loadSprites(names = spriteImages) {
     }
 }
 // What the menu itself draws (menu/, the menu interfaces): the logo, check marks, slider arrows and the
-// hot seat / tutorial banner emblems (MENU_EMBLEMS: 'normchel', 'noob'). The menu starts once these and the fonts are
-// ready; the other game sprites load behind it, and every entry into a game waits for them (whenGameSpritesReady).
-const MENU_CRITICAL_IMAGES = ['logo', 'checkMark', 'leftButton', 'rightButton', 'normchel', 'noob']
+// hot seat / tutorial / Play online banner emblems (MENU_EMBLEMS: 'normchel', 'noob', 'town'). The menu starts once
+// these and the fonts are ready; the other game sprites load behind it, and every entry into a game waits for them
+// (whenGameSpritesReady).
+// TASK-1669: and the Play online emblem's town (MENU_EMBLEMS.towns), so the menu's first frame draws that banner whole
+// (it was drawn without its emblem, then rasterized again once the town loaded).
+const MENU_CRITICAL_IMAGES = ['logo', 'checkMark', 'leftButton', 'rightButton', 'normchel', 'noob', 'town']
 function menuImagesSettled() {
     return MENU_CRITICAL_IMAGES.every(name => assets[name].complete || failedImages.has(name))
 }
@@ -676,6 +917,9 @@ function whenGameSpritesReady(run, control = Button.pressed) {
     if (gameSpritesLoaded)
         return run()
     const waiting = gameSpritesWaiting = {control, since: performance.now()}
+    // TASK-1669: the sprites still queued (loadSprites staggered) are requested at once.
+    if (spriteLoadQueue.length)
+        loadSprites(spriteLoadQueue.slice())
     return gameSpritesReady.then(() => {
         if (gameSpritesWaiting !== waiting)
             return
@@ -693,13 +937,15 @@ function waitForImagesLoad() {
         mainCanvas.addEventListener('contextrestored', restoreImageCaches)
     }
     // The first menu frame waits for the menu fonts (they load in parallel with the images). The other game sprites
-    // are requested then, so they do not hold up the menu's own downloads.
+    // are requested then, so they do not hold up the menu's own downloads. TASK-1669: and for the menu's pictures and
+    // rasters, built ahead in idle pieces (menuWarm), so the first frame only draws them.
     const startMenu = () => {
         menu.start()
-        loadSprites(spriteImages.filter(name => !MENU_CRITICAL_IMAGES.includes(name)))
+        loadSprites(spriteImages.filter(name => !MENU_CRITICAL_IMAGES.includes(name)), true)
     }
-    if (menuFontsReady) menuFontsReady.then(startMenu)
-    else startMenu()
+    const warmThenStart = () => typeof menuWarm == 'function' ? menuWarm(startMenu) : startMenu()
+    if (menuFontsReady) menuFontsReady.then(warmThenStart)
+    else warmThenStart()
 }
 // Called by every sprite load or failure: once every sprite has loaded or failed (a reloaded one counts again, so the
 // count alone is not enough) it caches them all (once) and resolves gameSpritesReady.
@@ -707,7 +953,7 @@ function settleGameSprites() {
     if (gameSpritesLoaded || imagesCountLoaded < images.length ||
             !images.every(name => failedImages.has(name) || (assets[name].complete && assets[name].naturalWidth > 0)))
         return
-    cacheAllImages()
+    cacheStaleImages()
     gameSpritesLoaded = true
     resolveGameSprites()
 }

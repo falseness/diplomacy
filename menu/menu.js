@@ -2663,13 +2663,17 @@ class HaloLogo {
         return {x: this.pos.x - this.w / 2 - margin, y: this.pos.y - this.h / 2 - margin,
             width: this.w + margin * 2, height: this.h + margin * 2}
     }
-    draw(ctx) {
+    // TASK-1669: the halo painted when its key changed (draw, and ahead: menuWarmSteps).
+    warm() {
         const image = assets[this.image]
         const key = `${this.w}x${this.h}`
         if (this.haloKey !== key && image?.complete && image.naturalWidth) {
             this.haloKey = key
             this.halo = this.paintHalo(image)
         }
+    }
+    draw(ctx) {
+        this.warm()
         // Unscaled at whole pixels: a plain copy each frame.
         if (this.halo) {
             const bounds = this.bounds
@@ -2895,10 +2899,97 @@ function drawMenuAsset(ctx, name, x, y, width, height, {rgb = null, slot = 'menu
     if (rgb) {
         const t = typeof ctx.getTransform == 'function' ? ctx.getTransform() : null
         const scale = t ? Math.hypot(t.a, t.b) || 1 : 1
+        if (menuPortraitPlan) {
+            menuPortraitPlan.push({name, rgb, size: Math.max(width, height) * scale, slot})
+            return image
+        }
         image = teamColourPortrait(name, rgb, Math.max(width, height) * scale, slot) ?? image
     }
+    if (menuPortraitPlan)
+        return image
     ctx.drawImage(image, x, y, width, height)
     return image
+}
+// TASK-1669: set while menuPortraitsOf paints the emblems to learn their portraits: drawMenuAsset records the portraits it
+// would draw ({name, rgb, size, slot}, as teamColourPortrait takes them) and draws nothing.
+let menuPortraitPlan = null
+// The player-colour portraits the banners' emblems draw (their rasters' transform: MenuBanner.canvasFor), but the
+// Play online one (its town cells take no portrait; its tiles: MENU_EMBLEMS.towns.tileSteps).
+function menuPortraitsOf(banners) {
+    const plan = []
+    for (const banner of banners) {
+        if (!(banner instanceof MenuBanner) || !banner.emblem || banner.emblem === 'towns' || !banner.emblemReady())
+            continue
+        const canvas = document.createElement('canvas')
+        canvas.width = canvas.height = 1
+        const ctx = canvas.getContext('2d')
+        ctx.translate(banner.margin - banner.rect.x, banner.margin - banner.rect.y)
+        menuPortraitPlan = plan
+        try {
+            menuEmblem(banner.emblem).paint(ctx, banner.disc, banner.emblemOptions)
+        } finally {
+            menuPortraitPlan = null
+        }
+    }
+    return plan
+}
+// TASK-1669: the menu's first frame built its pictures (1-2 s: the Play online emblem's tiles, the swordsmen's
+// portraits with their outlines, the sky, the banners' and logo's rasters). They are built ahead now, after the menu's
+// fonts and images (waitForImagesLoad), a piece at a time in idle callbacks (WARM_STEP_MS of pieces a callback, one at
+// least; a portrait's outline band in the outline worker meanwhile), the same builders and cache keys, so the first frame
+// finds them built; then done() starts the menu. After WARM_MAX_MS the menu starts as it is (its first frame builds the
+// rest). Without requestIdleCallback (headless runtimes) done() runs at once.
+const WARM_STEP_MS = 12
+const WARM_MAX_MS = 5000
+function* menuWarmSteps() {
+    if (otherSettings.atmosphericVisuals && typeof atmosphericLighting !== 'undefined')
+        yield* MENU_EMBLEMS.towns.tileSteps()
+    for (const p of menuPortraitsOf(menu.main.buttons))
+        yield* teamColourPortraitSteps(p.name, p.rgb, p.size, p.slot, true)
+    if (menu.sky.width !== WIDTH || menu.sky.height !== HEIGHT) {
+        menu.sky.rasterize()
+        yield
+    }
+    menu.inMenuText(() => menu.logo.warm?.())
+    yield
+    for (const banner of menu.main.buttons)
+        if (banner instanceof MenuBanner) {
+            menu.inMenuText(() => banner.warm())
+            yield
+        }
+}
+function menuWarm(done) {
+    if (typeof requestIdleCallback !== 'function' || typeof menu === 'undefined')
+        return done()
+    const steps = menuWarmSteps(), start = performance.now()
+    let finished = false
+    const finish = () => {
+        if (!finished) {
+            finished = true
+            done()
+        }
+    }
+    const run = deadline => {
+        const begin = performance.now()
+        try {
+            for (;;) {
+                const step = steps.next()
+                if (step.done)
+                    return finish()
+                if (performance.now() - start > WARM_MAX_MS)
+                    return finish()
+                // A portrait waiting for the outline worker: asked again in the next callback.
+                if (step.value === SPRITE_CACHE_WAIT || performance.now() - begin >= WARM_STEP_MS ||
+                        deadline.timeRemaining() <= 0)
+                    break
+            }
+        } catch (error) {
+            console.error('menu warm-up', error)
+            return finish()
+        }
+        requestIdleCallback(run, {timeout: 50})
+    }
+    requestIdleCallback(run, {timeout: 50})
 }
 
 // Banner emblems, painted inside the disc (already clipped to it). Geometry is in fractions of the disc radius r.
@@ -2953,6 +3044,19 @@ const MENU_EMBLEMS = {
             return {cells, arc: {x, y: topY + radius, radius, from: -Math.PI / 2 - half, to: -Math.PI / 2 + half,
                 width: r * 0.07, dash: [r * 0.12, r * 0.1]}}
         },
+        // The owned cell drawCell draws (atmospheric look): TASK-1669: its tile alone (singleTile: atmosphericLighting
+        // ownedTileSingle), not every variant of its colour, built ahead by menuEmblemPrebuild (tileSteps).
+        hexagon(rgb) {
+            return {calcPos: () => ({x: 0, y: 0}), pos: {x: 0, y: 0}, playerColor: 1, isSuburb: false,
+                unknown: false, tileHash: 0, player: {color: rgb}, singleTile: true}
+        },
+        *tileSteps() {
+            for (const rgb of [MENU_RED, MENU_GREEN]) {
+                const hexagon = this.hexagon(rgb)
+                yield* atmosphericLighting.ownedSingleSteps(hexagon.tileHash % atmosphericLighting.TILE.variants,
+                    atmosphericLighting.tileFill(hexagon))
+            }
+        },
         // Draws one cell (layout's cells: centre x, y, box width) in board units scaled to the box: the hexagon as an owned
         // cell of cell.rgb (Hexagon.draw: atmosphericLighting's grout and owned tile, else the player's hexagon raster) and
         // the town asset over it as an entity draws it (assets.size square on the cell's centre). glow: a shadow colour and
@@ -2968,8 +3072,7 @@ const MENU_EMBLEMS = {
                 ctx.shadowBlur = glow.blur
             }
             if (otherSettings.atmosphericVisuals) {
-                const hexagon = {calcPos: () => ({x: 0, y: 0}), pos: {x: 0, y: 0}, playerColor: 1, isSuburb: false,
-                    unknown: false, tileHash: 0, player: {color: cell.rgb}}
+                const hexagon = this.hexagon(cell.rgb)
                 ctx.save()
                 shadow()
                 // drawGrout draws the grout, then its trim clipped to it: the shadow only on the fill.
@@ -3018,6 +3121,25 @@ function menuHexagonRaster(rgb) {
     if (!raster)
         menuHexagonRasters.set(key, raster = Player.prototype.calcHexagon.call({hexColor: rgbToHex(rgb.r, rgb.g, rgb.b)}))
     return raster
+}
+// TASK-1669: the Play online emblem's owned tiles (MENU_EMBLEMS.towns.tileSteps) built from the page load on (loadAssets),
+// in idle callbacks (EMBLEM_PREBUILD_STEP_MS of pieces a callback, one at least) while the menu's fonts and images load,
+// so the menu's first frame does not build them (it builds what is left, the same tiles).
+const EMBLEM_PREBUILD_STEP_MS = 8
+function menuEmblemPrebuild() {
+    if (typeof requestIdleCallback !== 'function' || !otherSettings.atmosphericVisuals ||
+            typeof atmosphericLighting === 'undefined')
+        return
+    const steps = MENU_EMBLEMS.towns.tileSteps()
+    const run = deadline => {
+        const start = performance.now()
+        do {
+            if (steps.next().done)
+                return
+        } while (performance.now() - start < EMBLEM_PREBUILD_STEP_MS && deadline.timeRemaining() > 0)
+        requestIdleCallback(run, {timeout: 100})
+    }
+    requestIdleCallback(run, {timeout: 100})
 }
 function menuEmblem(name) {
     return MENU_EMBLEMS[name] ?? {assets: [name], paint(ctx, disc) {
@@ -3090,13 +3212,18 @@ class MenuBanner extends Button {
     get margin() {
         return this.rect.width * 0.25
     }
-    draw(ctx) {
+    // TASK-1669: the raster drawn now, rasterized when its key changed (draw, and ahead: menuWarmSteps).
+    warm() {
         const {x, y, width: w} = this.rect
         const key = `${x},${y},${w},${menuCompact()},${this.emblemKey()}`
         if (this.rasterKey !== key) {
             this.rasterKey = key
             this.raster = this.rasterize()
         }
+    }
+    draw(ctx) {
+        const {x, y, width: w} = this.rect
+        this.warm()
         ctx.save()
         const pivotX = x + w / 2
         ctx.translate(pivotX, y)
@@ -3775,9 +3902,8 @@ class Menu {
             this.selectedTree.buttons[i].touchmove(pos)
         }
     }
-    draw(ctx) {
-        ctx.save()
-        ctx.setTransform(1, 0, 0, 1, 0, 0)
+    // Runs paint with the menu's text settings (TASK-1669: draw, and the rasters built ahead, menuWarmSteps).
+    inMenuText(paint) {
         // Menu texts draw in the menu font; the game's texts keep Text's own default.
         const gameFamily = Text.defaultFamily, gameTitleFamily = Text.titleFamily
         Text.defaultFamily = MENU_FONT_FAMILY
@@ -3785,21 +3911,32 @@ class Menu {
         // Menu controls draw in the menu theme (sprites/elements/text.js MENU_THEME).
         Text.menuTheme = MENU_THEME
         try {
-            this.sky.draw(ctx)
-            // Co-op uses the header space for its size selector.
-            // A tree with its own logo and beta tag (the online hub, the hot seat setup screen) places them itself.
-            const logo = this.selectedTree.logo ?? this.logo, betaTag = this.selectedTree.betaTag ?? this.betaTag
-            if (this.selectedTree.logo || !this.selectedTree.isCoop) logo.draw(ctx)
-            betaTag.draw(ctx)
-            this.selectedTree.draw(ctx)
-            this.drawGameSpritesWaiting(ctx)
-            errorWindow.draw(ctx)
+            return paint()
         } finally {
             Text.defaultFamily = gameFamily
             Text.titleFamily = gameTitleFamily
             Text.menuTheme = null
+        }
+    }
+    draw(ctx) {
+        ctx.save()
+        ctx.setTransform(1, 0, 0, 1, 0, 0)
+        try {
+            this.inMenuText(() => this.drawParts(ctx))
+        } finally {
             ctx.restore()
         }
+    }
+    drawParts(ctx) {
+        this.sky.draw(ctx)
+        // Co-op uses the header space for its size selector.
+        // A tree with its own logo and beta tag (the online hub, the hot seat setup screen) places them itself.
+        const logo = this.selectedTree.logo ?? this.logo, betaTag = this.selectedTree.betaTag ?? this.betaTag
+        if (this.selectedTree.logo || !this.selectedTree.isCoop) logo.draw(ctx)
+        betaTag.draw(ctx)
+        this.selectedTree.draw(ctx)
+        this.drawGameSpritesWaiting(ctx)
+        errorWindow.draw(ctx)
     }
 }
 
@@ -3939,7 +4076,8 @@ const menuPrebuild = {
                 yield 'rockKeys'
             }
         }
-        yield* atmosphericLighting.prebuildOwnedSteps([...colours.values()])
+        // TASK-1669: the variants in pieces of their own too (split).
+        yield* atmosphericLighting.prebuildOwnedSteps([...colours.values()], true)
         // TASK-1632: the fogged cells' variants (per hex radius, any board).
         for (let i = 0; i < atmosphericLighting.TILE.variants; i++)
             if (!atmosphericLighting.fogVariants || atmosphericLighting.fogVariants.radius !== basis.r || !atmosphericLighting.fogVariants[i]) {
