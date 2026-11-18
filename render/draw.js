@@ -454,10 +454,11 @@ function drawDebugFps(ctx) {
 // button (drawTutorialArrow). The boxes drawn last are kept in drawTutorialHints.boxes, the arrow
 // in drawTutorialHints.arrow (null when none is drawn). Nothing is drawn while Retry or Next tutorial
 // switches tutorials (TutorialManager.switching). TASK-1679: until red's first unit selection in the game
-// only the 'click to control' arrow to a red unit is drawn (drawTutorialClickHint).
+// only the 'click to control' hint to a red unit is drawn (drawTutorialClickHint; TASK-1681 M1 spotlight style).
 function drawTutorialHints(ctx) {
     drawTutorialHints.boxes = []
     drawTutorialHints.arrow = null
+    drawTutorialHints.paint = null
     if (!gameSettings.tutorial || gameSettings.tutorial.id !== 'tutorial-0' || TutorialManager.switching)
         return
     const unit = Math.min(WIDTH, HEIGHT)
@@ -485,14 +486,15 @@ function drawTutorialHints(ctx) {
     ctx.textBaseline = 'middle'
 
     // TASK-1679: until red's first unit selection in this game (TutorialManager.clickHint, set by
-    // TutorialManager.start) only the 'click to control' arrow to a red unit is drawn.
+    // TutorialManager.start) only the 'click to control' hint to a red unit is drawn. TASK-1681: laid out here, painted
+    // by drawInterfaceTo after the HUD (drawTutorialHints.paint) so its darkness covers the HUD too.
     if (TutorialManager.clickHint) {
         const selected = gameEvent.selected
         if (selected && selected.isUnit && selected.playerColor === TUTORIAL_HUMAN_SLOT)
             TutorialManager.clickHint = false
         else {
             if (whooseTurn === TUTORIAL_HUMAN_SLOT && !gameEvent.waitingMode && !tutorialResultInterface.visible)
-                drawTutorialClickHint(ctx, unit, gap, box, drawLine)
+                drawTutorialHints.paint = drawTutorialClickHint(ctx, unit, gap)
             ctx.restore()
             return
         }
@@ -642,17 +644,53 @@ function drawTutorialArrow(ctx, unit, gap, font, obstacles, label, box, drawLine
             x: rect.x, y: rect.y, width: rect.width, height: rect.height}}
 }
 
-// TASK-1679: tutorial 0's first hint, a red arrow in drawTutorialArrow's style pointing at red's unit nearest the
-// screen centre (kept while its hex stays on screen), with a red 'click to control' caption box at its tail. The arrow points straight at the hex centre
-// across the middle of one of the hex's six edges, its tip (the white outline's round join) touching that edge, so
-// the whole arrow stays outside the hex: the unit's click area is never covered. The first direction (from
-// up-left first) and size (largest first) whose arrow and caption are on screen, clear of the HUD buttons, and whose
-// caption is clear of the arrow and the hex, is drawn; it is laid out again every frame, so it follows the camera.
-// drawTutorialHints.arrow keeps it with kind 'click' and the unit's hex as target.
-function drawTutorialClickHint(ctx, unit, gap, box, drawLine) {
+// TASK-1681: tutorial 0's first hint in the M1 style (the 'click to control' spotlight): the whole screen darkened except
+// a soft light beam falling straight down from the top screen edge onto the hex of red's unit nearest the screen centre
+// (kept while its hex stays on screen) and the hex itself; warm dust specks drifting down the beam, a warm light pool
+// and a pulsing glowing gold hex outline; the caption 'Click to' / 'Control' in the menu title font (cream-to-gold fill,
+// dark brown outline, gold glow) right of the unit with a gold arrow into the hex, flipped to the left or below the unit
+// when it would leave the screen or cover a HUD button (smaller sizes tried last). drawTutorialClickHint lays it out
+// (drawTutorialHints.arrow, kind 'click'; box 'clickCaption') and returns its painter, run by drawInterfaceTo after the
+// HUD so the darkness covers it. The darkness, beam light, pool, caption and arrow are built into one reused offscreen
+// canvas (clickHintOverlay) only when the screen size, camera, target unit, layout or font state changes; a frame
+// draws it (fading in over CLICK_HINT.fadeMs of the hint's own clock), the dust and the outline.
+const CLICK_HINT = {
+    fadeMs: 400, pulseMs: 1200, darkness: 'rgba(3, 3, 10, 0.86)',
+    // In hex radii (r): the beam's half width at the top screen edge and at the hex centre, the mask's blur
+    // (beam / hex rim), the light pool, the gold outline, the arrow tip's distance beyond the hex.
+    beamTop: 26 / 60, beamBottom: 0.95, beamBlur: 14 / 60, rimBlur: 6 / 60, rim: 6 / 60,
+    pool: {dy: 20 / 60, rx: 80 / 60, ry: 0.55, blur: 14 / 60}, outline: {r: 62 / 60, width: 5 / 60, glow: 16 / 60},
+    tipGap: 12 / 60,
+    // In caption font sizes (F): the arrow's length, shaft width, head length and half height, the gap to the caption,
+    // the text outline width and glow, the line height.
+    arrow: {length: 104 / 70, shaft: 8 / 70, head: 30 / 70, halfHead: 19 / 70, gap: 24 / 70},
+    text: {stroke: 5 / 70, glow: 16 / 70, line: 1, spacing: 2 / 70}, font: 0.078, dust: 38,
+    lines: ['Click to', 'Control'],
+}
+let clickHintOverlay = null
+function clickHintFont(size) {
+    return '800 ' + size + 'px ' + MENU_TITLE_FONT_FAMILY
+}
+function clickHintFontLoaded() {
+    try {
+        return typeof document !== 'undefined' && !!document.fonts && typeof document.fonts.check === 'function' &&
+            document.fonts.check('800 40px "Alegreya Sans SC"')
+    } catch (error) {
+        return false
+    }
+}
+function clickHintHexPath(ctx, x, y, r) {
+    ctx.beginPath()
+    for (let i = 0; i < 6; i++) {
+        const a = i * Math.PI / 3
+        i ? ctx.lineTo(x + r * Math.cos(a), y + r * Math.sin(a)) : ctx.moveTo(x + r * Math.cos(a), y + r * Math.sin(a))
+    }
+    ctx.closePath()
+}
+function drawTutorialClickHint(ctx, unit, gap) {
     const units = players[TUTORIAL_HUMAN_SLOT].units.filter(u => !u.killed && u.coord)
     if (!units.length)
-        return
+        return null
     const hexOf = u => {
         const t = biasToTransition(u.coord.x, u.coord.y)
         const x = (t.x * basis.offset.x - canvas.offset.x) * canvas.scale
@@ -667,79 +705,238 @@ function drawTutorialClickHint(ctx, unit, gap, box, drawLine) {
         kept.bounds.y + kept.bounds.height <= HEIGHT ? kept :
         units.map(hexOf).reduce((best, h) => distance(h) < distance(best) ? h : best)
     TutorialManager.clickHintUnit = hex.unit
-    const font = unit * 0.045
-    ctx.font = 'bold ' + font + 'px Arial'
-    const text = 'click to control'
-    const lineWidth = Math.max(2, unit * 0.006)
-    const captionWidth = ctx.measureText(text).width + font * 0.8
-    const captionHeight = font * 1.5
+    const fontLoaded = clickHintFontLoaded()
     const buttons = [backToMenuButton, iButton, undoButton, nextTurnButton].map(button => button.rect)
     const overlaps = (a, b) => a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height
     const onScreen = a => a.x >= gap && a.y >= gap && a.x + a.width <= WIDTH - gap && a.y + a.height <= HEIGHT - gap
-    const layOut = (size, angle, obstacles) => {
-        const length = size * 1.6, head = size * 0.5, halfHead = size * 0.33, halfShaft = size * 0.12
-        const cos = Math.cos(angle), sin = Math.sin(angle)
-        // angle is the arrow's direction, tail to tip: it enters the hex through the middle of the edge facing it.
-        const tip = {x: hex.x - cos * hex.apothem, y: hex.y - sin * hex.apothem}
-        const origin = {x: tip.x - cos * lineWidth / 2, y: tip.y - sin * lineWidth / 2}
-        const points = [[0, 0], [-head, halfHead], [-head, halfShaft], [-length, halfShaft],
-            [-length, -halfShaft], [-head, -halfShaft], [-head, -halfHead]]
-            .map(([x, y]) => ({x: origin.x + x * cos - y * sin, y: origin.y + x * sin + y * cos}))
-        const xs = points.map(p => p.x), ys = points.map(p => p.y)
-        const bounds = {x: Math.min(...xs) - lineWidth / 2, y: Math.min(...ys) - lineWidth / 2}
-        bounds.width = Math.max(...xs) + lineWidth / 2 - bounds.x
-        bounds.height = Math.max(...ys) + lineWidth / 2 - bounds.y
-        const tail = {x: origin.x - length * cos, y: origin.y - length * sin}
-        // The caption beyond the tail: above the arrow when it points down, below when it points up.
-        const caption = {x: Math.max(gap, Math.min(WIDTH - gap - captionWidth, tail.x - captionWidth / 2)),
-            y: sin > 0 ? bounds.y - gap - captionHeight : bounds.y + bounds.height + gap,
-            width: captionWidth, height: captionHeight}
-        const fits = [bounds, caption].every(part => onScreen(part) && !obstacles.some(o => overlaps(part, o))) &&
-            !overlaps(caption, bounds) && !overlaps(caption, hex.bounds)
-        return {tip, tail, points, bounds, caption, size, angle, fits}
+    const C = CLICK_HINT
+    // The caption at font size F: its line widths and the box round the drawn glyphs (outline included).
+    const measure = F => {
+        ctx.save()
+        ctx.font = clickHintFont(F)
+        if ('letterSpacing' in ctx)
+            ctx.letterSpacing = C.text.spacing * F + 'px'
+        const metrics = C.lines.map(line => ctx.measureText(line))
+        ctx.restore()
+        const ascent = Math.max(...metrics.map(m => m.actualBoundingBoxAscent || F * 0.7))
+        const descent = Math.max(...metrics.map(m => m.actualBoundingBoxDescent || F * 0.05))
+        const widths = metrics.map(m => m.width)
+        const pad = C.text.stroke * F / 2
+        return {widths, width: Math.max(...widths) + 2 * pad, height: ascent + C.text.line * F * (C.lines.length - 1) + descent + 2 * pad,
+            ascent, pad}
     }
-    const base = unit * 0.13
-    let arrow = null
+    // A layout: 'right' / 'left' (a horizontal arrow at the hex centre's height, the caption beyond its tail, centred on
+    // it) or 'below' (an arrow pointing up into the hex's bottom edge, the caption centred under its tail).
+    const layOut = (F, side, obstacles) => {
+        const m = measure(F), A = C.arrow
+        const length = A.length * F, shaft = A.shaft * F, head = A.head * F, halfHead = A.halfHead * F
+        const angle = side === 'right' ? Math.PI : side === 'left' ? 0 : -Math.PI / 2
+        const cos = Math.cos(angle), sin = Math.sin(angle)
+        const reach = side === 'below' ? hex.apothem : hex.r
+        const tip = {x: hex.x - cos * (reach + C.tipGap * hex.r), y: hex.y - sin * (reach + C.tipGap * hex.r)}
+        const tail = {x: tip.x - cos * length, y: tip.y - sin * length}
+        const points = [[0, 0], [-head, halfHead], [-head, shaft / 2], [-length, shaft / 2], [-length, -shaft / 2],
+            [-head, -shaft / 2], [-head, -halfHead]]
+            .map(([x, y]) => ({x: tip.x + x * cos - y * sin, y: tip.y + x * sin + y * cos}))
+        const xs = points.map(p => p.x), ys = points.map(p => p.y)
+        const bounds = {x: Math.min(...xs) - shaft / 2, y: Math.min(...ys) - shaft / 2}
+        bounds.width = Math.max(...xs) + shaft / 2 - bounds.x
+        bounds.height = Math.max(...ys) + shaft / 2 - bounds.y
+        const g = A.gap * F
+        const caption = {width: m.width, height: m.height}
+        if (side === 'below') {
+            caption.x = tail.x - m.width / 2
+            caption.y = tail.y + g
+        }
+        else {
+            caption.x = side === 'right' ? tail.x + g : tail.x - g - m.width
+            caption.y = tip.y - m.height / 2
+        }
+        const fits = [bounds, caption].every(part => onScreen(part) && !obstacles.some(o => overlaps(part, o))) &&
+            !overlaps(caption, hex.bounds) && !overlaps(caption, bounds)
+        return {side, F, measure: m, tip, tail, points, bounds, caption, angle, lineWidth: shaft, fits}
+    }
+    const base = unit * C.font
+    let layout = null
     search:
     for (const obstacles of [buttons, []])
         for (const scale of [1, 0.85, 0.7, 0.55, 0.4])
-            for (const degrees of [30, 150, -30, -150, 90, -90]) {
-                const candidate = layOut(base * scale, degrees * Math.PI / 180, obstacles)
-                arrow = arrow || candidate
+            for (const side of ['right', 'left', 'below']) {
+                const candidate = layOut(base * scale, side, obstacles)
+                layout = layout || candidate
                 if (candidate.fits) {
-                    arrow = candidate
+                    layout = candidate
                     break search
                 }
             }
-
+    const beam = {topY: 0, topLeft: hex.x - C.beamTop * hex.r, topRight: hex.x + C.beamTop * hex.r,
+        bottomY: hex.y, bottomLeft: hex.x - C.beamBottom * hex.r, bottomRight: hex.x + C.beamBottom * hex.r, centreX: hex.x}
+    const key = [WIDTH, HEIGHT, hex.x, hex.y, hex.r, layout.side, layout.F, fontLoaded].join(',')
+    const {x, y, width, height} = layout.caption
+    drawTutorialHints.boxes.push({name: 'clickCaption', x, y, width, height, lines: C.lines.map(text => [{text, color: 'gold'}])})
+    drawTutorialHints.arrow = {kind: 'click', tip: layout.tip, tail: layout.tail, points: layout.points,
+        bounds: layout.bounds, caption: layout.caption, size: layout.F, angle: layout.angle, fits: layout.fits,
+        lineWidth: layout.lineWidth, side: layout.side, font: clickHintFont(layout.F), fontLoaded, beam,
+        target: {coord: {x: hex.unit.coord.x, y: hex.unit.coord.y}, x: hex.x, y: hex.y, r: hex.r,
+            apothem: hex.apothem, bounds: hex.bounds}}
+    return paintCtx => paintTutorialClickHint(paintCtx, hex, layout, beam, key)
+}
+// The cached overlay: darkness with the beam and hex cut out, the beam light, the light pool, the arrow and the caption.
+function buildClickHintOverlay(hex, layout, beam, key) {
+    const C = CLICK_HINT
+    let overlay = clickHintOverlay
+    if (!overlay) {
+        const canvas = document.createElement('canvas')
+        overlay = clickHintOverlay = {canvas, ctx: canvas.getContext('2d'), key: null, builds: 0}
+    }
+    const {canvas, ctx} = overlay
+    if (canvas.width !== WIDTH || canvas.height !== HEIGHT) {
+        canvas.width = WIDTH
+        canvas.height = HEIGHT
+    }
+    const r = hex.r
+    const filters = 'filter' in ctx
+    const blur = px => { if (filters) ctx.filter = px > 0 ? 'blur(' + px + 'px)' : 'none' }
+    const beamPath = () => {
+        ctx.beginPath()
+        ctx.moveTo(beam.topLeft, beam.topY)
+        ctx.lineTo(beam.topRight, beam.topY)
+        ctx.lineTo(beam.bottomRight, beam.bottomY)
+        ctx.lineTo(beam.bottomLeft, beam.bottomY)
+        ctx.closePath()
+    }
     ctx.save()
-    // The arrow, outlined in white, with a soft shadow.
-    ctx.beginPath()
-    arrow.points.forEach((p, i) => i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y))
-    ctx.closePath()
-    ctx.shadowColor = 'rgba(0, 0, 0, 0.5)'
-    ctx.shadowBlur = unit * 0.015
-    ctx.shadowOffsetY = unit * 0.006
-    ctx.fillStyle = 'rgb(230, 20, 20)'
+    ctx.setTransform(1, 0, 0, 1, 0, 0)
+    ctx.clearRect(0, 0, WIDTH, HEIGHT)
+    ctx.fillStyle = C.darkness
+    ctx.fillRect(0, 0, WIDTH, HEIGHT)
+    // The mask: the beam lightens the darkness to 0.45 of it (soft edge), the hex is cut out (a soft rim, then solid).
+    ctx.globalCompositeOperation = 'destination-out'
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.55)'
+    blur(C.beamBlur * r)
+    beamPath()
     ctx.fill()
-    ctx.shadowColor = 'transparent'
+    ctx.fillStyle = 'black'
+    blur(C.rimBlur * r)
+    clickHintHexPath(ctx, hex.x, hex.y, r * (1 + C.rim))
+    ctx.fill()
+    blur(0)
+    clickHintHexPath(ctx, hex.x, hex.y, r)
+    ctx.fill()
+    // The beam's light, fading in towards the hex, and the warm pool on the hex.
+    ctx.globalCompositeOperation = 'source-over'
+    const light = ctx.createLinearGradient(0, beam.topY, 0, beam.bottomY)
+    light.addColorStop(0, 'rgba(255, 243, 196, 0.05)')
+    light.addColorStop(1, 'rgba(255, 243, 196, 0.5)')
+    ctx.fillStyle = light
+    blur(C.rimBlur * r)
+    beamPath()
+    ctx.fill()
+    blur(C.pool.blur * r)
+    ctx.fillStyle = 'rgba(255, 240, 176, 0.28)'
+    ctx.beginPath()
+    ctx.ellipse(hex.x, hex.y + C.pool.dy * r, C.pool.rx * r, C.pool.ry * r, 0, 0, Math.PI * 2)
+    ctx.fill()
+    blur(0)
+    // The arrow: a round-capped shaft and a head, gold with a gold glow.
+    const F = layout.F, A = C.arrow, cos = Math.cos(layout.angle), sin = Math.sin(layout.angle)
+    ctx.shadowColor = 'rgb(255, 207, 58)'
+    ctx.shadowBlur = C.text.glow * F
+    ctx.strokeStyle = ctx.fillStyle = 'rgb(255, 210, 63)'
+    ctx.lineWidth = A.shaft * F
+    ctx.lineCap = 'round'
+    const shaftEnd = A.head * F * 0.6
+    ctx.beginPath()
+    ctx.moveTo(layout.tail.x, layout.tail.y)
+    ctx.lineTo(layout.tip.x - cos * shaftEnd, layout.tip.y - sin * shaftEnd)
+    ctx.stroke()
+    ctx.beginPath()
+    const [t, h1, , , , , h2] = layout.points
+    ctx.moveTo(t.x, t.y)
+    ctx.lineTo(h1.x, h1.y)
+    ctx.lineTo(h2.x, h2.y)
+    ctx.closePath()
+    ctx.fill()
+    // The caption: outlined in dark brown with the gold glow, then the cream-to-gold fill, each line its own gradient.
+    const m = layout.measure
+    ctx.font = clickHintFont(F)
+    if ('letterSpacing' in ctx)
+        ctx.letterSpacing = C.text.spacing * F + 'px'
+    overlay.font = ctx.font
+    ctx.textBaseline = 'alphabetic'
+    ctx.textAlign = 'left'
     ctx.lineJoin = 'round'
-    ctx.lineWidth = lineWidth
-    ctx.strokeStyle = 'white'
+    ctx.lineWidth = C.text.stroke * F
+    ctx.strokeStyle = 'rgb(36, 19, 0)'
+    const box = layout.caption
+    C.lines.forEach((line, i) => {
+        const baseline = box.y + m.pad + m.ascent + i * C.text.line * F
+        const lineX = layout.side === 'right' ? box.x + m.pad : layout.side === 'left' ? box.x + box.width - m.pad - m.widths[i] :
+            box.x + (box.width - m.widths[i]) / 2
+        ctx.shadowColor = 'rgb(255, 207, 58)'
+        ctx.shadowBlur = C.text.glow * F
+        ctx.strokeText(line, lineX, baseline)
+        ctx.shadowColor = 'rgba(0, 0, 0, 0)'
+        ctx.shadowBlur = 0
+        const fill = ctx.createLinearGradient(0, baseline - m.ascent, 0, baseline)
+        fill.addColorStop(0, 'rgb(255, 251, 230)')
+        fill.addColorStop(1, 'rgb(255, 194, 26)')
+        ctx.fillStyle = fill
+        ctx.fillText(line, lineX, baseline)
+    })
+    ctx.restore()
+    overlay.key = key
+    overlay.builds++
+    overlay.captionFont = clickHintFont(F)
+}
+// A frame of the click hint: the overlay (fading in), the dust specks drifting down the beam, the pulsing gold outline.
+function paintTutorialClickHint(ctx, hex, layout, beam, key) {
+    const C = CLICK_HINT
+    // The hint's clock runs from its first painted frame, at most 50 ms a frame: a long frame (the game's first frames
+    // build its caches) does not skip the fade-in.
+    const now = typeof performance !== 'undefined' ? performance.now() : Date.now()
+    const clock = TutorialManager.clickHintClock ||= {last: now, elapsed: 0}
+    clock.elapsed += Math.max(0, Math.min(50, now - clock.last))
+    clock.last = now
+    const elapsed = clock.elapsed
+    const fade = Math.max(0, Math.min(1, elapsed / C.fadeMs))
+    if (!clickHintOverlay || clickHintOverlay.key !== key || clickHintOverlay.canvas.width !== WIDTH ||
+        clickHintOverlay.canvas.height !== HEIGHT)
+        buildClickHintOverlay(hex, layout, beam, key)
+    const r = hex.r
+    ctx.save()
+    ctx.setTransform(1, 0, 0, 1, 0, 0)
+    ctx.globalAlpha = fade
+    ctx.drawImage(clickHintOverlay.canvas, 0, 0)
+    // Dust: seeded specks, each sliding down the beam at its own speed, fading in at the top and out at the hex.
+    const specks = paintTutorialClickHint.specks ||= (() => {
+        let seed = 1681
+        const random = () => (seed = Math.imul(seed, 1664525) + 1013904223 >>> 0) / 4294967296
+        return Array.from({length: C.dust}, () => ({t: random(), u: random() * 2 - 1, size: 0.017 + random() * 0.027,
+            alpha: 0.25 + random() * 0.55, speed: 1 / (7000 + random() * 7000)}))
+    })()
+    ctx.fillStyle = 'rgb(255, 246, 208)'
+    for (const s of specks) {
+        const t = (s.t + elapsed * s.speed) % 1
+        const half = (beam.topRight - beam.topLeft) / 2 + ((beam.bottomRight - beam.bottomLeft) - (beam.topRight - beam.topLeft)) / 2 * t
+        const x = beam.centreX + s.u * half * 0.9, y = beam.topY + (beam.bottomY - beam.topY) * t
+        ctx.globalAlpha = fade * s.alpha * Math.min(1, t * 8, (1 - t) * 8)
+        ctx.beginPath()
+        ctx.arc(x, y, Math.max(0.6, s.size * r), 0, Math.PI * 2)
+        ctx.fill()
+    }
+    // The gold outline, its glow and brightness pulsing once per C.pulseMs.
+    const pulse = 0.5 - 0.5 * Math.cos(elapsed / C.pulseMs * Math.PI * 2)
+    ctx.globalAlpha = fade * (0.75 + 0.25 * pulse)
+    ctx.strokeStyle = 'rgb(255, 210, 63)'
+    ctx.shadowColor = 'rgb(255, 207, 58)'
+    ctx.shadowBlur = C.outline.glow * r * (0.6 + 0.8 * pulse)
+    ctx.lineWidth = C.outline.width * r
+    ctx.lineJoin = 'round'
+    clickHintHexPath(ctx, hex.x, hex.y, r * C.outline.r)
     ctx.stroke()
     ctx.restore()
-    // The caption, in the hint box style but red.
-    const {x, y, width, height} = arrow.caption
-    box('clickCaption', x, y, width, height, [[{text, color: 'white'}]])
-    ctx.fillStyle = 'rgb(220, 25, 25)'
-    roundedRectPath(ctx, x, y, width, height, Math.min(width, height) * 0.15)
-    ctx.fill()
-    ctx.stroke()
-    drawLine([[text, 'white']], x + width / 2, y + height / 2)
-    drawTutorialHints.arrow = {kind: 'click', tip: arrow.tip, tail: arrow.tail, points: arrow.points,
-        bounds: arrow.bounds, caption: arrow.caption, size: arrow.size, angle: arrow.angle, fits: arrow.fits,
-        lineWidth, target: {coord: {x: hex.unit.coord.x, y: hex.unit.coord.y}, x: hex.x, y: hex.y, r: hex.r,
-            apothem: hex.apothem, bounds: hex.bounds}}
+    drawTutorialHints.clickPaint = {elapsed, fade, pulse, builds: clickHintOverlay.builds, key, font: clickHintOverlay.captionFont}
 }
 
 // TASK-1554: the interface (HUD buttons, timer, panels, hints) is drawn into a cached canvas of the main canvas's size and
@@ -983,6 +1180,9 @@ function drawInterfaceTo(interfaceCtx) {
     gameEvent.draw(interfaceCtx)
 
     timer.draw(interfaceCtx)
+    // TASK-1681: tutorial 0's click hint darkens everything drawn so far (drawTutorialHints laid it out).
+    if (typeof drawTutorialHints.paint === 'function')
+        drawTutorialHints.paint(interfaceCtx)
 
     nextTurnPauseInterface.draw(interfaceCtx)
     if (gameSettings.tutorial) {
