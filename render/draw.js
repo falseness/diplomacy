@@ -457,30 +457,22 @@ function drawDebugFps(ctx) {
 // only the 'click to control' hint to a red unit is drawn (drawTutorialClickHint; TASK-1681 M1 spotlight style).
 function drawTutorialHints(ctx) {
     drawTutorialHints.boxes = []
+    drawTutorialHints.texts = []
     drawTutorialHints.arrow = null
     drawTutorialHints.paint = null
     if (!gameSettings.tutorial || gameSettings.tutorial.id !== 'tutorial-0' || TutorialManager.switching)
         return
     const unit = Math.min(WIDTH, HEIGHT)
     const gap = unit * 0.012
+    // TASK-1682: the hints in the M1 style, no boxes: a box keeps its layout (drawTutorialHints.boxes) and paints only a
+    // soft dark shade under its text (tutorialHintShade); drawLine sets the text in the menu title font (tutorialHintText).
     const box = (name, x, y, width, height, lines) => {
-        ctx.fillStyle = 'rgba(10, 18, 40, 0.75)'
-        roundedRectPath(ctx, x, y, width, height, Math.min(width, height) * 0.15)
-        ctx.fill()
-        ctx.strokeStyle = 'white'
-        ctx.lineWidth = Math.max(1, unit * 0.0025)
-        ctx.stroke()
+        tutorialHintShade(ctx, x, y, width, height, Math.min(width, height) * 0.5)
         drawTutorialHints.boxes.push({name, x, y, width, height, lines})
     }
-    // Each line is a list of [text, colour] parts, drawn centred on x.
-    const drawLine = (parts, x, y) => {
-        let left = x - parts.reduce((sum, [text]) => sum + ctx.measureText(text).width, 0) / 2
-        for (const [text, color] of parts) {
-            ctx.fillStyle = color
-            ctx.fillText(text, left, y)
-            left += ctx.measureText(text).width
-        }
-    }
+    // Each line is a list of [text, colour] parts, drawn centred on x at the Arial layout's size (ctx.font) and fitted to
+    // the width the Arial text took ('white' parts get the cream-to-gold fill, other colours are kept).
+    const drawLine = (parts, x, y) => tutorialHintText(ctx, parts, x, y)
     ctx.save()
     ctx.textAlign = 'left'
     ctx.textBaseline = 'middle'
@@ -549,8 +541,87 @@ function drawTutorialHints(ctx) {
     ctx.restore()
 }
 
-// A big red arrow (white outline, soft shadow) from up-left whose tip touches nextTurnButton.rect's
-// left border, a red glow ring around the button and a red caption box above the arrow's tail.
+// TASK-1682: tutorial 0's hints after the click in the M1 style of the click hint (TASK-1681): the menu title font 800 with a
+// cream-to-gold fill (red and blue words keep their player colours), a dark brown outline and a gold glow, over a soft dark
+// shade instead of a box; the next-turn arrow and its ring gold with the same glow.
+const TUTORIAL_HINT_STYLE = {
+    gold: 'rgb(255, 210, 63)', glow: 'rgb(255, 207, 58)', outline: 'rgb(36, 19, 0)', top: 'rgb(255, 251, 230)', bottom: 'rgb(255, 194, 26)',
+    // In font sizes (F): the outline width, the glow blur; the menu font's size vs the Arial layout size (fitted down to the
+    // Arial text's width); the shade's colour, spread beyond its box and blur.
+    stroke: 5 / 70, glowBlur: 9 / 70, scale: 1.2, shade: 'rgba(3, 2, 8, 0.96)', shadeSpread: 0.5, shadeBlur: 0.7,
+}
+// A soft dark shade round the box x, y, width, height (sized in ctx.font's size F): only the blurred shadow of a rounded rect drawn off screen, clipped off
+// the HUD buttons so they keep their look.
+function tutorialHintShade(ctx, x, y, width, height, radius) {
+    const S = TUTORIAL_HINT_STYLE, F = parseFloat(/([\d.]+)px/.exec(ctx.font)[1]), spread = S.shadeSpread * F
+    const off = WIDTH + width + 4 * F + Math.max(0, x)
+    ctx.save()
+    ctx.beginPath()
+    ctx.rect(0, 0, WIDTH, HEIGHT)
+    for (const button of [backToMenuButton, iButton, undoButton, nextTurnButton]) {
+        const r = button.rect
+        ctx.rect(r.x, r.y, r.width, r.height)
+    }
+    ctx.clip('evenodd')
+    ctx.shadowColor = S.shade
+    ctx.shadowBlur = S.shadeBlur * F
+    ctx.shadowOffsetX = off
+    ctx.fillStyle = 'black'
+    roundedRectPath(ctx, x - spread - off, y - spread, width + 2 * spread, height + 2 * spread, radius + spread)
+    ctx.fill()
+    ctx.restore()
+}
+// One hint line (a list of [text, colour] parts) centred on x, y (middle baseline): the menu title font at TUTORIAL_HINT_STYLE.scale
+// times ctx.font's size, made smaller when wider than the parts in ctx.font; outline with the gold glow, then the fill. Each part
+// drawn is kept in drawTutorialHints.texts (text, x, y, font, fill, outline width, glow blur).
+function tutorialHintText(ctx, parts, x, y) {
+    const S = TUTORIAL_HINT_STYLE
+    const layoutWidth = parts.reduce((sum, [text]) => sum + ctx.measureText(text).width, 0)
+    const layoutSize = parseFloat(/([\d.]+)px/.exec(ctx.font)[1])
+    ctx.save()
+    let F = layoutSize * S.scale
+    ctx.font = clickHintFont(F)
+    const width = () => parts.reduce((sum, [text]) => sum + ctx.measureText(text).width, 0)
+    const w = width()
+    if (w > layoutWidth) {
+        F *= layoutWidth / w
+        ctx.font = clickHintFont(F)
+    }
+    const widths = parts.map(([text]) => ctx.measureText(text).width)
+    const metrics = ctx.measureText(parts.map(([text]) => text).join(''))
+    const ascent = metrics.actualBoundingBoxAscent || F * 0.35, descent = metrics.actualBoundingBoxDescent || F * 0.35
+    ctx.textAlign = 'left'
+    ctx.textBaseline = 'middle'
+    ctx.lineJoin = 'round'
+    ctx.lineWidth = S.stroke * F
+    ctx.strokeStyle = S.outline
+    const left = x - widths.reduce((a, b) => a + b, 0) / 2
+    ctx.shadowColor = S.glow
+    ctx.shadowBlur = S.glowBlur * F
+    let at = left
+    parts.forEach(([text], i) => {
+        ctx.strokeText(text, at, y)
+        at += widths[i]
+    })
+    ctx.shadowColor = 'rgba(0, 0, 0, 0)'
+    ctx.shadowBlur = 0
+    const fill = ctx.createLinearGradient(0, y - ascent, 0, y + descent)
+    fill.addColorStop(0, S.top)
+    fill.addColorStop(1, S.bottom)
+    at = left
+    parts.forEach(([text, color], i) => {
+        ctx.fillStyle = color === 'white' ? fill : color
+        ctx.fillText(text, at, y)
+        if (drawTutorialHints.texts)
+            drawTutorialHints.texts.push({text, x: at, y, font: ctx.font, fill: color === 'white' ? [S.top, S.bottom] : color,
+                stroke: S.stroke * F, glow: S.glowBlur * F})
+        at += widths[i]
+    })
+    ctx.restore()
+}
+
+// A big arrow (TASK-1682: gold, dark brown outline, gold glow) from up-left whose tip touches nextTurnButton.rect's
+// left border, a gold glow ring around the button and a caption above the arrow's tail.
 // Every arrow part stays left of the button, so it never covers the button's click area. The first
 // angle, tip height and size (largest first) whose arrow and caption are on screen and clear of the
 // other hints and buttons (obstacles) is drawn. When none fits with the caption just above the arrow (a
@@ -606,38 +677,32 @@ function drawTutorialArrow(ctx, unit, gap, font, obstacles, label, box, drawLine
                 }
 
     ctx.save()
-    // The glow ring.
+    // TASK-1682: the glow ring and the arrow in the M1 gold with its gold glow; the arrow outlined in dark brown.
     const ring = {x: rect.centerX, y: rect.centerY, radius: rect.width * 0.55}
-    ctx.strokeStyle = 'rgba(255, 40, 40, 0.85)'
-    ctx.shadowColor = 'rgba(255, 0, 0, 0.9)'
+    ctx.strokeStyle = TUTORIAL_HINT_STYLE.gold
+    ctx.shadowColor = TUTORIAL_HINT_STYLE.glow
     ctx.shadowBlur = unit * 0.03
     ctx.lineWidth = Math.max(2, unit * 0.006)
     ctx.beginPath()
     ctx.arc(ring.x, ring.y, ring.radius, 0, Math.PI * 2)
     ctx.stroke()
     ctx.stroke()
-    // The arrow, outlined in white, with a soft shadow.
     ctx.beginPath()
     arrow.points.forEach((p, i) => i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y))
     ctx.closePath()
-    ctx.shadowColor = 'rgba(0, 0, 0, 0.5)'
-    ctx.shadowBlur = unit * 0.015
-    ctx.shadowOffsetY = unit * 0.006
-    ctx.fillStyle = 'rgb(230, 20, 20)'
-    ctx.fill()
-    ctx.shadowColor = 'transparent'
     ctx.lineJoin = 'round'
     ctx.lineWidth = lineWidth
-    ctx.strokeStyle = 'white'
+    ctx.strokeStyle = TUTORIAL_HINT_STYLE.outline
+    ctx.shadowBlur = unit * 0.025
     ctx.stroke()
-    ctx.restore()
-    // The caption, in the hint box style but red.
-    const {x, y, width, height} = arrow.caption
-    box('arrowCaption', x, y, width, height, [[{text, color: 'white'}]])
-    ctx.fillStyle = 'rgb(220, 25, 25)'
-    roundedRectPath(ctx, x, y, width, height, Math.min(width, height) * 0.15)
+    ctx.shadowColor = 'transparent'
+    ctx.fillStyle = TUTORIAL_HINT_STYLE.gold
     ctx.fill()
     ctx.stroke()
+    ctx.restore()
+    // The caption: the hint text style, no box.
+    const {x, y, width, height} = arrow.caption
+    box('arrowCaption', x, y, width, height, [[{text, color: 'white'}]])
     drawLine([[text, 'white']], x + width / 2, y + height / 2)
     drawTutorialHints.arrow = {tip: arrow.tip, tail: arrow.tail, points: arrow.points, bounds: arrow.bounds,
         caption: arrow.caption, ring, size: arrow.size, angle: arrow.angle, fits: arrow.fits, target: {
