@@ -196,10 +196,41 @@ const atmosphericLighting = {
             crack: {width: 0.012, alpha: 0.28, color: [112, 70, 50]},
             dome: {lift: 0.05, lean: 0.4, from: 0.4, to: 1, rim: [0.84, 0.76, 0.74]},
             bevel: {width: 0.07, lit: 0.35, shadow: 0.3}
+        },
+        // TASK-1673: the neutral tile is a concept cell texture (TASK-1672: tan cells cut from the concept art, the
+        // concept's own pixels), drawn as it is in the inset tile: textures [name, hex centre x, y (1x texture pixels),
+        // corner radius rx, apothem hy (1x pixels; the concept's hexes are a little flatter than the board's, so the
+        // texture is stretched to the board's hexagon)], files dir + name + '@' + level + 'x.webp' (lossless, the
+        // outside edge-extended), one level per drawn size (cellLevel). A cell's texture comes from a seeded hash of its
+        // coordinates (neutralIndex). The procedural slab (slab) is the fallback while they are not loaded (or failed).
+        cells: {
+            dir: 'assets/atmosphere/cells/',
+            levels: [1, 2, 4],
+            seed: 0x5bd1e995,
+            // A drawn hex up to fit x a level's hex width is drawn from that level (the smallest such), else from the largest.
+            fit: 1.02,
+            // Game entries wait for the textures at most this long (ms), then start with the fallback until they load.
+            wait: 20000,
+            textures: [
+                ['tan-01', 39.66, 33.5, 41.28, 34.5],
+                ['tan-02', 40.67, 34.27, 42.2, 35.27],
+                ['tan-03', 40.63, 34.19, 42.11, 35.19],
+                ['tan-04', 40.71, 34.0, 41.88, 35.0],
+                ['tan-05', 40.33, 33.5, 41.28, 34.5],
+                ['tan-06', 40.78, 34.0, 41.88, 35.0],
+                ['tan-07', 40.15, 33.42, 41.37, 34.58],
+                ['tan-08', 41.01, 34.0, 41.88, 35.0],
+                ['tan-09', 40.65, 34.33, 41.49, 34.67]
+            ]
         }
     },
     tileVariants: null,
     tileVariantBuilds: 0,
+    // TASK-1673: the concept cell textures (TILE.cells): 'idle', 'loading', 'ready' (every file loaded) or 'failed';
+    // cellImages by file name ('tan-01@2x') once ready; cellWaitOver once the game entries stopped waiting (TILE.cells.wait).
+    cellState: 'idle',
+    cellImages: null,
+    cellWaitOver: false,
     stoneVariants: null,
     stoneVariantBuilds: 0,
     tileDetails: null,
@@ -1603,8 +1634,94 @@ const atmosphericLighting = {
     // muted peach stone with soft blended light and dark patches (value noise) over broad soft lumps lit by the key light
     // (no facet creases, pits or chips), a few fine faint cracks, a gentle dome lit on its crown by the upper-left key light, and a thin soft bevel.
     // Clipped to the inset tile, centred in the raster; fog variants are made from them (fogVariant).
-    tileVariant(index) {
-        return this.runSteps(this.tileVariantSteps(index))
+    // TASK-1673: with the concept cell textures loaded, the neutral tile is the concept texture index (neutralIndex) at
+    // level (cellLevel; default: the level of the variant raster's own scale, TILE.rasterScale), cellVariant.
+    tileVariant(index, level) {
+        return this.runSteps(this.tileVariantSteps(index, level))
+    },
+    // TASK-1673: the concept cell textures requested (once): every file of every level; ready when all loaded, failed
+    // when one fails (the procedural slab stays). Once ready the neutral and fog variants are made again from them and
+    // the board's surface cache is drawn again.
+    loadCells() {
+        if (this.cellState !== 'idle' || typeof Image !== 'function') return
+        this.cellState = 'loading'
+        const C = this.TILE.cells, images = {}
+        let left = C.textures.length * C.levels.length
+        setTimeout(() => {
+            this.cellWaitOver = true
+            if (typeof settleGameSprites === 'function') settleGameSprites()
+        }, C.wait)
+        const done = ok => {
+            if (this.cellState !== 'loading') return
+            if (!ok) {
+                this.cellState = 'failed'
+                if (typeof settleGameSprites === 'function') settleGameSprites()
+                return
+            }
+            if (--left) return
+            this.cellImages = images
+            this.cellState = 'ready'
+            this.tileVariants = this.fogVariants = null
+            if (typeof grid !== 'undefined' && grid) grid.surfaceCacheState = undefined
+            if (typeof settleGameSprites === 'function') settleGameSprites()
+        }
+        for (const [name] of C.textures)
+            for (const level of C.levels) {
+                const image = new Image(), key = name + '@' + level + 'x'
+                image.onload = () => done(image.naturalWidth > 0 && (images[key] = image))
+                image.onerror = () => done(false)
+                image.src = C.dir + key + '.webp'
+            }
+    },
+    cellsReady() {
+        return this.cellState === 'ready'
+    },
+    // TASK-1673: game entries (settleGameSprites) wait until the textures loaded, failed or the wait (TILE.cells.wait) ran out.
+    cellsSettled() {
+        return this.cellState === 'ready' || this.cellState === 'failed' || this.cellWaitOver
+    },
+    // TASK-1673: the neutral variants there are (the concept textures, else the procedural slab's TILE.variants).
+    neutralCount() {
+        return this.cellsReady() ? this.TILE.cells.textures.length : this.TILE.variants
+    },
+    // TASK-1673: a neutral (or fogged) cell's variant: a seeded hash of its coordinates (tileHash) over the concept
+    // textures; tileHash's own variant (as before) for the procedural fallback.
+    neutralIndex(hexagon) {
+        if (!this.cellsReady()) return hexagon.tileHash % this.TILE.variants
+        let h = (hexagon.tileHash ^ this.TILE.cells.seed) >>> 0
+        h = Math.imul(h ^ (h >>> 16), 0x85ebca6b)
+        h = Math.imul(h ^ (h >>> 13), 0xc2b2ae35)
+        return ((h ^ (h >>> 16)) >>> 0) % this.TILE.cells.textures.length
+    },
+    // TASK-1673: the texture level a hex drawn px device pixels wide is drawn from: the smallest whose hex width (2 rx x
+    // level) is at least the drawn one (TILE.cells.fit), else the largest.
+    cellLevel(index, px) {
+        const C = this.TILE.cells, w = 2 * C.textures[index][3]
+        for (const level of C.levels)
+            if (w * level * C.fit >= px) return level
+        return C.levels[C.levels.length - 1]
+    },
+    // TASK-1673: a neutral tile from concept texture index at level: a raster of the texture's own resolution (its rx x
+    // level pixels per hex radius, rasterScale pixels per board unit) holding the inset tile (tileRadius) with the
+    // texture drawn in it 1:1 across, stretched down to the board's hexagon (the concept's is flatter); the hex
+    // centre (cx, cy) keeps the texture's sub-pixel phase across, so a hex drawn at the texture's own width on whole
+    // device pixels samples the concept's pixels as they are. The texture's outside (edge-extended) fills the thin ring
+    // between its cut and the tile's edge; the grout covers the joints as before.
+    cellVariant(index, level) {
+        const [name, tcx, tcy, rx, hy] = this.TILE.cells.textures[index], image = this.cellImages[name + '@' + level + 'x']
+        const r = basis.r, scale = rx * level / r, size = Math.ceil(2 * r * scale) + 4
+        const tx = tcx * level, ty = tcy * level, cx = Math.floor(size / 2) + tx - Math.floor(tx), cy = size / 2
+        const stretch = rx * Math.sqrt(3) / 2 / hy
+        const surface = document.createElement('canvas')
+        surface.width = surface.height = size
+        const g = surface.getContext('2d')
+        g.setTransform(scale, 0, 0, scale, cx, cy)
+        g.beginPath()
+        this.hexagonPath(g, 0, 0, this.tileRadius())
+        g.clip()
+        g.setTransform(1, 0, 0, stretch, cx - tx, cy - ty * stretch)
+        g.drawImage(image, 0, 0)
+        return Object.assign(surface, {rasterScale: scale, cx, cy, cell: name, level})
     },
     // TASK-1669: a variant's build shared by whoever asks for it (one generator per kind, radius and index): a variant built
     // in pieces (the menu's prebuild) and asked for at once meanwhile (a game's first frame) is finished, not started again.
@@ -1629,10 +1746,17 @@ const atmosphericLighting = {
     },
     // tileVariant's work in pieces (TASK-1669: a yield after each mottle octave, each VARIANT_STEP_PIXELS of relief lumps
     // and of the shading pass): the same operations in the same order, so the same pixels.
-    *tileVariantSteps(index) {
-        if (!this.tileVariants || this.tileVariants.radius !== basis.r) {
-            this.tileVariants = Object.assign(new Array(this.TILE.variants), {radius: basis.r})
+    *tileVariantSteps(index, level) {
+        const concept = this.cellsReady()
+        if (!this.tileVariants || this.tileVariants.radius !== basis.r || this.tileVariants.concept !== concept) {
+            this.tileVariants = Object.assign([], {radius: basis.r, concept})
             ++this.tileVariantBuilds
+        }
+        if (concept) {
+            const C = this.TILE.cells
+            level ??= this.cellLevel(index, 2 * basis.r * this.TILE.rasterScale)
+            const key = index + C.textures.length * C.levels.indexOf(level)
+            return this.tileVariants[key] ||= this.cellVariant(index, level)
         }
         if (this.tileVariants[index]) return this.tileVariants[index]
         const variants = this.tileVariants
@@ -1956,9 +2080,12 @@ const atmosphericLighting = {
     // Fog variants, built once per hex radius from the sandstone variant of the same index: the
     // cell in dark grout, the inset stone over it greyed, both multiplied by FOG.tint, then the mist
     // wisps on top.
+    // TASK-1673: index is neutralIndex's (the concept texture's when they are loaded); the tile is drawn by its own
+    // raster scale and hex centre (a concept cell's raster has its texture's).
     fogVariant(index) {
-        if (!this.fogVariants || this.fogVariants.radius !== basis.r)
-            this.fogVariants = Object.assign(new Array(this.TILE.variants), {radius: basis.r})
+        const concept = this.cellsReady()
+        if (!this.fogVariants || this.fogVariants.radius !== basis.r || this.fogVariants.concept !== concept)
+            this.fogVariants = Object.assign([], {radius: basis.r, concept})
         if (this.fogVariants[index]) return this.fogVariants[index]
         const r = basis.r, s = this.TILE.rasterScale, tile = this.tileVariant(index)
         const size = Math.ceil(2 * r * s) + 4
@@ -1971,8 +2098,8 @@ const atmosphericLighting = {
         g.fillStyle = this.FOG.grout
         g.fill()
         g.clip()
-        const tileSize = tile.width / s
-        g.drawImage(tile, -tileSize / 2, -tileSize / 2, tileSize, tileSize)
+        const k = 1 / (tile.rasterScale || s), tx = tile.cx ?? tile.width / 2, ty = tile.cy ?? tile.height / 2
+        g.drawImage(tile, -tx * k, -ty * k, tile.width * k, tile.height * k)
         // Each fogged slab a little lighter or darker than its neighbours (shade), and its mist
         // thicker over some cells than others (density), so the fog drifts in patches.
         const rand = this.random(0x85ebca6b * (index + 1))
@@ -2049,7 +2176,7 @@ const atmosphericLighting = {
         if (snap) ctx.setTransform(1, 0, 0, 1, 0, 0)
         for (const hexagon of hexagons) {
             const c = hexagon.calcPos()
-            const variant = this.fogVariant(hexagon.tileHash % this.TILE.variants)
+            const variant = this.fogVariant(this.neutralIndex(hexagon))
             const size = variant.width / this.TILE.rasterScale
             if (!snap) {
                 ctx.drawImage(variant, c.x - size / 2, c.y - size / 2, size, size)
@@ -2182,11 +2309,14 @@ const atmosphericLighting = {
     drawTile(ctx, hexagon) {
         const c = hexagon.calcPos(), shrink = 1 - this.TILE.trim.far.shrink * this.farJoint(ctx)
         if (hexagon.playerColor === 0) {
-            const index = hexagon.tileHash % this.TILE.variants
-            const variant = this.tileVariant(index)
-            const size = variant.width / this.TILE.rasterScale * shrink
+            // TASK-1673: the concept texture's level by the hex's drawn size (cellLevel), drawn about its hex centre.
+            const index = this.neutralIndex(hexagon), t = ctx.getTransform()
+            const level = this.cellsReady() ? this.cellLevel(index, 2 * basis.r * Math.hypot(t.a, t.b)) : undefined
+            const variant = this.tileVariant(index, level), scale = variant.rasterScale || this.TILE.rasterScale
+            const k = shrink / scale, cx = variant.cx ?? variant.width / 2, cy = variant.cy ?? variant.height / 2
             // A cell's tile canvas: its inset hexagon (tileBox: the hexagon's box and 2 px).
-            this.drawCropped(ctx, variant, c.x - size / 2, c.y - size / 2, size, this.cropOverlays && this.tileBox(variant.width))
+            this.drawCropped(ctx, variant, c.x - cx * k, c.y - cy * k, variant.width * k,
+                this.cropOverlays && this.tileBox(variant.width, scale, cx, cy))
             return
         }
         const fill = this.tileFill(hexagon)
@@ -2258,10 +2388,11 @@ const atmosphericLighting = {
     // TASK-1373: the pixel rectangle of a size x size variant raster holding its inset tile (the variant is drawn clipped to the
     // tileRadius hexagon at its centre, so every pixel outside is transparent), 2 pixels of margin: what tileDetail reads and
     // the owned tiles' detail and colour cover (their pixels outside it are transparent too).
-    tileBox(size) {
-        const s = this.TILE.rasterScale, rx = this.tileRadius() * s, ry = rx * Math.sqrt(3) / 2
-        const x = Math.max(0, Math.floor(size / 2 - rx) - 2), y = Math.max(0, Math.floor(size / 2 - ry) - 2)
-        return {x, y, w: Math.min(size, Math.ceil(size / 2 + rx) + 2) - x, h: Math.min(size, Math.ceil(size / 2 + ry) + 2) - y}
+    // TASK-1673: a raster of another scale (s) or hex centre (cx, cy: a concept cell's, cellVariant) too.
+    tileBox(size, s = this.TILE.rasterScale, cx = size / 2, cy = size / 2) {
+        const rx = this.tileRadius() * s, ry = rx * Math.sqrt(3) / 2
+        const x = Math.max(0, Math.floor(cx - rx) - 2), y = Math.max(0, Math.floor(cy - ry) - 2)
+        return {x, y, w: Math.min(size, Math.ceil(cx + rx) + 2) - x, h: Math.min(size, Math.ceil(cy + ry) + 2) - y}
     },
     // Owned marble, built once per hex radius and tile colour, all variants at once: the colour plus the
     // variant's detail, with the variant's alpha (the inset tile), under the sheen; an owned cell is one
@@ -2303,15 +2434,18 @@ const atmosphericLighting = {
     // prebuild) builds the neutral and stone variants in their own pieces too (tileVariantSteps, stoneVariantSteps), each
     // labelled as the variant's piece; without it a variant is one piece, as before (a game's start pieces).
     *ownedFillSteps(fills, split = false) {
-        for (let i = 0; i < this.TILE.variants; i++) {
-            if (!this.tileVariants || this.tileVariants.radius !== basis.r || !this.tileVariants[i]) {
-                if (split)
-                    for (const steps = this.tileVariantSteps(i); !steps.next().done;)
-                        yield 'tileVariant ' + i
-                else
+        // TASK-1673: the neutral variants are the concept cells once loaded (one drawImage each, at the raster scale's
+        // level; the drawn level is built when drawn); the procedural fallback is not built ahead while they load.
+        if (this.cellsReady())
+            for (let i = 0; i < this.neutralCount(); i++) {
+                const level = this.cellLevel(i, 2 * basis.r * this.TILE.rasterScale)
+                const key = i + this.TILE.cells.textures.length * this.TILE.cells.levels.indexOf(level)
+                if (!this.tileVariants || this.tileVariants.radius !== basis.r || !this.tileVariants.concept || !this.tileVariants[key]) {
                     this.tileVariant(i)
-                yield 'tileVariant ' + i
+                    yield 'tileVariant ' + i
+                }
             }
+        for (let i = 0; i < this.TILE.variants; i++) {
             if (!this.stoneVariants || this.stoneVariants.radius !== basis.r || !this.stoneVariants[i]) {
                 if (split)
                     for (const steps = this.stoneVariantSteps(i); !steps.next().done;)

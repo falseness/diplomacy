@@ -942,6 +942,8 @@ function waitForImagesLoad() {
     const startMenu = () => {
         menu.start()
         loadSprites(spriteImages.filter(name => !MENU_CRITICAL_IMAGES.includes(name)), true)
+        // TASK-1673: the concept cell textures (the neutral tiles) load with the other game sprites.
+        if (typeof atmosphericLighting != 'undefined') atmosphericLighting.loadCells()
     }
     const warmThenStart = () => typeof menuWarm == 'function' ? menuWarm(startMenu) : startMenu()
     if (menuFontsReady) menuFontsReady.then(warmThenStart)
@@ -953,6 +955,11 @@ function settleGameSprites() {
     if (gameSpritesLoaded || imagesCountLoaded < images.length ||
             !images.every(name => failedImages.has(name) || (assets[name].complete && assets[name].naturalWidth > 0)))
         return
+    // TASK-1673: and the concept cell textures (loaded, failed or waited for long enough: atmosphericLighting.cellsSettled).
+    if (typeof atmosphericLighting != 'undefined' && !atmosphericLighting.cellsSettled()) {
+        atmosphericLighting.loadCells()
+        return
+    }
     cacheStaleImages()
     gameSpritesLoaded = true
     resolveGameSprites()

@@ -4079,8 +4079,10 @@ const menuPrebuild = {
         // TASK-1669: the variants in pieces of their own too (split).
         yield* atmosphericLighting.prebuildOwnedSteps([...colours.values()], true)
         // TASK-1632: the fogged cells' variants (per hex radius, any board).
-        for (let i = 0; i < atmosphericLighting.TILE.variants; i++)
-            if (!atmosphericLighting.fogVariants || atmosphericLighting.fogVariants.radius !== basis.r || !atmosphericLighting.fogVariants[i]) {
+        // TASK-1673: the concept cells' (not the procedural fallback's while they load).
+        for (let i = 0; atmosphericLighting.cellsReady() && i < atmosphericLighting.neutralCount(); i++)
+            if (!atmosphericLighting.fogVariants || atmosphericLighting.fogVariants.radius !== basis.r ||
+                    !atmosphericLighting.fogVariants.concept || !atmosphericLighting.fogVariants[i]) {
                 atmosphericLighting.fogVariant(i)
                 yield 'fogVariant ' + i
             }
