@@ -176,6 +176,8 @@ class RangeWay extends Way {
         Q.push(coord)
         this.markCoord(v, coord, used)
     }
+    // TASK-1677: the capture tie-break is for move paths, not the shot range
+    usedHandler(v, coord, player) {}
     create(v0, moves, arr, player, bord, changeLogicText = false, newBorder = false) {
         // dont chage logic text and create border by default
         return super.create(v0, moves, arr, player, bord, changeLogicText, newBorder)

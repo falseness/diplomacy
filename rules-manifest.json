@@ -1,7 +1,7 @@
 {
   "format": 1,
   "algorithm": "sha256(path NUL bytes NUL ...)",
-  "rulesVersion": "6b47ec664c04cd5b6a1637723f83532a60c5f9c269b5f8c53ab0f53b1481e72a",
+  "rulesVersion": "b3a3a242ee3645424911367caf9cfb12e294442e9f7d46d1650b249802408d9d",
   "scripts": [
     {
       "path": "options/assert.js",
@@ -325,8 +325,8 @@
     },
     {
       "path": "sprites/entities/units/unit/interactionWithUnit.js",
-      "sha256": "36573f4bc339e3df65ad1890acdcb890797a2ddf11191026b3931bd108a6b16a",
-      "bytes": 32952
+      "sha256": "6756f7946d49cb4567194477e2a433b7e685fae7511eaa5d9aee1afc1e556074",
+      "bytes": 34575
     },
     {
       "path": "sprites/entities/units/unit/unit.js",
@@ -365,8 +365,8 @@
     },
     {
       "path": "sprites/entities/units/range/rangeUnit/interactionWithRangeUnit.js",
-      "sha256": "08a62a2132dbeb723056827dc015b5f847f6bc239fb0845125534aaf16ad228d",
-      "bytes": 6491
+      "sha256": "8bf8795a3f0406059b9ca3e7b1c588f5b7b8bdee1e82dfd3bf98d068aa2a26bc",
+      "bytes": 6606
     },
     {
       "path": "sprites/entities/units/range/rangeUnit/rangeUnit.js",

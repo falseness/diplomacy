@@ -301,6 +301,8 @@ class Way {
     constructor() {
         this.distanceOf = new Map()
         this.parentOf = new Map()
+        // TASK-1677: per reached cell, the cells its path paints that are neutral or an opponent's
+        this.gainOf = new Map()
         this.searchArr = null
         this.filledMoves = 0
         this.distanceRows = null
@@ -358,11 +360,13 @@ class Way {
         grid.newLogicText()
         this.distanceOf.clear()
         this.parentOf.clear()
+        this.gainOf.clear()
         this.distanceRows = null
         this.searchArr = arr
         this.filledMoves = moves
         this.setDistance(v0, 0)
         this.setParent(v0, v0)
+        this.gainOf.set(v0.x * WAY_KEY_STRIDE + v0.y, 0)
         return null
     }
     isCellImpassable(neighbour, v0, arr, player) {
@@ -418,6 +422,29 @@ class Way {
             this.setDistance(coord, this.distanceAt(v) + 1)
         }
         this.setParent(coord, v)
+        this.gainOf.set(coord.x * WAY_KEY_STRIDE + coord.y, this.gainThrough(v, coord, player))
+    }
+    // TASK-1677: 1 when moving onto the cell captures it (neutral or an opponent's hexagon), 0 for own and allied cells.
+    captureValue(coord, player) {
+        let hexagon = grid.arr[coord.x][coord.y].hexagon
+        return players[player].isAlliedWith(players[hexagon.playerColor]) ? 0 : 1
+    }
+    gainThrough(v, coord, player) {
+        return (this.gainOf.get(v.x * WAY_KEY_STRIDE + v.y) || 0) + this.captureValue(coord, player)
+    }
+    // TASK-1677: an already reached cell takes v as its parent when v is as far from the start as its parent
+    // (the same path length, so distances, reach and costs do not change) and the path through v captures more.
+    // BFS dequeues every cell of v's distance before the cell itself, so its gain is final when it is expanded.
+    usedHandler(v, coord, player) {
+        let key = coord.x * WAY_KEY_STRIDE + coord.y
+        let parent = this.parentOf.get(key)
+        if (!parent || coordsEqually(parent, coord) || this.distanceAt(parent) != this.distanceAt(v))
+            return
+        let gain = this.gainThrough(v, coord, player)
+        if (gain > (this.gainOf.get(key) || 0)) {
+            this.setParent(coord, v)
+            this.gainOf.set(key, gain)
+        }
     }
     // return arr of visitedCoords except v0
     create(v0, moves, arr, player, bord, changeLogicText = false, newBorder = true) {
@@ -452,6 +479,8 @@ class Way {
                 }
                 if (!this.isUsed(coord)) {
                     this.notUsedHandler(v, coord, moves, player, used, Q, enemyEntityQ)
+                } else {
+                    this.usedHandler(v, coord, player)
                 }
             }
         }
