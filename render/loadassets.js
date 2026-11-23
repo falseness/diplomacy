@@ -568,7 +568,7 @@ function teamColourImage(name, rgb) {
     // A new base canvas (sprites reloaded, theme switch), a repainted one (context loss: contentVersion) or a
     // changed assets.size rebuilds the variant in place, so references to it stay valid.
     if (variant.base !== base || variant.baseVersion !== base.contentVersion || variant.width !== base.width)
-        paintTeamColourImage(variant, base, key, name)
+        paintTeamColourImage(variant, base, key)
     return variant
 }
 // TASK-1632: whether teamColourImage(name, rgb) would build its variant now (the menu builds the variants ahead).
@@ -611,7 +611,7 @@ function* teamColourPortraitSteps(name, rgb, size, slot = name, viaWorker = fals
     // Kept again: another portrait of the slot may have been kept meanwhile (its canvas is repainted in place).
     const now = teamColourPortraits.get(slot)
     const canvas = now ? now.canvas : document.createElement('canvas')
-    paintTeamColourImage(canvas, base, key, name)
+    paintTeamColourImage(canvas, base, key)
     teamColourPortraits.set(slot, {name, key, size, src, canvas})
     return canvas
 }
@@ -622,102 +622,17 @@ function rebuildTeamColourImages() {
         if (!base || failedImages.has(name))
             continue
         for (const [key, variant] of variants)
-            paintTeamColourImage(variant, base, key, name)
+            paintTeamColourImage(variant, base, key)
     }
 }
 // Cloth classes of the polished art (artifacts/concepts/units_concept_style/concept_art/ranged_demons/vsvg.py
 // unit_recolored): red cloth hue < 0.045 or > 0.93 with saturation > 0.45 (and max channel > 0.12), blue cloth
 // 0.55 < hue < 0.75 with saturation > 0.35. Hue in [0, 1), HSV saturation.
+// TASK-1687: the curve art (red-hood archer included) paints only its cloth in these reds and blues: the bow, gold,
+// skin and wood are orange to yellow (hue > 0.05), iron grey and the dark lines below the max channel limit, so every
+// team-colour image (the archer too, no more TASK-1644 cloth regions) uses this colour rule alone.
 function teamColourIsCloth(h, s, mx) {
     return ((h < 0.045 || h > 0.93) && s > 0.45 && mx > 0.12) || (h > 0.55 && h < 0.75 && s > 0.35)
-}
-// TASK-1644: the GPT archer's bow is painted in the same reds as its hood and cloak, and the cloth's lit patches are
-// orange, so its cloth is classified by region: a red or orange pixel (hue < hmax or > 0.93, saturation > 0.45, max
-// channel > 0.12) is cloth only inside a cloth region, with that region's hue limit (0.075 hood and cloak, 0.1 the
-// pale lit patch on the hood's crown, 0.03 the face opening: hood shadows only, not skin or hair). Polygons in
-// sprite fractions of the archer (artwork facing right); archerLeft is its exact mirror. No blue rule.
-const TEAM_COLOUR_REGIONS = Object.freeze({
-    archer: Object.freeze({
-        regions: [
-            {hmax: 0.075, poly: [[0.39, 0.12], [0.45, 0.05], [0.55, 0.04], [0.63, 0.08], [0.68, 0.18], [0.68, 0.26],
-                [0.71, 0.30], [0.75, 0.38], [0.77, 0.45], [0.77, 0.50], [0.70, 0.50], [0.68, 0.47], [0.62, 0.43],
-                [0.55, 0.40], [0.47, 0.40], [0.40, 0.42], [0.35, 0.40], [0.32, 0.36], [0.33, 0.32], [0.37, 0.27],
-                [0.38, 0.18]]},
-            {hmax: 0.075, poly: [[0.62, 0.43], [0.68, 0.45], [0.77, 0.47], [0.77, 0.62], [0.70, 0.68], [0.64, 0.66],
-                [0.63, 0.55]]},
-            {hmax: 0.1, poly: [[0.42, 0.10], [0.45, 0.055], [0.52, 0.045], [0.52, 0.10], [0.46, 0.12]]},
-        ],
-        // Overrides the regions above where it applies.
-        face: {hmax: 0.03, poly: [[0.42, 0.22], [0.45, 0.17], [0.53, 0.155], [0.61, 0.17], [0.645, 0.22],
-            [0.63, 0.28], [0.56, 0.31], [0.48, 0.31], [0.43, 0.28]]},
-    }),
-})
-const TEAM_COLOUR_REGION_OF = Object.freeze({archer: {art: 'archer', mirror: false}, archerLeft: {art: 'archer', mirror: true}})
-function teamColourInPolygon(poly, x, y) {
-    let inside = false
-    for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
-        const [x1, y1] = poly[i], [x2, y2] = poly[j]
-        if ((y1 > y) != (y2 > y) && x < (x2 - x1) * (y - y1) / (y2 - y1) + x1)
-            inside = !inside
-    }
-    return inside
-}
-// Per pixel hue limit of a region-classified image (0 = never cloth), or null for the colour-only rule.
-// TASK-1655: kept per name and size (a pure function of them: every owner colour's variant of a sprite reads the same
-// limits), and each row's polygon edge crossings found once (teamColourRowCrossings: the same expression and comparison as
-// teamColourInPolygon, so the same pixels inside), not every polygon edge tested for every pixel (~110 ms an archer
-// variant on this host, inside the start's first held frames).
-const teamColourLimitsKept = new Map()
-function teamColourRegionLimits(name, width, height) {
-    const of = name && TEAM_COLOUR_REGION_OF[name]
-    if (!of)
-        return null
-    const memo = name + '|' + width + 'x' + height
-    const kept = teamColourLimitsKept.get(memo)
-    if (kept)
-        return kept
-    const art = TEAM_COLOUR_REGIONS[of.art]
-    const limits = new Float32Array(width * height)
-    for (let y = 0; y < height; ++y) {
-        const fy = (y + 0.5) / height
-        const face = teamColourRowCrossings(art.face.poly, fy)
-        const regions = art.regions.map(region => teamColourRowCrossings(region.poly, fy))
-        if (!face.length && regions.every(c => !c.length))
-            continue
-        for (let x = 0; x < width; ++x) {
-            const fx = of.mirror ? 1 - (x + 0.5) / width : (x + 0.5) / width
-            let hmax = 0
-            if (teamColourCrossed(face, fx))
-                hmax = art.face.hmax
-            else for (let k = 0; k < regions.length; ++k)
-                if (teamColourCrossed(regions[k], fx))
-                    hmax = Math.max(hmax, art.regions[k].hmax)
-            limits[y * width + x] = hmax
-        }
-    }
-    teamColourLimitsKept.set(memo, limits)
-    return limits
-}
-// TASK-1655: the x of each edge of poly the row at y crosses (teamColourInPolygon's test and value, in its edge order).
-function teamColourRowCrossings(poly, y) {
-    const out = []
-    for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
-        const [x1, y1] = poly[i], [x2, y2] = poly[j]
-        if ((y1 > y) != (y2 > y))
-            out.push((x2 - x1) * (y - y1) / (y2 - y1) + x1)
-    }
-    return out
-}
-// TASK-1655: teamColourInPolygon(poly, x, y) from the row's crossings: inside when x is left of an odd number of them.
-function teamColourCrossed(crossings, x) {
-    let inside = false
-    for (let k = 0; k < crossings.length; ++k)
-        if (x < crossings[k])
-            inside = !inside
-    return inside
-}
-function teamColourIsRegionCloth(h, s, mx, hmax) {
-    return hmax > 0 && (h < hmax || h > 0.93) && s > 0.45 && mx > 0.12
 }
 function teamColourHsv(r, g, b) {
     const mx = Math.max(r, g, b), mn = Math.min(r, g, b), d = mx - mn
@@ -726,7 +641,7 @@ function teamColourHsv(r, g, b) {
         h = (mx == r ? ((g - b) / d + 6) % 6 : mx == g ? (b - r) / d + 2 : (r - g) / d + 4) / 6
     return [h, mx > 0 ? d / mx : 0, mx]
 }
-function paintTeamColourImage(variant, base, key, name) {
+function paintTeamColourImage(variant, base, key) {
     const width = base.width, height = base.height
     variant.width = width
     variant.height = height
@@ -747,20 +662,18 @@ function paintTeamColourImage(variant, base, key, name) {
     // The player's colour at full value: the cloth hue target (r, g, b sum to its own luminance below).
     const [hr, hg, hb] = teamColourFromHsv(ph, 1, 1)
     // Mean cloth saturation of the base: a cloth pixel keeps its saturation relative to it.
-    const limits = teamColourRegionLimits(name, width, height)
-    const isCloth = (i, h, s, mx) => limits ? teamColourIsRegionCloth(h, s, mx, limits[i >> 2]) : teamColourIsCloth(h, s, mx)
     let clothSat = 0, cloth = 0
     for (let i = 0; i < px.length; i += 4) {
         if (px[i + 3] == 0) continue
         const [h, s, mx] = teamColourHsv(px[i] / 255, px[i + 1] / 255, px[i + 2] / 255)
-        if (isCloth(i, h, s, mx)) { clothSat += s; ++cloth }
+        if (teamColourIsCloth(h, s, mx)) { clothSat += s; ++cloth }
     }
     const satScale = cloth ? ps / (clothSat / cloth) : 0
     for (let i = 0; i < px.length; i += 4) {
         if (px[i + 3] == 0) continue
         const r = px[i] / 255, g = px[i + 1] / 255, b = px[i + 2] / 255
         const [h, s, mx] = teamColourHsv(r, g, b)
-        if (!isCloth(i, h, s, mx)) continue
+        if (!teamColourIsCloth(h, s, mx)) continue
         const lum = 0.299 * r + 0.587 * g + 0.114 * b
         const sat = Math.min(1, s * satScale)
         // Grey of the pixel's luminance mixed toward the hue colour by sat, scaled to keep the luminance; when a

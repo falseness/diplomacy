@@ -1,7 +1,7 @@
 {
   "format": 1,
   "algorithm": "sha256(path NUL bytes NUL ...)",
-  "rulesVersion": "9b1d476dd6ddbadf4d35522b661ff5a5492f03a92b2c475a5152dfe6566842ec",
+  "rulesVersion": "9833f8102d0b7f5fab740b6225fa98debf5ba479485060feb73993cd86fd42cf",
   "scripts": [
     {
       "path": "options/assert.js",
@@ -120,8 +120,8 @@
     },
     {
       "path": "render/loadassets.js",
-      "sha256": "78bdee744c658438cb84358687ba14423a3ffa258404e543210ec31fab76ee55",
-      "bytes": 48862
+      "sha256": "9c85d5c5b607b3bba8217fb0017a05570af0dab21bae4673fbeb2bd05dbee61a",
+      "bytes": 44377
     },
     {
       "path": "render/staticons.js",
