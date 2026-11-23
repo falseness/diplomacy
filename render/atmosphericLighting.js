@@ -224,31 +224,7 @@ const atmosphericLighting = {
                 ['tan-07', 40.15, 33.42, 41.37, 34.58],
                 ['tan-08', 41.01, 34.0, 41.88, 35.0],
                 ['tan-09', 40.65, 34.33, 41.49, 34.67]
-            ],
-            // TASK-1674: owned cells are concept cells too: the concept's red cell textures (TASK-1672's base-shade red,
-            // the 9 closest to the concept's even red; rows as textures), recoloured per owner and state keeping each
-            // pixel's luminance relative to the texture's mean (ownedCellVariant). A cell's mean colour comes from the
-            // owner's deep colour (colourFill's suburb fill, TASK-1636) in CIE LCh: L x l, C x c, hue + h. suburb is
-            // fitted so the reference owner's (red) is the concept's red (whose suburbs draw the textures as they are),
-            // captured so the blue owner's is the concept's blue cells (TASK-1672 blue-01/02): lighter than the suburbs,
-            // as TASK-1636's captured cells are. minL: a lightness floor (a dark owner's captured cells still lighter than
-            // its suburbs, as TASK-1636's are: below the red and blue anchors' 61.7 and 56.7, so they stay as fitted).
-            owned: {
-                seed: 0x2f6b9d35,
-                reference: [255, 0, 0],
-                look: {suburb: {l: 0.4841, c: 0.4617, h: -10.4}, captured: {l: 1.1654, c: 0.6193, h: 3.07, minL: 50}},
-                textures: [
-                    ['red-01', 49.96, 43.36, 50.96, 44.64],
-                    ['red-02', 50.57, 44.2, 51.61, 45.2],
-                    ['red-03', 50.57, 44.16, 51.56, 45.16],
-                    ['red-04', 50.34, 44.55, 51.88, 45.45],
-                    ['red-05', 49.86, 44.0, 51.37, 45.0],
-                    ['red-06', 50.59, 44.0, 51.37, 45.0],
-                    ['red-07', 50.73, 44.55, 51.83, 45.4],
-                    ['red-08', 50.15, 44.0, 51.37, 45.0],
-                    ['red-09', 50.55, 43.93, 51.29, 44.93]
-                ]
-            }
+            ]
         }
     },
     tileVariants: null,
@@ -258,12 +234,6 @@ const atmosphericLighting = {
     cellState: 'idle',
     cellImages: null,
     cellWaitOver: false,
-    // TASK-1674: the owned concept cells built (ownedCellVariant) by owner colour, state, texture and level, at the hex
-    // radius now; their mean colours by owner colour and state (ownedTarget); colourFill's fills' owner colour and state.
-    ownedCells: null,
-    ownedCellBuilds: 0,
-    ownedTargets: new Map(),
-    fillSpecs: new Map(),
     stoneVariants: null,
     stoneVariantBuilds: 0,
     tileDetails: null,
@@ -1678,9 +1648,8 @@ const atmosphericLighting = {
     loadCells() {
         if (this.cellState !== 'idle' || typeof Image !== 'function') return
         this.cellState = 'loading'
-        // TASK-1674: and the owned cells' red textures (TILE.cells.owned).
-        const C = this.TILE.cells, images = {}, textures = [...C.textures, ...C.owned.textures]
-        let left = textures.length * C.levels.length
+        const C = this.TILE.cells, images = {}
+        let left = C.textures.length * C.levels.length
         setTimeout(() => {
             this.cellWaitOver = true
             if (typeof settleGameSprites === 'function') settleGameSprites()
@@ -1696,12 +1665,10 @@ const atmosphericLighting = {
             this.cellImages = images
             this.cellState = 'ready'
             this.tileVariants = this.fogVariants = null
-            // TASK-1674: the owned tiles built meanwhile were the procedural fallback's.
-            this.ownedTiles = this.ownedPrewarm = null
             if (typeof grid !== 'undefined' && grid) grid.surfaceCacheState = undefined
             if (typeof settleGameSprites === 'function') settleGameSprites()
         }
-        for (const [name] of textures)
+        for (const [name] of C.textures)
             for (const level of C.levels) {
                 const image = new Image(), key = name + '@' + level + 'x'
                 image.onload = () => done(image.naturalWidth > 0 && (images[key] = image))
@@ -1731,8 +1698,8 @@ const atmosphericLighting = {
     },
     // TASK-1673: the texture level a hex drawn px device pixels wide is drawn from: the smallest whose hex width (2 rx x
     // level) times TILE.cells.fit is at least the drawn one, else the largest.
-    cellLevel(index, px, row = this.TILE.cells.textures[index]) {
-        const C = this.TILE.cells, w = 2 * row[3]
+    cellLevel(index, px) {
+        const C = this.TILE.cells, w = 2 * C.textures[index][3]
         for (const level of C.levels)
             if (w * level * C.fit >= px) return level
         return C.levels[C.levels.length - 1]
@@ -1743,17 +1710,14 @@ const atmosphericLighting = {
     // centre (cx, cy) keeps the texture's sub-pixel phase across, so a hex drawn at the texture's own width on whole
     // device pixels samples the concept's pixels as they are. The texture's outside (edge-extended) fills the thin ring
     // between its cut and the tile's edge; the grout covers the joints as before.
-    // TASK-1674: row: another texture row (an owned cell's, TILE.cells.owned); read: a raster read back (ownedCellVariant).
-    cellVariant(index, level, row = this.TILE.cells.textures[index], read = false) {
-        const [name, tcx, tcy, rx, hy] = row, image = this.cellImages[name + '@' + level + 'x']
+    cellVariant(index, level) {
+        const [name, tcx, tcy, rx, hy] = this.TILE.cells.textures[index], image = this.cellImages[name + '@' + level + 'x']
         const r = basis.r, scale = rx * level / r, size = Math.ceil(2 * r * scale) + 4
-        // TASK-1674: a texture taller than the board's hexagon (the red concept cells, ~1% taller) is drawn 1:1 and
-        // clipped, its sub-pixel phase kept down too (so its pixels are drawn as they are); a flatter one is stretched.
-        const stretch = Math.max(1, rx * Math.sqrt(3) / 2 / hy), tx = tcx * level, ty = tcy * level
-        const cx = Math.floor(size / 2) + tx - Math.floor(tx), cy = stretch === 1 ? Math.floor(size / 2) + ty - Math.floor(ty) : size / 2
+        const tx = tcx * level, ty = tcy * level, cx = Math.floor(size / 2) + tx - Math.floor(tx), cy = size / 2
+        const stretch = rx * Math.sqrt(3) / 2 / hy
         const surface = document.createElement('canvas')
         surface.width = surface.height = size
-        const g = surface.getContext('2d', read ? {willReadFrequently: true} : undefined)
+        const g = surface.getContext('2d')
         g.setTransform(scale, 0, 0, scale, cx, cy)
         g.beginPath()
         this.hexagonPath(g, 0, 0, this.tileRadius())
@@ -1761,107 +1725,6 @@ const atmosphericLighting = {
         g.setTransform(1, 0, 0, stretch, cx - tx, cy - ty * stretch)
         g.drawImage(image, 0, 0)
         return Object.assign(surface, {rasterScale: scale, cx, cy, cell: name, level})
-    },
-    // TASK-1674: an owned cell's texture (a seeded hash of its coordinates over TILE.cells.owned.textures, as neutralIndex).
-    ownedIndex(hexagon) {
-        const O = this.TILE.cells.owned
-        let h = (hexagon.tileHash ^ O.seed) >>> 0
-        h = Math.imul(h ^ (h >>> 16), 0x85ebca6b)
-        h = Math.imul(h ^ (h >>> 13), 0xc2b2ae35)
-        return ((h ^ (h >>> 16)) >>> 0) % O.textures.length
-    },
-    ownedLevel(index, px) {
-        return this.cellLevel(index, px, this.TILE.cells.owned.textures[index])
-    },
-    ownedCellMap() {
-        if (!this.ownedCells || this.ownedCells.radius !== basis.r) {
-            this.ownedCells = Object.assign(new Map(), {radius: basis.r})
-            ++this.ownedCellBuilds
-        }
-        return this.ownedCells
-    },
-    ownedCellKey({r, g, b}, suburb, index, level) {
-        return r + ',' + g + ',' + b + (suburb ? ',s ' : ' ') + index + '@' + level
-    },
-    // TASK-1674: an owned cell of colour ({r, g, b}), suburb or captured, from owned texture index at level: the red concept
-    // texture's tile (cellVariant), each pixel colour ownedTarget's mean colour x the pixel's luminance over the tile's mean
-    // luminance (the texture's luminance kept relative to its mean; a channel past 255 pulled toward the grey of the same
-    // luminance, as paintTeamColourImage does). The reference owner's suburbs are the texture as it is.
-    ownedCellVariant(index, colour, suburb, level) {
-        const cells = this.ownedCellMap(), key = this.ownedCellKey(colour, suburb, index, level)
-        if (cells.has(key)) return cells.get(key)
-        const O = this.TILE.cells.owned, row = O.textures[index], [R, G, B] = O.reference
-        const reference = suburb && colour.r === R && colour.g === G && colour.b === B
-        const tile = this.cellVariant(index, level, row, !reference)
-        if (!reference) {
-            const box = this.tileBox(tile.width, tile.rasterScale, tile.cx, tile.cy), g = tile.getContext('2d')
-            const image = g.getImageData(box.x, box.y, box.w, box.h), px = image.data
-            let sum = 0, n = 0
-            for (let i = 0; i < px.length; i += 4)
-                if (px[i + 3] === 255) {
-                    sum += 0.299 * px[i] + 0.587 * px[i + 1] + 0.114 * px[i + 2]
-                    ++n
-                }
-            const [tr, tg, tb] = this.ownedTarget(colour, suburb), mean = sum / n, ty = 0.299 * tr + 0.587 * tg + 0.114 * tb
-            for (let i = 0; i < px.length; i += 4) {
-                if (!px[i + 3]) continue
-                const k = (0.299 * px[i] + 0.587 * px[i + 1] + 0.114 * px[i + 2]) / mean, y = ty * k
-                let cr = tr * k, cg = tg * k, cb = tb * k
-                const over = Math.max(cr, cg, cb)
-                if (over > 255) {
-                    const t = y >= 255 ? 0 : (255 - y) / (over - y)
-                    cr = y + (cr - y) * t; cg = y + (cg - y) * t; cb = y + (cb - y) * t
-                }
-                px[i] = Math.round(Math.min(255, cr))
-                px[i + 1] = Math.round(Math.min(255, cg))
-                px[i + 2] = Math.round(Math.min(255, cb))
-            }
-            g.putImageData(image, box.x, box.y)
-        }
-        cells.set(key, tile)
-        return tile
-    },
-    // TASK-1674: an owned cell's mean colour (sRGB [r, g, b]): the owner's deep colour (colourFill's suburb fill) in CIE
-    // LCh (D65) moved by TILE.cells.owned.look[suburb or captured], chroma cut back into the sRGB gamut.
-    ownedTarget(colour, suburb) {
-        const key = colour.r + ',' + colour.g + ',' + colour.b + (suburb ? ',s' : '')
-        let target = this.ownedTargets.get(key)
-        if (target) return target
-        const deep = this.colourFill(colour, true).match(/\d+/g).map(Number)
-        const look = this.TILE.cells.owned.look[suburb ? 'suburb' : 'captured']
-        const [L, a, b] = this.labOfRgb(deep), C = Math.hypot(a, b), h = Math.atan2(b, a) + look.h * Math.PI / 180
-        const at = c => this.rgbOfLab([Math.max(L * look.l, look.minL || 0), c * Math.cos(h), c * Math.sin(h)])
-        let lo = 0, hi = C * look.c
-        if (!at(hi).inGamut) {
-            for (let i = 0; i < 24; i++) {
-                const mid = (lo + hi) / 2
-                if (at(mid).inGamut) lo = mid
-                else hi = mid
-            }
-            hi = lo
-        }
-        target = at(hi).rgb.map(v => Math.round(Math.min(255, Math.max(0, v))))
-        this.ownedTargets.set(key, target)
-        return target
-    },
-    // sRGB (0..255) <-> CIE L*a*b* (D65).
-    labOfRgb(rgb) {
-        const [r, g, b] = rgb.map(v => (v /= 255) <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4)
-        const f = t => t > 216 / 24389 ? Math.cbrt(t) : (24389 / 27 * t + 16) / 116
-        const x = f((0.4124564 * r + 0.3575761 * g + 0.1804375 * b) / 0.95047)
-        const y = f(0.2126729 * r + 0.7151522 * g + 0.0721750 * b)
-        const z = f((0.0193339 * r + 0.1191920 * g + 0.9503041 * b) / 1.08883)
-        return [116 * y - 16, 500 * (x - y), 200 * (y - z)]
-    },
-    rgbOfLab([L, a, b]) {
-        const fy = (L + 16) / 116, fx = fy + a / 500, fz = fy - b / 200
-        const inv = t => t ** 3 > 216 / 24389 ? t ** 3 : (116 * t - 16) / (24389 / 27)
-        const X = inv(fx) * 0.95047, Y = inv(fy), Z = inv(fz) * 1.08883
-        const lin = [3.2404542 * X - 1.5371385 * Y - 0.4985314 * Z, -0.9692660 * X + 1.8760108 * Y + 0.0415560 * Z,
-            0.0556434 * X - 0.2040259 * Y + 1.0572252 * Z]
-        const inGamut = lin.every(v => v >= -1e-6 && v <= 1 + 1e-6)
-        const rgb = lin.map(v => 255 * (Math.max(0, v) <= 0.0031308 ? 12.92 * Math.max(0, v) : 1.055 * Math.max(0, v) ** (1 / 2.4) - 0.055))
-        return {rgb, inGamut}
     },
     // TASK-1669: a variant's build shared by whoever asks for it (one generator per kind, radius and index): a variant built
     // in pieces (the menu's prebuild) and asked for at once meanwhile (a game's first frame) is finished, not started again.
@@ -2353,8 +2216,6 @@ const atmosphericLighting = {
             const mix = (c, i) => Math.round(suburb ? deep(c, i) : deep(c, i) + (255 - deep(c, i)) * 0.4)
             fill = `rgb(${mix(r, 0)},${mix(g, 1)},${mix(b, 2)})`
             this.tileFills.set(key, fill)
-            // TASK-1674: the fill's owner colour and state (ownedFillSteps builds its concept cells).
-            if (!this.fillSpecs.has(fill)) this.fillSpecs.set(fill, {colour: {r, g, b}, suburb: !!suburb})
         }
         return fill
     },
@@ -2462,24 +2323,6 @@ const atmosphericLighting = {
             return
         }
         const fill = this.tileFill(hexagon)
-        // TASK-1674: with the concept cells loaded an owned cell is one too (ownedCellVariant: the red concept textures
-        // recoloured per owner and state), its level by the drawn size, drawn about its hex centre as a neutral one. The
-        // menu's emblem tile (singleTile) stays the procedural owned tile.
-        if (this.cellsReady() && !hexagon.singleTile) {
-            const index = this.ownedIndex(hexagon), t = ctx.getTransform(), colour = hexagon.player.color
-            const level = this.ownedLevel(index, 2 * basis.r * Math.hypot(t.a, t.b))
-            if (this.flatOwnedTiles && !this.ownedCellMap().has(this.ownedCellKey(colour, hexagon.isSuburb, index, level))) {
-                ctx.fillStyle = 'rgb(' + this.ownedTarget(colour, !!hexagon.isSuburb) + ')'
-                this.hexPath(ctx, [{pos: c}])
-                ctx.fill()
-                return
-            }
-            const variant = this.ownedCellVariant(index, colour, !!hexagon.isSuburb, level), scale = variant.rasterScale
-            const k = shrink / scale
-            this.drawCropped(ctx, variant, c.x - variant.cx * k, c.y - variant.cy * k, variant.width * k,
-                this.cropOverlays && this.tileBox(variant.width, scale, variant.cx, variant.cy))
-            return
-        }
         // TASK-1544: a surface cache stand-in preview (Grid.standInPreviewSteps) builds no owned tile: a fill not built yet
         // is drawn flat in its colour.
         if (this.flatOwnedTiles && !this.ownedTileMap().has(fill)) {
@@ -2605,22 +2448,6 @@ const atmosphericLighting = {
                     yield 'tileVariant ' + i
                 }
             }
-        // TASK-1674: and the owned cells are concept cells (ownedCellVariant, at the raster scale's level), a fill kept
-        // (ownedTiles) once all its textures are built; no procedural stone, detail or owned tile.
-        if (this.cellsReady()) {
-            for (const fill of fills) {
-                const spec = this.fillSpecs.get(fill), tiles = []
-                for (let i = 0; spec && i < this.TILE.cells.owned.textures.length && !this.ownedTileMap().has(fill); i++) {
-                    const level = this.ownedLevel(i, 2 * basis.r * this.TILE.rasterScale)
-                    const built = this.ownedCellMap().has(this.ownedCellKey(spec.colour, spec.suburb, i, level))
-                    tiles.push(this.ownedCellVariant(i, spec.colour, spec.suburb, level))
-                    if (!built) yield 'ownedTile ' + fill + ' ' + i
-                }
-                if (spec && !this.ownedTileMap().has(fill))
-                    this.ownedTileMap().set(fill, tiles)
-            }
-            return
-        }
         for (let i = 0; i < this.TILE.variants; i++) {
             if (!this.stoneVariants || this.stoneVariants.radius !== basis.r || !this.stoneVariants[i]) {
                 if (split)
