@@ -226,8 +226,23 @@ class MapDepth {
         // vertex and goes on past it for corner.reach hex radii (within the 0.3 r band under the bottom outline that TASK-1696's
         // cut check leaves to the rim), narrowing to nothing over the corner block's top: the side and the bottom wall's
         // rounded corner block are one rock.
-        slab: {depth: 1.4, out: 0.045, bulge: 0.06, jag: {amount: 0.03, step: 0.22}, round: 0.2, lip: 0.08, shade: 0.3, sample: 0.5,
-            glow: {alpha: 0.45, falloff: 0.2}, corner: {reach: 0.28}}
+        // TASK-1697 (2nd pass, the concept's darker side rock with its cracks): depth per side (the concept's right wall reaches
+        // a little further under the notch and stands out a little further: its whole-side wall 0.071 vs 0.060 hex widths;
+        // depth and out per side), bulge 0.07 hex radii (the concept's lower
+        // side edge walls, ~0.12 / 0.14 hex widths), the stone sampled deeper (sample.from .. sample.to hex radii below the
+        // bottom face's edge over the lip's drop, sample.width times as wide: the darker stone under the glow, with its
+        // creases), from the bottom face column columns[ky] (some with the wall's cyan cracks), shaded by shade to its foot (and
+        // turning the wall's cool grey, stoneLow, by cool there: the concept's blue-grey slab, not the sky's orange nebulae) and
+        // a fainter glow. A corner lip (corner.depth hex heights deep: its foot's soft edge clear of the corner vertex's half
+        // hex height) fills its notch under its lower edge and only the notch's bottom (corner.fill hex
+        // heights above the corner cell's vertex, rounded into the lip by corner.bend): above that a skin corner.skin hex radii
+        // along the corner cell's upper edge, widening to corner.out at its vertex (the concept's slim wall under an upper
+        // side edge), in the lip's foot stone; and a wedge of rock along the vertex column, corner.ridge.width hex radii
+        // inward at its foot, corner.ridge.height hex heights up from the corner vertex (the side's rock edge runs on into the corner
+        // block; the notch beside it stays open, so the corner cell's upper edge keeps its slim wall); past the vertex its end
+        // over the corner block's top starts corner.tip hex radii out.
+        slab: {depth: {left: 1.42, right: 1.43}, out: {left: 0.065, right: 0.075}, bulge: 0.07, jag: {amount: 0.03, step: 0.22}, round: 0.2, lip: 0.08, shade: 0.15,
+            sample: {from: 0.1, to: 0.5, width: 1.3}, columns: [7, 0, 2, 4], glow: {alpha: 0.12, falloff: 0.12}, cool: 0.5, corner: {depth: 1.05, reach: 0.28, skin: 0.015, out: 0.045, tip: 0.07, fill: 0.2, bend: 4.5, ridge: {width: 0.08, height: 0.6}}}
     }
     static rockSprites = null
     // TASK-1697: the bottom face's stone the side lips sample (slabPixelSteps), per hex radius and row of the period
@@ -1504,47 +1519,57 @@ class MapDepth {
         // (the outer vertex v, the notch n under it, the next cell's outer vertex p below; out: outward along x)
         const v = left ? {x: -r / 2, y: -h} : {x: 0, y: 0}, n = left ? {x: 0, y: 0} : {x: -r / 2, y: h}, out = left ? -1 : 1
         const p = {x: v.x, y: v.y + 2 * h}
-        // (a corner lip goes on past the corner cell's vertex p for corner.reach hex radii, its outer side narrowing from out
-        // to none (a parabola: no straight vertical side) over the corner block's top: no sky at the vertex between it and the
-        // corner block)
-        const span = corner ? p.y - v.y : S.depth * h, bottom = corner ? p.y + S.corner.reach * r : v.y + span, round = S.round * r
+        // (TASK-1697 2nd pass: every lip has the same outer side down the face (out, bulge, jag), rounded into its level bottom
+        // depth hex heights below v (a little under the notch, along the next cell's upper edge). A corner lip ('c') goes on
+        // below its notch only as a skin along the corner cell's upper edge, corner.skin hex radii past it (widening to the
+        // corner block's top, corner.out, at the corner cell's vertex p), its rounded bottom meeting the skin (no sky between
+        // the lip and the skin), then past p for corner.reach hex radii narrowing to nothing over the corner block's top: the
+        // notch under the lowest lower edge is filled as the concept's (the side and the bottom wall's corner block are one
+        // rock) while the corner cell's upper edge keeps the concept's slim wall.)
+        const span = (corner ? S.corner.depth : S.depth[which]) * h, regular = v.y + span, bottom = corner ? p.y + S.corner.reach * r : regular, round = S.round * r
         // (the outline's x at row y: the face's edge above the notch, the next cell's upper edge below it; past a corner lip's
         // vertex p, under the corner block's own outline (wall.out tapering in by wall.taper, rockPixelSteps sideOutline): the
         // lip covers the sliver between the vertex column and that outline)
         const WL = R.wall, wallOut = WL.out[which] * r
         const zig = y => y > p.y ? v.x - out * Math.max(0, WL.taper * (y - p.y) - wallOut) : n.x + (v.x - n.x) * Math.min(1, Math.abs(y - n.y) / h)
-        // (a corner lip's outset at p: at least the corner block's, wall.out)
-        const outP = corner ? Math.max(S.out * r, wallOut) : S.out * r
+        // (a corner lip's outset at p: corner.out, at least the corner block's, wall.out: it covers the corner block's top)
+        const outP = Math.max(S.corner.out * r, wallOut)
         // (the lip's outer side's distance past the vertex column at row y; broken by jag.amount hex radii in knots of jag.step
-        // hex radii, in the field's frame (no two lips alike), none at the lip's top and at a corner lip's foot)
+        // hex radii, in the field's frame (no two lips alike), none at the lip's top and bottom)
         const smooth = t => t * t * (3 - 2 * t), J = S.jag, base0 = (ky * h + kx * 7.3 * r) / (J.step * r)
         const jag = y => {
             const u = base0 + (y - v.y) / (J.step * r), j = Math.floor(u), f = smooth(u - j)
             const a = MapDepth.rockHash(j & 1023, 41), b = MapDepth.rockHash((j + 1) & 1023, 41)
             const t = Math.max(0, Math.min(1, (y - v.y) / span))
-            return (2 * (a + (b - a) * f) - 1) * J.amount * Math.sin(Math.PI * Math.min(1, t * (corner ? 1 : 2)))
+            return (2 * (a + (b - a) * f) - 1) * J.amount * Math.sin(Math.PI * t)
+        }
+        const lipOut = y => {
+            if (y > regular) return -Infinity
+            const t = Math.max(0, Math.min(1, (y - v.y) / span)), below = Math.max(0, y - (regular - round))
+            return (S.out[which] + S.bulge * Math.sin(Math.PI * t) + jag(y) / r) * r - (round - Math.sqrt(Math.max(0, round * round - below * below)))
         }
         const outAt = y => {
-            if (corner && y > p.y) return outP * (1 - ((y - p.y) / (S.corner.reach * r)) ** 2)
-            const t = Math.max(0, Math.min(1, (y - v.y) / span))
-            const base = (S.out * r + (outP - S.out * r) * smooth(t)) / r
-            const below = corner ? 0 : Math.max(0, y - (bottom - round))
-            return (base + S.bulge * Math.sin(Math.PI * t) + jag(y)) * r - (round - Math.sqrt(Math.max(0, round * round - below * below)))
+            if (!corner || y <= n.y) return lipOut(y)
+            // (past p: from corner.tip hex radii out narrowing to nothing by a parabola over the corner block's top)
+            if (y > p.y) return Math.max(outP, S.corner.tip * r) * (1 - ((y - p.y) / (S.corner.reach * r)) ** 2)
+            // (the skin: corner.skin past the upper edge, widening to outP at p; the upper edge lies inward of the vertex column;
+            // and the notch's bottom corner.fill hex heights above p filled out to outP, rounded up into the lip's bottom by a
+            // parabola of corner.bend per hex radius: no sky pocket next to the corner vertex)
+            const inward = (v.x - zig(y)) * out, skin = S.corner.skin * r + (outP - S.corner.skin * r) * smooth((y - n.y) / h)
+            const above = Math.max(0, p.y - S.corner.fill * h - y), fill = outP - S.corner.bend * above * above / r
+            return Math.max(lipOut(y), skin - inward, fill)
         }
-        // (the stone: the bottom face's rock at this row of the period, kept per hex radius and row)
+        // (the stone: the bottom face's rock at this row of the period, its column slab.columns[ky] (some with a crack), kept per
+        // hex radius and row: the left and the right lips of a row are the same stone, mirrored)
         const memo = MapDepth.slabStone && MapDepth.slabStone.r === r ? MapDepth.slabStone : (MapDepth.slabStone = {r, stones: new Map()})
-        // (the field's first column for both sides: the left and the right lips are the same stone, mirrored)
         let src = memo.stones.get(ky)
         if (!src) {
-            src = yield* MapDepth.rockPixelSteps(3, 0, ky, '', r)
+            src = yield* MapDepth.rockPixelSteps(3, S.columns[ky % S.columns.length], ky, '', r)
             memo.stones.set(ky, src)
         }
-        const mid = (v.x + n.x) / 2, maxDepth = S.sample * r
-        const skip = R.rim.width * r, mirror = u => {
-            const t = u % (2 * maxDepth)
-            return t < maxDepth ? t : 2 * maxDepth - t
-        }
-        const pad = 3 / k, reach = outP + (S.bulge + S.jag.amount) * r + 2 / k
+        const mid = (v.x + n.x) / 2
+        const rid = corner ? {width: S.corner.ridge.width * r, height: S.corner.ridge.height * h} : null
+        const pad = 3 / k, reach = Math.max(S.out[which] * r, outP, S.corner.tip * r) + (S.bulge + S.jag.amount) * r + 2 / k
         const x0 = Math.min(v.x, n.x) - (left ? reach : pad), x1 = Math.max(v.x, n.x) + (left ? pad : reach)
         const y0 = v.y - pad, y1 = bottom + pad
         const W = Math.ceil((x1 - x0) * k), H = Math.ceil((y1 - y0) * k), d = new Uint8ClampedArray(W * H * 4)
@@ -1556,25 +1581,38 @@ class MapDepth {
             for (let px = 0; px < W; ++px) {
                 const x = x0 + (px + 0.5) / k, past = (x - v.x) * out
                 // (inside the outline by a pixel under the tiles' edge; out to the outer side; above the bottom)
-                const a = clamp(Math.min(((x - z) * out * sin60 + 1) * k + 0.5, (o - past) * k + 0.5, (bottom - y) * k + 0.5,
-                    (y - v.y) * k + 0.5))
+                const inner = ((x - z) * out * sin60 + 1) * k + 0.5
+                let a = clamp(Math.min(inner, (o - past) * k + 0.5, (bottom - y) * k + 0.5, (y - v.y) * k + 0.5))
+                // (a corner lip's ridge: a wedge along the vertex column, corner.ridge.height hex heights up from the corner cell's
+                // vertex p, widening down to corner.ridge.width hex radii inward of the vertex column and outP past it (curved
+                // sides, no vertical edge): the rock along the vertex column joins the corner block, the notch beside it stays open)
+                if (rid && y <= p.y && y >= p.y - rid.height) {
+                    const f = clamp((y - (p.y - rid.height)) / rid.height)
+                    a = Math.max(a, clamp(Math.min(inner, (outP * Math.sqrt(f) - past) * k + 0.5, (past + rid.width * f) * k + 0.5)))
+                }
                 if (!(a > 0)) continue
-                // (the bottom face's stone, unsheared: the drop below the outer vertex from just under the bottom face's rim
-                // (skip), x mirrored so both sides read it alike; past sample hex radii more reflected back up: the bottom
-                // face's foot is ~0.6 r below its edge)
-                const ys = skip + mirror(Math.max(0, y - v.y)), xs = -r / 2 - out * (x - mid)
+                // (the bottom face's stone, unsheared, x mirrored so both sides read it alike: the lip's drop below its outer
+                // vertex (to its depth) mapped onto the bottom face's stone from sample.from to sample.to hex radii below its
+                // edge: under the rim's glow, down to the darker stone and the cracks above its dark foot)
+                // (a corner lip's skin, notch fill and end past p: the lip's foot stone)
+                const t = clamp((y - v.y) / span)
+                // (below the lip's own foot (a corner lip's skin, fill and ridge) the stone runs back up the face's rock: no black wedge)
+                const ys = Math.max(S.sample.from * r, (S.sample.from + (S.sample.to - S.sample.from) * t) * r - Math.max(0, y - regular) * 0.5)
+                const xs = -r / 2 - out * (x - mid) * S.sample.width
                 const sx = Math.max(0, Math.min(src.width - 1, Math.floor((xs - src.x) * src.k)))
                 const sy = Math.max(0, Math.min(src.height - 1, Math.floor((ys - src.y) * src.k)))
                 const q = 4 * (sy * src.width + sx)
-                const t = clamp((y - v.y) / span), lip = corner ? 0 : clamp(1 - (bottom - y) / (S.lip * r))
+                const lip = corner ? 0 : clamp(1 - (bottom - y) / (S.lip * r))
                 const gain = (1 - S.shade * t * t) * (1 - 0.5 * lip)
                 // (the rim's warm light on the stone right under the side rim, as the bottom wall's: glow of the rim light's
                 // colour, falling off over glow.falloff hex radii below the rim)
                 const under = Math.max(0, y - (v.y + (n.y - v.y) * (x - v.x) / (n.x - v.x)) - R.rim.side * R.rim.width * r)
                 const warm = S.glow.alpha * Math.exp(-under / (S.glow.falloff * r))
                 const pp = 4 * (py * W + px)
+                // (towards its foot the stone turns the bottom wall's cool grey, stoneLow, as the wall's lower stone: cool times t)
+                const lum = (0.3 * src.data[q] + 0.59 * src.data[q + 1] + 0.11 * src.data[q + 2]) * gain, cool = S.cool * t
                 for (let c = 0; c < 3; ++c) {
-                    const col = src.data[q + c] * gain
+                    const col = src.data[q + c] * gain * (1 - cool) + lum * R.stoneLow[c] / 114 * cool
                     d[pp + c] = col + (R.rimLight.color[c] - col) * warm
                 }
                 d[pp + 3] = 255 * a
