@@ -168,7 +168,7 @@ class MapDepth {
     static ROCK = {
         depth: 2.3,
         period: {columns: 10, rows: 4},
-        scallop: {depth: 1.5, amplitude: 0.35, flat: 0.35, ramp: 0.55, jag: 0.12, knot: 0.3},
+        scallop: {depth: 1.5, amplitude: 0.35, flat: 0.35, ramp: 0.55, jag: 0.12, jagMin: 0.4, knot: 0.3, soft: 0.12},
         pad: 0.12,
         corner: 0.3,
         // (the outline's smoothing for depths below it, hex radii either side)
@@ -208,7 +208,9 @@ class MapDepth {
         // widths, TASK-1660 targets.json), with a rounded stone per boulder row stepping out by stones[row % 3] more (row 0
         // right under a side vertex: the rock under the corners, row 1 at the notch; an uneven stone wall, not a clipped
         // line, at 27 px hexes too)
-        wall: {out: {left: 0.015, right: 0.05}, stones: [0.06, 0.3, 0.0]},
+        // TASK-1696: no stones (they stuck out past the bottom corners: the side walls are slab faces since TASK-1663), the
+        // corner tapering in by taper per unit of drop and rounded into the foot over round hex radii
+        wall: {out: {left: 0.015, right: 0.05}, taper: 0.22, round: 0.35},
         // TASK-1663: the side walls as the concept's (artifacts/TASK-1663/diag-concept-left.png, -right.png): under each lower
         // side edge (markOpenFaces 's') the hex prism's side face, hanging from the edge down to depth hex heights below its
         // outer vertex (a level bottom), its outer side from that vertex leaning out by lean per unit of drop (the face seen
@@ -368,6 +370,30 @@ class MapDepth {
             // left / lower right edge: the board's left and right walls) is a slab face ('s', slabPixelSteps)
             if ((face.side === 2 || face.side === 4) && face.open && prev && next && !lower(prev) && !lower(next))
                 face.open += 's'
+        }
+        // TASK-1696: a cell with a bottom face and only one slanted lower face is a step up at an end of the bottom row (the
+        // board's last or first column a half hex higher than its neighbour): its bottom sits at the level of the protruding
+        // cells' centres, the bottom wall's upper level. Its lower faces are marked 'L' (faces 2 and 3: the lower neighbour on
+        // its left, the bottom-right corner) or 'R' (faces 3 and 4: on its right, the bottom-left corner): rockPixelSteps
+        // hangs their rock from that level (not from the cell's centre, a half hex higher: a shallower wall whose foot and
+        // the neighbour's sprite box cut the stone in straight lines) and its bottom face meets the neighbour's face.
+        const cells = new Map()
+        for (const face of this.faces)
+            if (lower(face)) {
+                if (!cells.has(face.cell)) cells.set(face.cell, [])
+                cells.get(face.cell).push(face)
+            }
+        for (const faces of cells.values()) {
+            const has = side => faces.some(face => face.side === side)
+            if (has(3) && has(2) !== has(4))
+                for (const face of faces)
+                    if (face.side === 3 || face.side === (has(2) ? 2 : 4))
+                        face.open = (face.open || '') + (has(2) ? 'L' : 'R')
+            // (and a bottom corner cell's bottom face takes the corner's outline too (its open vertex 'B' the cell's right
+            // vertex, 'E' its left vertex): the corner's rounding reaches past the slanted face, rockPixelSteps)
+            const bottom = faces.find(face => face.side === 3)
+            if (bottom && faces.some(face => face.side === 2 && /b/.test(face.open) && !/s/.test(face.open))) bottom.open += 'B'
+            if (bottom && faces.some(face => face.side === 4 && /e/.test(face.open) && !/s/.test(face.open))) bottom.open += 'E'
         }
     }
     // TASK-1583: the brass rim under the lower edges as ribbons of the runs (lowerRuns), each the run and the run moved down
@@ -1163,8 +1189,14 @@ class MapDepth {
         const END = {2: {x: -r / 2, y: h}, 3: {x: -r, y: 0}, 4: {x: -r / 2, y: -h}, notch: {x: -r, y: 0}}
         const BEGIN = {2: {x: r, y: 0}, 3: {x: r / 2, y: h}, 4: {x: -r / 2, y: h}, notch: {x: r / 2, y: h}}
         const PREV = {2: 'notch', 3: 2, 4: 3, notch: 4}, NEXT = {2: 3, 3: 4, 4: 'notch', notch: 2}
+        // TASK-1696: a step-up cell at an end of the bottom row (markOpenFaces 'L', 'R'): the upper level is its bottom (its
+        // face 2's end, its faces 3 and 4's begin), and its bottom face meets the lower neighbour's slanted face (a notch's
+        // neighbours: 2 after it at the bottom-right corner, 4 before it at the bottom-left)
+        const stepL = open.includes('L'), stepR = open.includes('R')
+        if (side == 3 && stepL) NEXT[3] = 2
+        if (side == 3 && stepR) PREV[3] = 4
         const slope = kind => END[kind].y / END[kind].x
-        const end = END[side], upper = side == 3 || side == 4 ? -h : 0
+        const end = END[side], upper = stepL || stepR ? (side == 2 ? h : 0) : side == 3 || side == 4 ? -h : 0
         // TASK-1612: an open end (markOpenFaces: past the begin vertex, 'b', x > 0, or the end vertex, 'e', x < end.x) has no
         // face beyond it: there the field runs on past the vertex column, below the vertex, out to the rock's own side
         // outline (sideOutline: rounded chunks stacked down the side), not to the sprite's box. The face keeps its own tone
@@ -1172,7 +1204,8 @@ class MapDepth {
         const openB = open.includes('b'), openE = open.includes('e')
         const outside = x => openB && x > 0 || openE && x < end.x
         // (a protruding cell's centre, local x: the foot is deepest under it)
-        const low = side == 2 ? -r : side == 3 ? -r / 2 : side == 4 ? r / 2 : r
+        // (TASK-1696: a step-up cell's neighbour protrudes, 1.5 hex radii along: the same lattice x modulo 3 hex radii)
+        const low = stepL || stepR ? (side == 2 ? r / 2 : side == 3 ? r : -r) : side == 2 ? -r : side == 3 ? -r / 2 : side == 4 ? r / 2 : r
         // The outline's y at local x: this face's edge, its neighbours' past its ends.
         const edgeY = x => x > 0 ? slope(PREV[side]) * x : x < end.x ? end.y + slope(NEXT[side]) * (x - end.x) : end.y * x / end.x
         // (the outline averaged over smooth hex radii either side: the depth below it that the rim light, tiers and foot
@@ -1189,10 +1222,15 @@ class MapDepth {
             return (S.depth + S.amplitude * (1 - t * t * (3 - 2 * t))) * r
         }
         // (the foot's breakup: knots every scallop.knot hex radii along the period, each hanging +- jag)
-        const nk = Math.round(R.period.columns * 1.5 / S.knot), kw = R.period.columns * 1.5 * r / nk
+        // (TASK-1696: the knots alternate up and down, each by jagMin..1 of jag: no level stretch of the foot, which read as a
+        // straight horizontal cut against the void; an even count, so the alternation is periodic too)
+        const nk = 2 * Math.round(R.period.columns * 1.5 / S.knot / 2), kw = R.period.columns * 1.5 * r / nk
         const jagAt = x => {
             const t = (kx * 1.5 * r + BEGIN[side].x + x) / kw, j = Math.floor(t), f = t - j
-            const v = j => S.jag * r * (2 * hash(((j % nk) + nk) % nk, 3) - 1)
+            const v = j => {
+                const m = ((j % nk) + nk) % nk
+                return S.jag * r * (m % 2 ? -1 : 1) * (S.jagMin + (1 - S.jagMin) * hash(m, 3))
+            }
             return v(j) + (v(j + 1) - v(j)) * f
         }
         // The field's frame: the cell's place in the period plus the face's begin.
@@ -1202,23 +1240,30 @@ class MapDepth {
         const nx = Math.max(1, Math.round(PX / (C.x * r))), ny = Math.max(1, Math.round(PY / (C.y * r))), sx = PX / nx, sy = PY / ny
         const unit = Math.min(sx, sy), bevel = C.bevel * unit
         // TASK-1662: an open end's rock reaches past its vertex to the wall's outline (sideOutline), at most this far
-        const WL = R.wall, pad = R.pad * r, sideReach = openB || openE ? (Math.max(WL.out.left, WL.out.right) + Math.max(...WL.stones)) * r + 1 / k : 0
-        // (the side outline's reach past the vertex at field height wy (world units): a rounded stone per boulder row (sy, the
-        // field's period rows; three a cell's height), counted from the side's vertices (the field's rows ky * h, 2h apart
-        // down a side), stepping out by wall.stones[row % 3] past the wall's flush face (wall.out, left or right); in the field's frame, so the
-        // faces down a side agree. TASK-1612 had lumps of 0.45, 1 and 0.7 of rockSideReach: a fringe, not the concept's wall)
-        const sideOutline = (wy, out) => {
-            const u = wy - (((ky % 2) + 2) % 2) * h, j0 = Math.floor(u / sy)
-            let e = 0
-            for (let j = j0 - 1; j <= j0 + 1; ++j) {
-                const t = (u - (j + 0.5) * sy) / (0.5 * sy)
-                if (Math.abs(t) < 1) e = Math.max(e, WL.stones[((j % 3) + 3) % 3] * Math.sqrt(1 - t * t))
-            }
-            return (out + e) * r
+        const WL = R.wall, pad = R.pad * r, sideReach = openB || openE ? Math.max(WL.out.left, WL.out.right) * r + 1 / k : 0
+        // TASK-1696: the outline past an open vertex (only the board's bottom corners: the side walls are slab faces): a flush
+        // wall wall.out hex radii past the vertex column, rounded into the foot over wall.round hex radii (the foot's depth
+        // at the vertex column), the concept's rounded corner block. (TASK-1662's rounded stone per boulder row, wall.stones,
+        // stuck out past the bottom corners as a stray round stone.) Its reach past the vertex at local y (world units;
+        // negative near the foot: the rounding cuts into the face's own columns, within wall.round of the vertex).
+        // (and tapering in by wall.taper per unit of drop below the vertex: no straight vertical side, the concept's block)
+        const round = WL.round * r
+        const cornerAt = v => v && {...v, foot: upper + footBase(v.x) + jagAt(v.x)}
+        const rightV = cornerAt(openB ? {x: 0, y: 0} : side == 3 && open.includes('B') ? {x: r / 2, y: -h} : null)
+        const leftV = cornerAt(openE ? {x: end.x, y: end.y} : side == 3 && open.includes('E') ? {x: -3 * r / 2, y: -h} : null)
+        const sideOutline = (y, out, v) => {
+            const below = Math.max(0, Math.min(round, y - (v.foot - round)))
+            return out * r - WL.taper * Math.max(0, y - v.y) - (round - Math.sqrt(round * round - below * below))
         }
         const x0 = Math.min(0, end.x) - pad - (openE ? sideReach : 0), x1 = Math.max(0, end.x) + pad + (openB ? sideReach : 0)
-        const y0 = Math.min(0, end.y) - 2 * pad, y1 = upper + (S.depth + S.amplitude + S.jag) * r + 2 / k
+        const y0 = Math.min(0, end.y) - 2 * pad, y1 = upper + (S.depth + S.amplitude + S.jag + S.soft / 2) * r + 2 / k
         const W = Math.ceil((x1 - x0) * k), H = Math.ceil((y1 - y0) * k)
+        // (TASK-1696: the foot's underside fades out over scallop.soft hex radii (at least a pixel): a level stretch of the
+        // jagged foot (a hump's top) is no hard horizontal line against the void at any zoom)
+        const footSoft = Math.max(1 / k, S.soft * r)
+        // (how far in from a corner's vertex column its outline can cut: the taper from the vertex (up to h above the box: a
+        // bottom face's corner) down to the box's foot, and the rounding)
+        const cornerReach = round + WL.taper * (y1 - y0 + h) + 1 / k
         // (TASK-1615: the seeds' hashes looked up from tables, not hashed again at every pixel; the same values. sample's
         // result in sGap, sN1, sTilt, sD1)
         const seeds = nx * ny, seedX = new Float64Array(seeds), seedY = new Float64Array(seeds), seedCos = new Float64Array(seeds), seedSin = new Float64Array(seeds)
@@ -1321,7 +1366,8 @@ class MapDepth {
         const segItems = segments.map((q, j) => ({a: q.a, b: q.b, fade: q.fade, box: segBox[j]}))
         const centres = segments.map(q => q.a)
         // (the protruding corners: a cell's lower vertices, local x)
-        const corners = side == 2 ? [end.x] : side == 3 ? [0, end.x] : side == 4 ? [0] : []
+        // (TASK-1696: a step-up cell's bottom face has one, at its outer end)
+        const corners = side == 2 ? [end.x] : side == 3 ? (stepL ? [0] : stepR ? [end.x] : [0, end.x]) : side == 4 ? [0] : []
         const d = new Uint8ClampedArray(W * H * 4)
         const height = new Float32Array(W * H), level = new Float32Array(W * H), alpha = new Float32Array(W * H)
         const glow = new Float32Array(W * H), cast = new Float32Array(W * H), tone = new Float32Array(W * H)
@@ -1330,7 +1376,7 @@ class MapDepth {
         // expressions as per pixel before)
         const colX = new Float64Array(W), colTop = new Float64Array(W), colFoot = new Float64Array(W), colPlain = new Float64Array(W)
         const colSoft = new Float64Array(W), colTone = new Float64Array(W), colWX = new Float64Array(W), colGX = new Int32Array(W)
-        const colOut = new Uint8Array(W), colOutX = new Float64Array(W)
+        const colOut = new Uint8Array(W), colOutX = new Float64Array(W), colOutB = new Uint8Array(W)
         for (let px = 0; px < W; ++px) {
             const x = colX[px] = x0 + (px + 0.5) / k
             colTop[px] = edgeY(x)
@@ -1340,27 +1386,29 @@ class MapDepth {
             colTone[px] = toneAt(x)
             colWX[px] = ox + x
             colGX[px] = Math.floor((ox + x) * k)
-            colOut[px] = outside(x) ? 1 : 0
-            colOutX[px] = x > 0 ? x : end.x - x
+            colOut[px] = outside(x) || rightV && x > rightV.x - cornerReach || leftV && x < leftV.x + cornerReach ? 1 : 0
+            // (the column's corner: the right one when there is only that, or on its half)
+            colOutB[px] = rightV && (!leftV || x > (rightV.x + leftV.x) / 2) ? 1 : 0
+            colOutX[px] = colOutB[px] ? x - rightV.x : leftV ? leftV.x - x : 0
         }
         const seedTone = new Float64Array(seeds)
         for (let n = 0; n < seeds; ++n) seedTone[n] = 2 * hash(n, 4) - 1
         for (let py = 0; py < H; ++py) {
             const y = y0 + (py + 0.5) / k, wy = oy + y, gy = Math.floor((oy + y) * k)
-            const band = Math.abs((((oy + y) % sy) + sy) % sy - sy / 2), rowLeft = openE ? sideOutline(oy + y, WL.out.left) : 0, rowRight = openB ? sideOutline(oy + y, WL.out.right) : 0
+            const band = Math.abs((((oy + y) % sy) + sy) % sy - sy / 2), rowLeft = leftV ? sideOutline(y, WL.out.left, leftV) : 0, rowRight = rightV ? sideOutline(y, WL.out.right, rightV) : 0
             rowSegments = segItems.filter(q => y >= q.box[2] && y <= q.box[3])
             for (let px = 0; px < W; ++px) {
                 const i = py * W + px, x = colX[px]
                 const top = colTop[px]
                 if (y < top - 1 / k) continue
                 const foot = colFoot[px]
-                if (y > foot + 1 / k) continue
+                if (y > foot + footSoft / 2 + 1 / k) continue
                 const w = colPlain[px]
                 sample(colWX[px], wy)
                 const gap = sGap, n1 = sN1, tilt = sTilt, d1 = sD1
-                alpha[i] = Math.max(0, Math.min(1, (y - top) * k + 0.5, (foot - y) * k + 0.5))
+                alpha[i] = Math.max(0, Math.min(1, (y - top) * k + 0.5, (foot - y) / footSoft + 0.5))
                 // (TASK-1612: past an open vertex, within the side outline)
-                if (colOut[px] && !((alpha[i] = Math.max(0, Math.min(alpha[i], ((colX[px] > 0 ? rowRight : rowLeft) - colOutX[px]) * k + 0.5))) > 0))
+                if (colOut[px] && !((alpha[i] = Math.max(0, Math.min(alpha[i], ((colOutB[px] ? rowRight : rowLeft) - colOutX[px]) * k + 0.5))) > 0))
                     continue
                 // (a rounded boulder: a dome around its seed (chunk.dome of the cell size), falling into the gap at its edge)
                 const e = Math.min(1, gap / bevel), dome = Math.sqrt(Math.max(0, 1 - (d1 / (C.dome * unit)) ** 2))
