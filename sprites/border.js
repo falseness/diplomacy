@@ -110,34 +110,121 @@ class Border {
                 Border.selection.drawMove(ctx, data)
             return
         }
-        ctx.beginPath()
+        const chains = this.insetChains()
+        const trace = () => {
+            ctx.beginPath()
+            for (const chain of chains) {
+                ctx.moveTo(chain.points[0].x, chain.points[0].y)
+                for (let i = 1; i < chain.points.length; ++i)
+                    ctx.lineTo(chain.points[i].x, chain.points[i].y)
+                if (chain.closed)
+                    ctx.closePath()
+            }
+        }
         ctx.lineJoin = 'round'
         ctx.lineCap = 'round'
-        
+
+        trace()
         ctx.strokeStyle = this.color
         ctx.lineWidth = this.strokeWidth
-        
-        for (let i = 0; i < this.lines.length; ++i) {
-            ctx.moveTo(this.lines[i].begin.x, this.lines[i].begin.y)
-            ctx.lineTo(this.lines[i].end.x, this.lines[i].end.y)
-        }
         ctx.stroke()
-        ctx.closePath()
 
-        
         if (this.extraColor && this.extraStrokeWidth) {
-            ctx.beginPath()
-
+            trace()
             ctx.strokeStyle = this.extraColor
             ctx.lineWidth = this.extraStrokeWidth
-            for (let i = 0; i < this.lines.length; ++i) {
-                ctx.moveTo(this.lines[i].begin.x, this.lines[i].begin.y)
-                ctx.lineTo(this.lines[i].end.x, this.lines[i].end.y)
-            }
-
             ctx.stroke()
-            ctx.closePath()
         }
+    }
+    // TASK-1699: the stroke's outer side on the visible cell edge. The lines (createLine) are lattice edges, in the
+    // middle of the dark seam; the cell texture is drawn at atmosphericLighting.tileRadius(). Each edge is moved inward
+    // (towards its own cell) by inset(): half the seam plus half the stroke. The edges are chained into runs and loops
+    // (a region's boundary, duplicates dropped) and offset as a whole: consecutive inset edges meet at their mitre
+    // (a convex corner: the inset hexagon's vertex; a corner between two selected cells: a point in their seam), so a
+    // multi-cell outline stays one joined line. Cached until the lines, the radius or the stroke change.
+    inset() {
+        const r = basis.r
+        const tile = typeof atmosphericLighting != 'undefined' && atmosphericLighting.tileRadius ?
+            atmosphericLighting.tileRadius() : r
+        return (r - tile) * Math.sqrt(3) / 2 + this.strokeWidth / 2
+    }
+    insetChains() {
+        const d = this.inset()
+        const key = this.lines.length + ':' + basis.r + ':' + d + ':' + Border.serial
+        if (this.insetCache && this.insetCache.key === key && this.insetCache.lines === this.lines)
+            return this.insetCache.chains
+        const chains = Border.insetChains(this.lines, d)
+        this.insetCache = {key, lines: this.lines, chains}
+        return chains
+    }
+    static pointKey(p) {
+        return Math.round(p.x * 100) + ':' + Math.round(p.y * 100)
+    }
+    // Chains of edges (each {begin, end}, clockwise round its cell on screen, so the outward normal is (dy, -dx))
+    // offset inward by d: [{points, closed}].
+    static insetChains(lines, d) {
+        const byBegin = new Map(), endKeys = new Set(), edges = []
+        for (const line of lines) {
+            const k = Border.pointKey(line.begin), e = Border.pointKey(line.end)
+            if (byBegin.has(k) && Border.pointKey(byBegin.get(k).end) === e)
+                continue
+            if (byBegin.has(k)) {
+                // (two edges leaving one vertex: draw this one as its own run)
+                edges.push({line, alone: true})
+                continue
+            }
+            byBegin.set(k, line)
+            endKeys.add(e)
+            edges.push({line})
+        }
+        const used = new Set(), chains = []
+        const walk = (first) => {
+            const run = []
+            for (let line = first; line && !used.has(line);) {
+                used.add(line)
+                run.push(line)
+                line = byBegin.get(Border.pointKey(line.end))
+            }
+            const closed = run.length > 2 && Border.pointKey(run[run.length - 1].end) === Border.pointKey(run[0].begin)
+            chains.push(Border.offsetRun(run, closed, d))
+        }
+        // open runs first (from an edge nothing ends at), then the loops
+        for (const {line, alone} of edges)
+            if (alone) {
+                used.add(line)
+                chains.push(Border.offsetRun([line], false, d))
+            }
+        for (const {line} of edges)
+            if (!used.has(line) && !endKeys.has(Border.pointKey(line.begin)))
+                walk(line)
+        for (const {line} of edges)
+            if (!used.has(line))
+                walk(line)
+        return chains
+    }
+    static offsetRun(run, closed, d) {
+        const n = run.length
+        const normal = line => {
+            const dx = line.end.x - line.begin.x, dy = line.end.y - line.begin.y, l = Math.hypot(dx, dy) || 1
+            return {x: dy / l, y: -dx / l}
+        }
+        const N = run.map(normal)
+        // the corner where edge a ends and edge b begins, moved inward so both edges stay at distance d
+        const corner = (p, a, b) => {
+            const x = a.x + b.x, y = a.y + b.y, l = Math.hypot(x, y)
+            if (l < 1e-9)
+                return {x: p.x - b.x * d, y: p.y - b.y * d}
+            const m = {x: x / l, y: y / l}, k = 1 / Math.max(0.35, m.x * b.x + m.y * b.y)
+            return {x: p.x - m.x * k * d, y: p.y - m.y * k * d}
+        }
+        const points = []
+        for (let i = 0; i < n; ++i) {
+            const prev = i > 0 ? N[i - 1] : closed ? N[n - 1] : N[i]
+            points.push(corner(run[i].begin, prev, N[i]))
+        }
+        if (!closed)
+            points.push(corner(run[n - 1].end, N[n - 1], N[n - 1]))
+        return {points, closed}
     }
 }
 
