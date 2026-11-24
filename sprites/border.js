@@ -191,7 +191,9 @@ class MapDepth {
             // sampled off the concept's top rim (a yellow highlight, then saturated gold)
             upper: 0.82,
             // TASK-1663: the side walls' rim (over the slab faces) side times the lower rim's width (the concept's heavy frame)
-            side: 1.6, sideColors: {left: ['#ffd36a', '#faba4a', '#fa9521', '#f4790f', '#c85a14'], right: ['#f0c070', '#d99d5a', '#c2954f', '#bf7439', '#8a5a30']},
+            // (TASK-1697: one gold for both sides, the bottom rim's: the concept's slim gold rim along the side zigzag, the
+            // same light on the left and the right)
+            side: 1.6, sideColors: {left: ['#ffe2a0', '#fff4d4', '#ffcc70', '#eea448', '#c88032'], right: ['#ffe2a0', '#fff4d4', '#ffcc70', '#eea448', '#c88032']},
             upperEdge: {width: 0.024, color: '#4a3418'},
             upperColors: ['#ffd25a', '#f6b938', '#eb9a30', '#d07a30', '#a85a24']},
         crack: {spacing: 0.6, share: 0.45, at: [0.5, 0.75], steps: [5, 8], step: 0.14, branch: 0.5, line: 0.035, halo: 0.08, snap: 0.09,
@@ -211,18 +213,25 @@ class MapDepth {
         // TASK-1696: no stones (they stuck out past the bottom corners: the side walls are slab faces since TASK-1663), the
         // corner tapering in by taper per unit of drop and rounded into the foot over round hex radii
         wall: {out: {left: 0.015, right: 0.05}, taper: 0.22, round: 0.35},
-        // TASK-1663: the side walls as the concept's (artifacts/TASK-1663/diag-concept-left.png, -right.png): under each lower
-        // side edge (markOpenFaces 's') the hex prism's side face, hanging from the edge down to depth hex heights below its
-        // outer vertex (a level bottom), its outer side from that vertex leaning out by lean per unit of drop (the face seen
-        // from above the board), sky below it down to the next cell's vertex and none past the side otherwise. The left face
-        // lit warm gold, the right one shaded blue-grey (colours from the face's top, under the rim, to its foot), with
-        // vertical streaks (streak hex radii wide, +- amount), a lit outer corner (left) and a dark lip at the foot. (The left
-        // face's gold keeps green at ~0.7 of red: the sky's orange nebulae behind the board's sides are ~0.52.)
-        slab: {depth: 1.2, lean: {left: 0.35, right: 0.4}, lip: 0.06, round: 0.12,
-            streak: {width: 0.11, amount: 0.12}, corner: {width: 0.05, gain: {left: 0.35, right: 0.12}},
-            colors: {left: [[246, 178, 84], [214, 150, 64], [188, 132, 56], [140, 96, 42]], right: [[104, 110, 116], [74, 78, 82], [56, 58, 60], [36, 37, 40]]}}
+        // TASK-1663: the side walls as slab faces under each lower side edge (markOpenFaces 's'): TASK-1663 drew them as flat
+        // leaning prism faces, lit gold on the left and shaded grey on the right.
+        // TASK-1697: the side walls as the concept's rock edge (TASK-1663's flat gold / grey flaps are gone): under each lower
+        // side edge a thin rock lip in the bottom wall's stone (its pixels sampled from the bottom face's rock at the cell's
+        // row of the period, rockPixelSteps side 3: the same boulders, rim light, cracks and tone on both sides), depth hex heights
+        // below its outer vertex (partly filling the zigzag's notch under it and the next cell's upper edge), its outer side
+        // out hex radii past the side's vertex column, bulging by bulge mid-way, rounded into its level bottom over round
+        // hex radii (and broken by jag), shaded by shade towards its foot and darker over a lip hex radii at it (the stone
+        // sampled within sample hex radii below the bottom face's edge), with the rim's warm light under the side rim (glow).
+        // The lowest lip of a side (over the bottom corner cell, markOpenFaces 'c') fills its notch down to the corner cell's
+        // vertex and goes on past it for corner.reach hex radii (within the 0.3 r band under the bottom outline that TASK-1696's
+        // cut check leaves to the rim), narrowing to nothing over the corner block's top: the side and the bottom wall's
+        // rounded corner block are one rock.
+        slab: {depth: 1.4, out: 0.045, bulge: 0.06, jag: {amount: 0.03, step: 0.22}, round: 0.2, lip: 0.08, shade: 0.3, sample: 0.5,
+            glow: {alpha: 0.45, falloff: 0.2}, corner: {reach: 0.28}}
     }
     static rockSprites = null
+    // TASK-1697: the bottom face's stone the side lips sample (slabPixelSteps), per hex radius and row of the period
+    static slabStone = null
     static rockBuilds = 0
     // Atmospheric drop shadow: the slab (top face and sides) casts a soft shadow onto the sky away
     // from the upper-left key light, only below and right of it: a broad layer and a near one (blur
@@ -368,8 +377,15 @@ class MapDepth {
             face.open = (corner(prev) ? 'b' : '') + (corner(next) ? 'e' : '')
             // TASK-1663: a slanted lower face that is a lower run of its own between two upper edges (a side cell's lower
             // left / lower right edge: the board's left and right walls) is a slab face ('s', slabPixelSteps)
-            if ((face.side === 2 || face.side === 4) && face.open && prev && next && !lower(prev) && !lower(next))
+            if ((face.side === 2 || face.side === 4) && face.open && prev && next && !lower(prev) && !lower(next)) {
                 face.open += 's'
+                // (TASK-1697: the lowest slab face of a side, 'c': past the next cell's upper edge (the outline going on
+                // round the notch under it) a lower edge that is no slab face, the bottom corner cell's lower face, the outline
+                // going on along the bottom past it)
+                const left = face.side === 4, beyond = left ? byEnd.get(this.pointKey(prev.begin)) : byBegin.get(this.pointKey(next.end))
+                const past = beyond && (left ? byEnd.get(this.pointKey(beyond.begin)) : byBegin.get(this.pointKey(beyond.end)))
+                if (beyond && lower(beyond) && past && lower(past)) face.open += 'c'
+            }
         }
         // TASK-1696: a cell with a bottom face and only one slanted lower face is a step up at an end of the bottom row (the
         // board's last or first column a half hex higher than its neighbour): its bottom sits at the level of the protruding
@@ -1180,7 +1196,7 @@ class MapDepth {
     // main thread can make a sprite over several frames (rockSpriteSteps). Pure JS (no canvas, no page globals): it runs in a
     // Worker too.
     static *rockPixelSteps(side, kx, ky, open, r) {
-        if (open.includes('s')) return yield* MapDepth.slabPixelSteps(side, kx, ky, r)
+        if (open.includes('s')) return yield* MapDepth.slabPixelSteps(side, kx, ky, r, open)
         const R = MapDepth.ROCK, C = R.chunk, S = R.scallop, X = R.crack, k = R.raster, h = r * Math.sqrt(3) / 2
         const hash = MapDepth.rockHash
         // The outline around a face (getVertices; the bottom row from right to left: side 2 down to a protruding cell's
@@ -1481,50 +1497,87 @@ class MapDepth {
     // TASK-1663: a side wall's slab face (ROCK.slab; markOpenFaces 's'), rockPixelSteps' pixels for a lower left (side 4, the
     // board's left side) or lower right (side 2, its right side) edge between upper edges; local to the face's begin as
     // rockPixelSteps'. Pure JS (a worker runs it too).
-    static *slabPixelSteps(side, kx, ky, r) {
-        const R = MapDepth.ROCK, S = R.slab, k = R.raster, h = r * Math.sqrt(3) / 2, hash = MapDepth.rockHash
-        const left = side == 4, which = left ? 'left' : 'right'
-        // (the outer vertex v, the inner one (the notch) n, local x growing outward d(x) = distance past v)
+    // TASK-1697: a thin rock lip in the bottom wall's stone (ROCK.slab), 'c' the lowest of its side (markOpenFaces).
+    static *slabPixelSteps(side, kx, ky, r, open = '') {
+        const R = MapDepth.ROCK, S = R.slab, k = R.raster, h = r * Math.sqrt(3) / 2
+        const left = side == 4, which = left ? 'left' : 'right', corner = open.includes('c')
+        // (the outer vertex v, the notch n under it, the next cell's outer vertex p below; out: outward along x)
         const v = left ? {x: -r / 2, y: -h} : {x: 0, y: 0}, n = left ? {x: 0, y: 0} : {x: -r / 2, y: h}, out = left ? -1 : 1
-        const lean = S.lean[which], depth = S.depth * h, bottom = v.y + depth, round = S.round * r
-        const edgeY = x => v.y + (n.y - v.y) * (x - v.x) / (n.x - v.x)
-        const reach = lean * depth + 1 / k, pad = 2 / k
+        const p = {x: v.x, y: v.y + 2 * h}
+        // (a corner lip goes on past the corner cell's vertex p for corner.reach hex radii, its outer side narrowing from out
+        // to none (a parabola: no straight vertical side) over the corner block's top: no sky at the vertex between it and the
+        // corner block)
+        const span = corner ? p.y - v.y : S.depth * h, bottom = corner ? p.y + S.corner.reach * r : v.y + span, round = S.round * r
+        // (the outline's x at row y: the face's edge above the notch, the next cell's upper edge below it; past a corner lip's
+        // vertex p, under the corner block's own outline (wall.out tapering in by wall.taper, rockPixelSteps sideOutline): the
+        // lip covers the sliver between the vertex column and that outline)
+        const WL = R.wall, wallOut = WL.out[which] * r
+        const zig = y => y > p.y ? v.x - out * Math.max(0, WL.taper * (y - p.y) - wallOut) : n.x + (v.x - n.x) * Math.min(1, Math.abs(y - n.y) / h)
+        // (a corner lip's outset at p: at least the corner block's, wall.out)
+        const outP = corner ? Math.max(S.out * r, wallOut) : S.out * r
+        // (the lip's outer side's distance past the vertex column at row y; broken by jag.amount hex radii in knots of jag.step
+        // hex radii, in the field's frame (no two lips alike), none at the lip's top and at a corner lip's foot)
+        const smooth = t => t * t * (3 - 2 * t), J = S.jag, base0 = (ky * h + kx * 7.3 * r) / (J.step * r)
+        const jag = y => {
+            const u = base0 + (y - v.y) / (J.step * r), j = Math.floor(u), f = smooth(u - j)
+            const a = MapDepth.rockHash(j & 1023, 41), b = MapDepth.rockHash((j + 1) & 1023, 41)
+            const t = Math.max(0, Math.min(1, (y - v.y) / span))
+            return (2 * (a + (b - a) * f) - 1) * J.amount * Math.sin(Math.PI * Math.min(1, t * (corner ? 1 : 2)))
+        }
+        const outAt = y => {
+            if (corner && y > p.y) return outP * (1 - ((y - p.y) / (S.corner.reach * r)) ** 2)
+            const t = Math.max(0, Math.min(1, (y - v.y) / span))
+            const base = (S.out * r + (outP - S.out * r) * smooth(t)) / r
+            const below = corner ? 0 : Math.max(0, y - (bottom - round))
+            return (base + S.bulge * Math.sin(Math.PI * t) + jag(y)) * r - (round - Math.sqrt(Math.max(0, round * round - below * below)))
+        }
+        // (the stone: the bottom face's rock at this row of the period, kept per hex radius and row)
+        const memo = MapDepth.slabStone && MapDepth.slabStone.r === r ? MapDepth.slabStone : (MapDepth.slabStone = {r, stones: new Map()})
+        // (the field's first column for both sides: the left and the right lips are the same stone, mirrored)
+        let src = memo.stones.get(ky)
+        if (!src) {
+            src = yield* MapDepth.rockPixelSteps(3, 0, ky, '', r)
+            memo.stones.set(ky, src)
+        }
+        const mid = (v.x + n.x) / 2, maxDepth = S.sample * r
+        const skip = R.rim.width * r, mirror = u => {
+            const t = u % (2 * maxDepth)
+            return t < maxDepth ? t : 2 * maxDepth - t
+        }
+        const pad = 3 / k, reach = outP + (S.bulge + S.jag.amount) * r + 2 / k
         const x0 = Math.min(v.x, n.x) - (left ? reach : pad), x1 = Math.max(v.x, n.x) + (left ? pad : reach)
         const y0 = v.y - pad, y1 = bottom + pad
         const W = Math.ceil((x1 - x0) * k), H = Math.ceil((y1 - y0) * k), d = new Uint8ClampedArray(W * H * 4)
-        const C = S.colors[which], colorAt = (t, c) => {
-            const q = Math.max(0, Math.min(1, t)) * (C.length - 1), i = Math.min(C.length - 2, Math.floor(q))
-            return C[i][c] + (C[i + 1][c] - C[i][c]) * (q - i)
-        }
-        // (streaks: value noise along the face, in the field's frame so the side's faces differ)
-        const sw = S.streak.width * r, base = kx * 1.5 * r + ky * 7.3 * r
-        const streak = x => {
-            const t = (base + x) / sw, j = Math.floor(t), f = t - j, g = f * f * (3 - 2 * f)
-            const a = hash(j & 1023, 31), b = hash((j + 1) & 1023, 31)
-            return (2 * (a + (b - a) * g) - 1) * S.streak.amount
-        }
-        const clamp = t => Math.max(0, Math.min(1, t))
+        const clamp = t => Math.max(0, Math.min(1, t)), sin60 = Math.sqrt(3) / 2
         for (let py = 0; py < H; ++py, yield) {
-            const y = y0 + (py + 0.5) / k, drop = y - v.y
-            if (drop < -pad) continue
-            // (the outer side: from v, leaning out; rounded into the level bottom over round)
-            const below = Math.max(0, y - (bottom - round)), cut = round - Math.sqrt(Math.max(0, round * round - below * below))
-            const outer = v.x + out * (lean * Math.max(0, drop) - cut)
+            const y = y0 + (py + 0.5) / k
+            if (y < v.y - pad) continue
+            const z = zig(y), o = outAt(y)
             for (let px = 0; px < W; ++px) {
-                const x = x0 + (px + 0.5) / k
-                const past = (x - outer) * out
-                const a = clamp(Math.min((y - edgeY(x)) * k + 0.5, (bottom - y) * k + 0.5, -past * k + 0.5, (left ? -x : x - n.x) * k + 1.5))
+                const x = x0 + (px + 0.5) / k, past = (x - v.x) * out
+                // (inside the outline by a pixel under the tiles' edge; out to the outer side; above the bottom)
+                const a = clamp(Math.min(((x - z) * out * sin60 + 1) * k + 0.5, (o - past) * k + 0.5, (bottom - y) * k + 0.5,
+                    (y - v.y) * k + 0.5))
                 if (!(a > 0)) continue
-                // (t: 0 under the edge .. 1 at the foot, over the face's height at this column)
-                const top = edgeY(x), t = clamp((y - top) / Math.max(1e-6, bottom - top))
-                const lip = clamp(1 - (bottom - y) / (S.lip * r)), lit = Math.exp(-(((-past) / (S.corner.width * r)) ** 2)) * S.corner.gain[which]
-                const gain = (1 + streak(x)) * (1 - 0.5 * lip)
-                const p = 4 * (py * W + px)
+                // (the bottom face's stone, unsheared: the drop below the outer vertex from just under the bottom face's rim
+                // (skip), x mirrored so both sides read it alike; past sample hex radii more reflected back up: the bottom
+                // face's foot is ~0.6 r below its edge)
+                const ys = skip + mirror(Math.max(0, y - v.y)), xs = -r / 2 - out * (x - mid)
+                const sx = Math.max(0, Math.min(src.width - 1, Math.floor((xs - src.x) * src.k)))
+                const sy = Math.max(0, Math.min(src.height - 1, Math.floor((ys - src.y) * src.k)))
+                const q = 4 * (sy * src.width + sx)
+                const t = clamp((y - v.y) / span), lip = corner ? 0 : clamp(1 - (bottom - y) / (S.lip * r))
+                const gain = (1 - S.shade * t * t) * (1 - 0.5 * lip)
+                // (the rim's warm light on the stone right under the side rim, as the bottom wall's: glow of the rim light's
+                // colour, falling off over glow.falloff hex radii below the rim)
+                const under = Math.max(0, y - (v.y + (n.y - v.y) * (x - v.x) / (n.x - v.x)) - R.rim.side * R.rim.width * r)
+                const warm = S.glow.alpha * Math.exp(-under / (S.glow.falloff * r))
+                const pp = 4 * (py * W + px)
                 for (let c = 0; c < 3; ++c) {
-                    const col = colorAt(t, c) * gain
-                    d[p + c] = col + (255 - col) * lit * (1 - t)
+                    const col = src.data[q + c] * gain
+                    d[pp + c] = col + (R.rimLight.color[c] - col) * warm
                 }
-                d[p + 3] = 255 * a
+                d[pp + 3] = 255 * a
             }
         }
         return {data: d, width: W, height: H, x: x0, y: y0, k}
