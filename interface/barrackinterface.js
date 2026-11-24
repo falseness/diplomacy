@@ -183,8 +183,10 @@ class BarrackInterface {
             let image
             if (name == 'suburb') 
                 image = new SuburbImage({}, 0.22 * WIDTH * 0.1, 0.002 * WIDTH)
-            else
+            else {
                 image = new JustImage(name, {}, models.image.width, models.image.height)
+                image.outlined = true // TASK-1694: the unit/building picture is outlined as on the board
+            }
 
             let imageButton = new ImageButton(
                 image, 

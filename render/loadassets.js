@@ -383,6 +383,7 @@ function restoreImageCaches() {
             paintCachedImage(cachedImages[name], name)
     }
     rebuildTeamColourImages()
+    outlinedPortraits.clear() // TASK-1694: painted again when next drawn
     if (typeof grid != 'undefined' && grid) {
         grid.surfaceCacheState = undefined
         // TASK-1562: the unit sectors were drawn from the lost sprites (kept across zooms now).
@@ -612,6 +613,42 @@ function* teamColourPortraitSteps(name, rgb, size, slot = name, viaWorker = fals
     paintTeamColourImage(canvas, base, key)
     teamColourPortraits.set(slot, {name, key, size, src, canvas})
     return canvas
+}
+// TASK-1694: an entity picture of the entity and barrack panels (any outlined sprite, spriteOutlined) at a given pixel
+// size, outlined as on the board (paintSpriteOutline, OUTLINE_WIDTH_FRAC of that size): rasterized from the asset and
+// painted once per image and size, then kept (the panels draw it every time they are drawn). null when the image is not
+// an outlined sprite or not loaded (the caller draws the asset as it is). The team-colour portraits are teamColourPortrait.
+const outlinedPortraits = new Map()
+const OUTLINED_PORTRAITS_KEPT = 64
+let outlinedPortraitPaints = 0
+function outlinedPortrait(name, size) {
+    const image = assets[name]
+    if (!spriteOutlined(name) || failedImages.has(name) || !image || !image.complete || !image.naturalWidth)
+        return null
+    size = Math.max(1, Math.round(size))
+    const key = name + '|' + size
+    const kept = outlinedPortraits.get(key)
+    if (kept && kept.src === image.src)
+        return kept.canvas
+    const canvas = kept ? kept.canvas : document.createElement('canvas')
+    canvas.width = canvas.height = size
+    canvas.getContext('2d').drawImage(image, 0, 0, size, size)
+    paintSpriteOutline(canvas, size)
+    ++outlinedPortraitPaints
+    canvas.contentVersion = (canvas.contentVersion || 0) + 1 // TASK-1554 (InterfaceRecorder)
+    if (!kept && outlinedPortraits.size >= OUTLINED_PORTRAITS_KEPT)
+        outlinedPortraits.delete(outlinedPortraits.keys().next().value)
+    outlinedPortraits.set(key, {src: image.src, canvas})
+    return canvas
+}
+// The panel picture of name at size p (device px) centred on pos: the team-colour portrait (rgb given, polished player
+// unit), else the outlined picture, else the asset as it is.
+function drawEntityPicture(ctx, name, pos, p, rgb = null) {
+    const picture = p >= 1 ? (rgb && teamColourPortrait(name, rgb, p)) || outlinedPortrait(name, p) : null
+    if (picture)
+        ctx.drawImage(picture, pos.x - p / 2, pos.y - p / 2, p, p)
+    else
+        drawImage(ctx, name, pos, p, p)
 }
 // Repaints every built variant from its (repainted) base; restoreImageCaches calls it after a context loss.
 function rebuildTeamColourImages() {

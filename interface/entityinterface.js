@@ -593,10 +593,9 @@ class EntityInterface {
             this.suburbImage.r = radius
         }
         else if (this.img.image) {
-            const variant = typeof teamColourPortrait == 'function' && p >= 1 ?
-                teamColourPortrait(this.img.image, this.imgColour, p) : null
-            if (variant)
-                ctx.drawImage(variant, portrait.x - p / 2, portrait.y - p / 2, p, p)
+            // TASK-1694: outlined as on the board (team-colour portrait or outlined picture, kept per size).
+            if (typeof drawEntityPicture == 'function')
+                drawEntityPicture(ctx, this.img.image, portrait, p, this.imgColour)
             else
                 drawImage(ctx, this.img.image, portrait, p, p)
         }

@@ -1,7 +1,7 @@
 {
   "format": 1,
   "algorithm": "sha256(path NUL bytes NUL ...)",
-  "rulesVersion": "5baa50fbd714572a0680949f7908f6e4a297b56422b2a4fd171ffc5482acc117",
+  "rulesVersion": "81763dfb300009aece13313d5ca78b6aa4ebcacda43bab294aecc9ad8fada701",
   "scripts": [
     {
       "path": "options/assert.js",
@@ -120,8 +120,8 @@
     },
     {
       "path": "render/loadassets.js",
-      "sha256": "e6420b36538bb2f5a3e7151b71b27186ebe489f3a67b840b8e82ce95a68579c0",
-      "bytes": 44161
+      "sha256": "aa05230baba26c3838ef0d01e0c261674a72152cc74e35ac04fe9da8280085c2",
+      "bytes": 46245
     },
     {
       "path": "render/staticons.js",
@@ -155,13 +155,13 @@
     },
     {
       "path": "interface/entityinterface.js",
-      "sha256": "165e0c38c5ccd166c75e054c5c72bfd771f0942d3e820bcf7ca8720121a688d1",
-      "bytes": 34675
+      "sha256": "ee7e9059f805eb45684f8cd82cb1b6f0c8d11bb2b72157475ccc837d27710f5f",
+      "bytes": 34658
     },
     {
       "path": "interface/barrackinterface.js",
-      "sha256": "8c45a27f9ce597fb7e59e3a8b200727d4b820cb4381f333fe0c9b22c9d566842",
-      "bytes": 21296
+      "sha256": "4a173d05ad33a932e766a3a932195f183e1875027886b109169263de88abaa54",
+      "bytes": 21418
     },
     {
       "path": "interface/towninterface.js",
@@ -225,8 +225,8 @@
     },
     {
       "path": "sprites/elements/image.js",
-      "sha256": "1e876c5be09b01b19f2385f1a580e8eb6de0598c031bc3bf7c3890cba5abb0fa",
-      "bytes": 13164
+      "sha256": "5bee7f1ecfb040d72ddac5b2833c02988fdaad03d9da16da0b45198c93b943aa",
+      "bytes": 13455
     },
     {
       "path": "sprites/elements/imageButton.js",

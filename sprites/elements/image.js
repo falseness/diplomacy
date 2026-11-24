@@ -31,7 +31,11 @@ class JustImage {
         if (!this.image)
             return
 
-        drawImage(ctx, this.image, this.pos, this.w, this.h)
+        // TASK-1694: an entity picture (outlined: the barrack panel's train cards) is drawn outlined as on the board.
+        if (this.outlined && this.w === this.h && typeof drawEntityPicture == 'function')
+            drawEntityPicture(ctx, this.image, this.pos, this.w)
+        else
+            drawImage(ctx, this.image, this.pos, this.w, this.h)
     }
     get x() {
         return this.pos.x
