@@ -116,18 +116,16 @@ for (let i = 0; i < images.length; ++i) {
 }
 
 // TASK-1649: the sprite outline is drawn by the game, not baked into the asset files: a crisp #1E0F06 line of
-// OUTLINE_WIDTH_FRAC of the drawn sprite size (1.5 px at 128, 2.6 px at 219, 21.4 px at 911) under the art of every
-// polished unit body and demon portal, painted once per cache paint (board cache, so the team-colour variants inherit
-// it; the unit panel portrait at its own size). Buildings, nature, spritesOld/ and undead/ get none.
-const OUTLINE_WIDTH_FRAC = 6 / 512
+// OUTLINE_WIDTH_FRAC of the drawn sprite size under the art, painted once per cache paint (board cache, so the
+// team-colour variants inherit it; the unit panel portrait at its own size).
+// TASK-1693: every entity sprite on the board is outlined (no whitelist, both sprite themes): the game sprite list
+// (spriteImages: player units, buildings, nature, demonSpriteImages, undeadSpriteImages; the atmospheric nature and
+// building art loads under the same names), at twice the TASK-1649 width (3 px at 128, 5.1 px at 219, 42.7 px at 911).
+// Images outside that list (menu and UI images, stat icons, gold, cell textures, fx) get none.
+const OUTLINE_WIDTH_FRAC = 12 / 512
 const OUTLINE_COLOUR = Object.freeze({r: 0x1E, g: 0x0F, b: 0x06})
-const OUTLINED = Object.freeze(['noob', 'archer', 'archerLeft', 'KOHb', 'KOHbLeft', 'normchel', 'catapult', 'catapultLeft',
-    'imp', 'clawling', 'hound', 'houndLeft', 'brute', 'bulwark', 'spitter', 'emberArcher', 'hexcaster', 'ravager',
-    'ravagerLeft', 'demonLord', 'bombard', 'bombardLeft', 'mortar', 'mortarLeft', 'demonQueen',
-    'demonPortalMelee', 'demonPortalRanged', 'demonPortalSiege', 'demonPortalHeavy', 'demonPortalCavalry',
-    'demonPortalChaos', 'demonPortalMage'])
 function spriteOutlined(name) {
-    return otherSettings.usePolishedSprites && OUTLINED.includes(name)
+    return spriteImages.includes(name)
 }
 // 1D squared distance transform (Felzenszwalb and Huttenlocher) of f[0..n) into d, with scratch v and z.
 function outlineDistance1d(f, n, d, v, z) {
