@@ -174,6 +174,9 @@ class Grid extends SpritesGroup {
         // Set by GameManager.start and (TASK-1633) GameManager.load (a saved game): a board loaded otherwise (an online board, a
         // turn playback's recordings) is not held.
         this.startHoldWanted = false
+        // TASK-1705: the map GameManager.start started this board from (a lesson: its id; its surface cache adopted by a start of
+        // the same map).
+        this.startMap = undefined
         this.startRestFirst = false
         // TASK-1543: when the frames after the start hold first called litRestUnderWay (its START_REST_FIRST_MS bound).
         this.startRestFirstAt = undefined
@@ -13652,6 +13655,8 @@ Grid.surfacePatching = true
 Grid.liveCellLayer = true
 // TASK-1519: a turn playback's loaded board takes over the computed board's surface cache (Grid.adoptSurfaceCache).
 Grid.surfaceAdoption = true
+// TASK-1705: a game started from the map the last board was started from takes over its surface cache (GameManager.start).
+Grid.startAdoption = true
 // TASK-1625: a turn playback's board loads and its end swap the board into the Grid shown (Grid.takeBoard); false: a new Grid
 // shown at each load (its caches built again, the surface cache adopted: TASK-1519).
 Grid.boardTakes = true

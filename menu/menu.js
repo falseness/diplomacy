@@ -3990,7 +3990,8 @@ function menuLoop() {
 // (Grid.prebuildCellMaskSteps). Those boards: tutorial 0 and the hot seat screen's selected map (not co-op, whose map
 // is generated); TASK-1473: and the lamps' overlays of any board (atmosphericLighting.prebuildLampSteps). With the same
 // builders and cache keys, the game takes them as cache hits; a game started before they are built builds the rest itself. Steps run QUIET_MS after the last input: one an idle callback, for the idle time left
-// within MIN_STEP_MS..STEP_MS (STEP_MS when it timed out, TIMEOUT_MS: the animated menu may leave no idle period), and
+// within MIN_STEP_MS..STEP_MS (when it timed out, TIMEOUT_MS: the animated menu may leave no idle period, a share of the time
+// since the last callback, STARVED_SHARE, from STEP_MS up to STARVED_MAX_MS), and
 // more while STEP_MS of idle time is left; the work stops while a game runs (menu hidden) and goes on when the menu is
 // shown again (start). A new selection is planned again after the next input.
 const menuPrebuild = {
@@ -4000,6 +4001,12 @@ const menuPrebuild = {
     MIN_STEP_MS: 4,
     QUIET_MS: 300,
     TIMEOUT_MS: 100,
+    // TASK-1705: a callback that timed out (no idle period: the menu's frames take the main thread, ~100 ms each on a slow
+    // host) runs STARVED_SHARE of the time since the last callback's steps ended, within STEP_MS..STARVED_MAX_MS (was
+    // STEP_MS: ~7% of the main thread there, and a first start some seconds after page load found most of the work not done).
+    STARVED_SHARE: 0.25,
+    STARVED_MAX_MS: 32,
+    lastRunEnd: undefined,
     LOG_SIZE: 1000,
     job: null,
     queued: false,
@@ -4011,9 +4018,11 @@ const menuPrebuild = {
     listening: false,
     // Whether the work is planned again once the game sprites are cached (the lamps' overlays need them).
     lampWait: false,
+    // (TASK-1705: none while a game entry with the sprites loaded waits for its start, gameSpritesWaiting: the board is built
+    // two frames later, and a piece then delayed it, up to ~0.4 s on this host)
     enabled() {
         return typeof requestIdleCallback === 'function' && typeof menu !== 'undefined' && menu.visible &&
-            otherSettings.atmosphericVisuals
+            otherSettings.atmosphericVisuals && !(typeof gameSpritesWaiting !== 'undefined' && gameSpritesWaiting && gameSpritesLoaded)
     },
     // Plans the work again (start, input; stale) and asks for an idle callback.
     schedule(stale = true) {
@@ -4092,6 +4101,12 @@ const menuPrebuild = {
         }
         // TASK-1669: the variants in pieces of their own too (split).
         yield* atmosphericLighting.prebuildOwnedSteps([...colours.values()], true)
+        // The masks only serve the cell layer (Grid.cellLayerOn).
+        // TASK-1705: right after the next boards' owned tiles (was last, after the work for every board the menu can start:
+        // a start a few seconds after page load found it not done and built it, ~1.3-1.8 s of a first start on this host).
+        for (const map of Grid.liveCellLayer === true ? maps : [])
+            for (const _ of Grid.prebuildCellMaskSteps(map))
+                yield 'cellMask ' + (map.testName || map.mapSize.x + 'x' + map.mapSize.y)
         // TASK-1632: the fogged cells' variants (per hex radius, any board).
         // TASK-1673: the concept cells' (not the procedural fallback's while they load).
         for (let i = 0; atmosphericLighting.cellsReady() && i < atmosphericLighting.neutralCount(); i++)
@@ -4140,10 +4155,6 @@ const menuPrebuild = {
             this.lampWait = true
             gameSpritesReady.then(() => this.schedule())
         }
-        // The masks only serve the cell layer (Grid.cellLayerOn).
-        for (const map of Grid.liveCellLayer === true ? maps : [])
-            for (const _ of Grid.prebuildCellMaskSteps(map))
-                yield 'cellMask ' + (map.testName || map.mapSize.x + 'x' + map.mapSize.y)
     },
     // Steps of pieces, each while another piece as long as the last fits in its budget (the idle time left, within
     // MIN_STEP_MS..STEP_MS; STEP_MS on a timeout): one, then more while the idle time left is STEP_MS or more.
@@ -4158,7 +4169,8 @@ const menuPrebuild = {
         let first = true
         while ((first || deadline.timeRemaining() >= this.STEP_MS) && this.enabled() &&
                 performance.now() - this.lastInput >= this.QUIET_MS) {
-            const budget = first && deadline.didTimeout ? this.STEP_MS :
+            const budget = first && deadline.didTimeout ?
+                Math.min(this.STARVED_MAX_MS, Math.max(this.STEP_MS, this.STARVED_SHARE * (performance.now() - (this.lastRunEnd ?? -Infinity)))) :
                 Math.min(this.STEP_MS, Math.max(this.MIN_STEP_MS, deadline.timeRemaining()))
             first = false
             if (!this.job) {
@@ -4183,6 +4195,7 @@ const menuPrebuild = {
             if (this.log.length > this.LOG_SIZE)
                 this.log.shift()
         }
+        this.lastRunEnd = performance.now()
         this.schedule(false)
     }
 }

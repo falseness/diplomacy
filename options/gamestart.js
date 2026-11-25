@@ -1953,10 +1953,21 @@ class GameManager {
     }
     // A local (hot seat) game; online games start from a lobby (openLobbyGame).
     static start(map, _isFogOfWar, isClassicTimer = false) {
+        const previous = typeof grid !== 'undefined' ? grid : null
         this.setUpBoard(map, _isFogOfWar, isClassicTimer, false)
         // TASK-1518: the new game's first frames are held while its first lit view is built (Grid.holdStartFrame).
-        if (typeof grid !== 'undefined' && grid)
+        if (typeof grid !== 'undefined' && grid) {
             grid.startHoldWanted = true
+            // TASK-1705: a start of the map the last board was started from (the same lesson again, Retry, a hot seat map
+            // again) takes over that board's surface cache (Grid.adoptSurfaceCache, as a turn playback's board does: matched
+            // cell by cell, patched where the board differs, or rebuilt whole when a patch is refused; a build under way is
+            // finished for it: canTakeSurfaceDonor) instead of building its own from nothing (2.5-5 s of a repeat start's
+            // ~8 s on this host, artifacts/TASK-1705/cause.md).
+            // (A lesson's map is made anew by each start, tutorials' map getter: its id names it.)
+            grid.startMap = map.tutorial ? 'tutorial:' + map.tutorial.id : map
+            if (Grid.startAdoption && previous && previous !== grid && previous.startMap === grid.startMap && typeof grid.adoptSurfaceCache === 'function')
+                grid.adoptSurfaceCache(previous)
+        }
         startTurn()
         // A tutorial keeps the camera of its first turn.
         if (!gameSettings.tutorial)

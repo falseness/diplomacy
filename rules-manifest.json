@@ -1,7 +1,7 @@
 {
   "format": 1,
   "algorithm": "sha256(path NUL bytes NUL ...)",
-  "rulesVersion": "78e16b30967c3cae432bd5d85da0e335f641d2cabfed9578dff867d031a560be",
+  "rulesVersion": "814826e383cfe34af87b6d39f33ff0cf452a836c5e130a5fa751ba3b55fdb2da",
   "scripts": [
     {
       "path": "options/assert.js",
@@ -30,8 +30,8 @@
     },
     {
       "path": "options/gamestart.js",
-      "sha256": "154857e568d9b2be61bbb20bbc9108391f4e3e9afd111876dd935270be68e4b5",
-      "bytes": 101057
+      "sha256": "6bce7e12c55b0f93faf19a91aff0c4f70f05f659f23096a23e3e7fed21a3aed6",
+      "bytes": 102082
     },
     {
       "path": "options/tutorials.js",
@@ -300,8 +300,8 @@
     },
     {
       "path": "menu/menu.js",
-      "sha256": "30dd4a3262a0d2f4a1965092cf672bd53813e9c7583ef654d122a394af4524e5",
-      "bytes": 195304
+      "sha256": "94a0636ebf228d71cf0ea757b6735919aa033f859e97c763810905df154ebc05",
+      "bytes": 196564
     },
     {
       "path": "sprites/hexagon.js",
@@ -310,8 +310,8 @@
     },
     {
       "path": "groups/grid.js",
-      "sha256": "4dea5b069f5768fb50723af8e156cebe1c8f117e26feb472d7c35329bfbc8a22",
-      "bytes": 888444
+      "sha256": "a385bb90e79f90952617b09849eba88e3063414a79169fc067aa34f440effd84",
+      "bytes": 888785
     },
     {
       "path": "sprites/entities/hpBar.js",
