@@ -2031,7 +2031,7 @@ class SelectionOverlay {
         if (t.b !== 0 || t.c !== 0 || t.a <= 0 || t.d <= 0)
             return undefined
         if (raster && raster.data === state.data && raster.move === state.move && raster.range === state.range &&
-                raster.r === basis.r && !(raster.missingIcon && SelectionOverlay.whiteIcon(raster.missingIcon))) {
+                raster.r === basis.r && raster.seam === SelectionOverlay.seam() && !(raster.missingIcon && SelectionOverlay.whiteIcon(raster.missingIcon))) {
             const screen = typeof gameEvent != 'undefined' && gameEvent ? gameEvent.screen : undefined
             if (screen && SelectionOverlay.cameraMoving(screen))
                 return raster
@@ -2115,7 +2115,8 @@ class SelectionOverlay {
             ++SelectionOverlay.rasterBuilds
         }
         g.restore()
-        return rasters[layer] = {canvas, data: state.data, move: state.move, range: state.range, r: basis.r, sx, sy,
+        return rasters[layer] = {canvas, data: state.data, move: state.move, range: state.range, r: basis.r,
+            seam: SelectionOverlay.seam(), sx, sy,
             wx: (ix - t.e) / sx, wy: (iy - t.f) / sy, view, missingIcon: this.missingIcon}
     }
     // The raster of layer, or both.
@@ -2132,17 +2133,48 @@ class SelectionOverlay {
     get raster() {
         return this.rasters?.plate
     }
-    // S6 look (concept drawS6): the range as a thin raised ridge pushed out 0.1 r; the move area as a soft
-    // raised plate inset 0.1 r with no face fill, so the cells keep their own colour; neutral target emblems.
-    // Light comes from the upper left; no hue carries meaning. Shadows scale with the context's transform.
+    // S6 look (concept drawS6): the range as a thin raised ridge; the move area as a soft raised plate with no face
+    // fill, so the cells keep their own colour; neutral target emblems. Light comes from the upper left; no hue carries
+    // meaning. Shadows scale with the context's transform.
+    // TASK-1700: both on the covered cells' own visible edges (as TASK-1699's borders): the loops are lattice edges, in
+    // the middle of the dark seam; the cell texture is drawn at atmosphericLighting.tileRadius(), seam() hex radii
+    // inside them. The plate's edge lies on that visible edge, its rim and the ridge's stroke just inside it, and
+    // everything is clipped to the covered cells' visible area (clipCells: the loops inset by seam(), mitred, so a
+    // multi-cell outline stays one joined line across the seams between two covered cells).
     static scaleOf(ctx) {
         return ctx.getTransform ? Math.abs(ctx.getTransform().a) || 1 : 1
+    }
+    // Half the dark seam between two cells, in hex radii: a lattice edge to the visible cell edge, perpendicular.
+    static seam() {
+        const r = basis.r
+        const tile = typeof atmosphericLighting != 'undefined' && atmosphericLighting.tileRadius ?
+            atmosphericLighting.tileRadius() : r
+        return (r - tile) * Math.sqrt(3) / 2 / r
+    }
+    static RIDGE_WIDTH = 0.085
+    static RIM_WIDTH = 0.012
+    static CORNER = 0.08
+    // Clips ctx to the loops' visible cell area (the loops inset by seam(), mitred; holes keep their winding).
+    static clipCells(ctx, loops) {
+        const seam = SelectionOverlay.seam()
+        ctx.beginPath()
+        for (const loop of loops) {
+            const Q = SelectionOverlay.offsetPoints(loop, -seam)
+            ctx.moveTo(Q[0][0], Q[0][1])
+            for (let i = 1; i < Q.length; ++i)
+                ctx.lineTo(Q[i][0], Q[i][1])
+            ctx.closePath()
+        }
+        ctx.clip()
     }
     drawRange(ctx, data) {
         if (!data.ranged || !data.rangeLoops.length)
             return
-        const r = basis.r, sc = SelectionOverlay.scaleOf(ctx)
-        const path = () => SelectionOverlay.roundedOffset(ctx, data.rangeLoops, 0.1, 0.32)
+        const r = basis.r, sc = SelectionOverlay.scaleOf(ctx), width = SelectionOverlay.RIDGE_WIDTH
+        const offset = -(SelectionOverlay.seam() + width / 2)
+        const path = () => SelectionOverlay.roundedOffset(ctx, data.rangeLoops, offset, SelectionOverlay.CORNER)
+        ctx.save()
+        SelectionOverlay.clipCells(ctx, data.rangeLoops)
         ctx.save()
         ctx.lineJoin = 'round'
         ctx.shadowColor = 'rgba(0,0,0,0.6)'
@@ -2152,7 +2184,7 @@ class SelectionOverlay {
         ctx.beginPath()
         path()
         ctx.strokeStyle = 'rgba(225,225,230,0.95)'
-        ctx.lineWidth = 0.085 * r
+        ctx.lineWidth = width * r
         ctx.stroke()
         ctx.restore()
         ctx.save()
@@ -2164,6 +2196,7 @@ class SelectionOverlay {
         ctx.lineWidth = 0.035 * r
         ctx.stroke()
         ctx.restore()
+        ctx.restore()
     }
     drawMove(ctx, data) {
         this.drawPlate(ctx, data)
@@ -2171,8 +2204,13 @@ class SelectionOverlay {
     }
     drawPlate(ctx, data) {
         if (data.moveLoops.length) {
-            const frame = SelectionOverlay.frameOf(data.moveLoops)
-            this.softPlate(ctx, () => SelectionOverlay.roundedOffset(ctx, data.moveLoops, -0.1, 0.32), frame)
+            const frame = SelectionOverlay.frameOf(data.moveLoops), seam = SelectionOverlay.seam()
+            ctx.save()
+            SelectionOverlay.clipCells(ctx, data.moveLoops)
+            this.softPlate(ctx, () => SelectionOverlay.roundedOffset(ctx, data.moveLoops, -seam, SelectionOverlay.CORNER),
+                () => SelectionOverlay.roundedOffset(ctx, data.moveLoops, -(seam + SelectionOverlay.RIM_WIDTH / 2),
+                    SelectionOverlay.CORNER), frame)
+            ctx.restore()
         }
     }
     // The loops' bounds plus a margin, as a rectangle wound counter-clockwise: with the area's clockwise
@@ -2213,33 +2251,20 @@ class SelectionOverlay {
         ctx.fill()
         ctx.restore()
     }
-    // The concept's softPlate with face 0 and sheen 0: drop shadow outside only, white inner light on the
-    // upper-left edges, dark inner shade on the lower-right ones, a hairline rim.
-    softPlate(ctx, path, frame) {
-        const r = basis.r, sc = SelectionOverlay.scaleOf(ctx)
-        ctx.save()
-        ctx.beginPath()
-        SelectionOverlay.frameRect(ctx, frame)
-        path()
-        ctx.clip()
-        ctx.shadowColor = 'rgba(0,0,0,0.7)'
-        ctx.shadowBlur = 0.3 * r * sc
-        ctx.shadowOffsetX = 0.07 * r * sc
-        ctx.shadowOffsetY = 0.1 * r * sc
-        ctx.beginPath()
-        path()
-        ctx.fillStyle = '#000'
-        ctx.fill()
-        ctx.restore()
+    // The concept's softPlate with face 0 and sheen 0: white inner light on the upper-left edges, dark inner shade on
+    // the lower-right ones, a hairline rim (rimPath: just inside the edge). TASK-1700: no drop shadow outside the plate
+    // (the plate's edge is the cell's visible edge; outside it is the seam and the neighbours).
+    softPlate(ctx, path, rimPath, frame) {
+        const r = basis.r
         for (let i = 0; i < 2; ++i)
             this.innerShadow(ctx, path, frame, 'rgba(255,255,255,0.95)', 0.06, 0.08, 0.11)
         for (let i = 0; i < 2; ++i)
             this.innerShadow(ctx, path, frame, 'rgba(0,0,0,0.6)', 0.07, -0.08, -0.11)
         ctx.save()
         ctx.beginPath()
-        path()
+        rimPath()
         ctx.strokeStyle = 'rgba(0,0,0,0.35)'
-        ctx.lineWidth = 0.012 * r
+        ctx.lineWidth = SelectionOverlay.RIM_WIDTH * r
         ctx.stroke()
         ctx.restore()
     }
