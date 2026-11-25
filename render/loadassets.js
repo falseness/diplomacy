@@ -875,6 +875,84 @@ function whenGameSpritesReady(run, control = Button.pressed) {
         return run()
     })
 }
+// TASK-1704: a game entry from the menu (a lesson card, the start and load slot lists) or Retry / Next
+// (TutorialManager.switchTo) shows 'Loading…' (drawGameEntryLabel) from the first frame after the click till its board's
+// settled frame, even with the game sprites cached: the entry under way ({control, since, startAt, board}) from its board's
+// start on (Retry / Next: from the old game's last frame), or null. Its board is grid after its start (gameEntryStarted;
+// a co-op map from the Worker: the first game frame's, drawGameEntryLoading); the label goes with
+// the first drawn game frame whose board has no build under way (Grid.boardBuildsPending: what visualsPerf's loadPending
+// lists), at the latest GAME_ENTRY_LABEL_MS after the click (only a safety bound: a board that never settles), and when the
+// game ends (Menu.stopGame).
+let gameEntry = null
+const GAME_ENTRY_LABEL_MS = 600000
+// The last entry's times (performance.now): click, label gone and why (settled, time, board), for tests and probes.
+let gameEntryLast = null
+// Runs run() (the board's start) for a menu entry: the pressed control is shown as loading (gameSpritesWaiting: the menu
+// draws it) and run() waits for the game sprites (whenGameSpritesReady) and then for two frames, so the label is on
+// screen before the board is built in a later frame (as TutorialManager.switchTo does). A later entry replaces a waiting
+// one (a double click starts one game: the menu's listeners go with the start, Menu.visible).
+function enterGame(run, control = Button.pressed) {
+    const waiting = gameSpritesWaiting = {control, since: performance.now()}
+    gameEntryLast = {since: waiting.since}
+    // TASK-1669: the sprites still queued (loadSprites staggered) are requested at once.
+    if (!gameSpritesLoaded && spriteLoadQueue.length)
+        loadSprites(spriteLoadQueue.slice())
+    const go = () => {
+        if (gameSpritesWaiting !== waiting)
+            return
+        gameSpritesWaiting = null
+        gameEntry = waiting
+        waiting.startAt = gameEntryLast.startAt = performance.now()
+        // The pressed control as during the click (a co-op map's wait marks it again, start).
+        const pressed = Button.pressed
+        Button.pressed = waiting.control
+        try {
+            return run()
+        } finally {
+            Button.pressed = pressed
+            // Nothing entered (a save that does not load) nor waited for (a co-op map from the Worker): no label left.
+            if (gameEntry === waiting && typeof menu !== 'undefined' && menu.visible && !gameSpritesWaiting)
+                gameEntry = null
+            else if (gameEntry === waiting && typeof menu !== 'undefined' && !menu.visible)
+                gameEntryStarted(waiting)
+        }
+    }
+    const afterLabel = () => {
+        if (gameSpritesWaiting === waiting)
+            requestAnimationFrame(() => gameSpritesWaiting === waiting && requestAnimationFrame(go))
+    }
+    if (gameSpritesLoaded)
+        afterLabel()
+    else
+        gameSpritesReady.then(afterLabel)
+}
+// The entry's board started (its run: the board is grid; a co-op map from the Worker starts later: its first game frame's).
+function gameEntryStarted(entry) {
+    entry.board = typeof grid !== 'undefined' ? grid : null
+}
+// The label over a game frame (drawInterface) while an entry's board is not settled (before its start: over the old
+// game's last frame, Retry / Next).
+function drawGameEntryLoading(ctx) {
+    const entry = gameEntry
+    if (!entry)
+        return
+    const board = typeof grid !== 'undefined' ? grid : null
+    if (entry.startAt === undefined)
+        return drawGameEntryLabel(ctx, entry)
+    entry.board ??= board
+    const end = why => {
+        gameEntry = null
+        if (gameEntryLast && gameEntryLast.since === entry.since)
+            Object.assign(gameEntryLast, {endAt: performance.now(), end: why})
+    }
+    if (entry.board !== board)
+        return end('board')
+    if (!(board && board.boardBuildsPending && board.boardBuildsPending()))
+        return end('settled')
+    if (performance.now() - entry.since >= GAME_ENTRY_LABEL_MS)
+        return end('time')
+    drawGameEntryLabel(ctx, entry)
+}
 function waitForImagesLoad() {
     if (!menuImagesSettled()) {
         requestAnimationFrame(waitForImagesLoad)

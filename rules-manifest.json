@@ -1,7 +1,7 @@
 {
   "format": 1,
   "algorithm": "sha256(path NUL bytes NUL ...)",
-  "rulesVersion": "e549dd216fdf9b89d4091fc5c56ee52243b3a2ea730d188cbe72af4fc87083ac",
+  "rulesVersion": "78e16b30967c3cae432bd5d85da0e335f641d2cabfed9578dff867d031a560be",
   "scripts": [
     {
       "path": "options/assert.js",
@@ -45,8 +45,8 @@
     },
     {
       "path": "options/tutorialManager.js",
-      "sha256": "7e3160ec5f00ebde7d654b74a6d2bfe164f92830e80400b587c729b92bbfce57",
-      "bytes": 11069
+      "sha256": "701107c31a88db26494c32e4ca1bfbfe611884041ea5211ab991ef6d1fe1fb56",
+      "bytes": 11041
     },
     {
       "path": "options/save.js",
@@ -120,8 +120,8 @@
     },
     {
       "path": "render/loadassets.js",
-      "sha256": "aa05230baba26c3838ef0d01e0c261674a72152cc74e35ac04fe9da8280085c2",
-      "bytes": 46245
+      "sha256": "ffd372030d510e71085d4cd098823967c58328e5c1bbdaa13796a6b767326727",
+      "bytes": 50428
     },
     {
       "path": "render/staticons.js",
@@ -150,8 +150,8 @@
     },
     {
       "path": "render/draw.js",
-      "sha256": "e6c552056a99f20788438a2c531f164ff3ba9d9542b9cdbcdebd2a0cc05be71a",
-      "bytes": 67601
+      "sha256": "b05ef8dea131cae7c3d4d20e8a3a7ff8426fa7882100f7adc4b86a69f1920b2d",
+      "bytes": 67891
     },
     {
       "path": "interface/entityinterface.js",
@@ -300,8 +300,8 @@
     },
     {
       "path": "menu/menu.js",
-      "sha256": "c412c41c521f73c489174a7eb5af71a6af77bd4ddf061d4b9126c7b4c51c7d23",
-      "bytes": 194635
+      "sha256": "30dd4a3262a0d2f4a1965092cf672bd53813e9c7583ef654d122a394af4524e5",
+      "bytes": 195304
     },
     {
       "path": "sprites/hexagon.js",

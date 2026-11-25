@@ -1202,6 +1202,10 @@ function drawInterface() {
     interfaceCtx.save()
     interfaceCtx.setTransform(1, 0, 0, 1, 0, 0)
     drawDebugFps(interfaceCtx)
+    // TASK-1704: a game entry's 'Loading…' over the frames before its board is settled (render/loadassets.js
+    // drawGameEntryLoading), drawn over the cached interface, as the FPS counter.
+    if (typeof drawGameEntryLoading === 'function')
+        drawGameEntryLoading(interfaceCtx)
     interfaceCtx.restore()
 }
 

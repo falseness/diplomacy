@@ -17,7 +17,7 @@
 class TutorialCard extends MenuButton {
     constructor(tree, tutorial) {
         super(new Rect(0, 0, 0, 0), new Text(0, 0, 0, tutorial.title),
-            id => whenGameSpritesReady(() => TutorialManager.start(id)), tutorial.id, true)
+            id => enterGame(() => TutorialManager.start(id)), tutorial.id, true)
         this.tree = tree
         Object.assign(this, TutorialCardsTree.parseTitle(tutorial.title))
         this.label = null

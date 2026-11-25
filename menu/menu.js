@@ -31,10 +31,11 @@ function menuTouchEnd(event) {
     let pos = getEventPos(event)
     menu.touchEnd(pos)
 }
-// Every entry into a game waits for the game sprites (render/loadassets.js whenGameSpritesReady).
+// Every entry into a game waits for the game sprites and shows 'Loading…' till its board is settled (render/loadassets.js
+// enterGame).
 function start(_slot) {
     let game_mode = menu.previousTree
-    return whenGameSpritesReady(() => {
+    return enterGame(() => {
         // TASK-1655: a co-op map from the generation Worker (generateCoopGameAsync: at once when made ahead, else when it
         // answers, 'Loading…' over the pressed control meanwhile; a later entry replaces this one, as a sprite wait's).
         const coop = game_mode.coopGeneration
@@ -60,14 +61,14 @@ function start(_slot) {
     })
 }
 function startAI(_slot) {
-    return whenGameSpritesReady(() => {
+    return enterGame(() => {
         gameSlot = _slot
         return GameManager.startAI()
     })
 }
 function load(_slot) {
     // The save is unpacked into the game's entities, so it waits too.
-    return whenGameSpritesReady(() => {
+    return enterGame(() => {
         gameSlot = _slot
         if (!saveManager.load())
             return
@@ -3839,6 +3840,8 @@ class Menu {
     // Ends the running game without showing the menu: back() and TutorialManager.switchTo.
     // Returns whether it was a lobby game. The game loop stops on its next frame (gameExit).
     stopGame() {
+        // TASK-1704: an entry's label goes with its game.
+        gameEntry = null
         // TASK-1496: a step-by-step playback of AI turns ends first: the computed board is back for the save and the timer
         // pause below, and nothing of it keeps running (options/turnPlayback.js).
         if (typeof turnPlaybackView !== 'undefined')
@@ -3940,22 +3943,33 @@ class Menu {
     }
 }
 
-// While a game entry waits for the game sprites: 'Loading…' over the pressed control (a centred pill without one).
+// While a game entry waits for the game sprites or its first frames (enterGame): 'Loading…' over the pressed control.
 Menu.prototype.drawGameSpritesWaiting = function(ctx) {
-    if (!gameSpritesWaiting)
-        return
-    const rect = gameSpritesWaiting.control?.rect
-    const box = rect && rect.width > 0 ? rect : {x: WIDTH * 0.35, y: HEIGHT * 0.86, width: WIDTH * 0.3, height: HEIGHT * 0.07}
+    if (gameSpritesWaiting)
+        drawGameEntryLabel(ctx, gameSpritesWaiting)
+}
+// TASK-1704: the one 'Loading…' look of every game entry ({control, since}): a dark pill over the pressed control (a
+// centred pill near the bottom without one), in the menu, over the game's frames till its board is settled
+// (drawGameEntryLoading) and for Retry / Next (TutorialManager.drawLoading). Its box: gameEntryLabelBox.
+function gameEntryLabelBox(entry) {
+    const rect = entry.control?.rect
+    return rect && rect.width > 0 ? rect : {x: WIDTH * 0.35, y: HEIGHT * 0.86, width: WIDTH * 0.3, height: HEIGHT * 0.07}
+}
+function drawGameEntryLabel(ctx, entry) {
+    const box = gameEntryLabelBox(entry)
     ctx.save()
-    ctx.fillStyle = 'rgba(20, 16, 10, 0.72)'
+    ctx.setTransform(1, 0, 0, 1, 0, 0)
+    ctx.globalAlpha = 1
+    ctx.globalCompositeOperation = 'source-over'
+    // (TASK-1704: 0.92, was 0.72: the control's own text no longer reads through the label)
+    ctx.fillStyle = 'rgba(20, 16, 10, 0.92)'
     roundedRectPath(ctx, box.x, box.y, box.width, box.height, Math.min(box.width, box.height) * 0.12)
     ctx.fill()
-    const dots = '.'.repeat(1 + Math.floor((performance.now() - gameSpritesWaiting.since) / 400) % 3)
     ctx.fillStyle = '#fbe7b0'
     ctx.font = `${Math.round(Math.min(box.height * 0.32, box.width * 0.12))}px ${MENU_FONT_FAMILY}`
     ctx.textAlign = 'center'
     ctx.textBaseline = 'middle'
-    ctx.fillText('Loading' + dots, box.x + box.width / 2, box.y + box.height / 2)
+    ctx.fillText('Loading…', box.x + box.width / 2, box.y + box.height / 2)
     ctx.restore()
 }
 

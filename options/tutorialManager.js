@@ -160,34 +160,31 @@ class TutorialManager {
     // 'tutorial:' timer keys) and removeEvents. It skips Menu.back's menu steps: menu.visible, menu.start
     // (the menu loop), setTree and updateSlotManagers, which would draw the menu until the new board.
     // The old game loop draws its last frame and stops on the next frame, before the callback below
-    // (requested later); the 'Loading…' frame is shown, and the new game starts one frame after it, so
-    // only one game loop runs. switching is set until start, so the old loop's last frame draws no
-    // tutorial 0 hints (drawTutorialHints), whose arrow would otherwise flash once the result screen hides.
+    // (requested later); the 'Loading…' label is drawn over that frame (TASK-1704: the entry's label, gameEntry, kept
+    // over the new board's frames till it is settled), and the new game starts one frame after it, so only one game
+    // loop runs. switching is set until start, so the old loop's last frame draws no tutorial 0 hints
+    // (drawTutorialHints), whose arrow would otherwise flash once the result screen hides.
     static switchTo(id) {
         TutorialManager.switching = true
         tutorialResultInterface.hide()
         menu.stopGame()
+        const entry = {control: null, since: performance.now()}
+        gameEntryLast = {since: entry.since}
         requestAnimationFrame(() => {
+            gameEntry = entry
             TutorialManager.drawLoading()
-            requestAnimationFrame(() => TutorialManager.start(id))
+            requestAnimationFrame(() => {
+                if (gameEntry !== entry)
+                    return
+                entry.startAt = gameEntryLast.startAt = performance.now()
+                TutorialManager.start(id)
+                gameEntryStarted(entry)
+            })
         })
     }
-    // A small centred 'Loading…' label over the last game frame.
+    // The entry's 'Loading…' label (drawGameEntryLabel: the menu's look) over the last game frame.
     static drawLoading() {
-        const ctx = interfaceCtx
-        const fontSize = Math.max(16 * window.devicePixelRatio, Math.min(WIDTH, HEIGHT) / 30)
-        ctx.save()
-        ctx.setTransform(1, 0, 0, 1, 0, 0)
-        ctx.font = fontSize + 'px Arial'
-        ctx.textAlign = 'center'
-        ctx.textBaseline = 'middle'
-        const text = 'Loading…'
-        const w = ctx.measureText(text).width + fontSize * 1.5, h = fontSize * 2
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.65)'
-        ctx.fillRect(WIDTH / 2 - w / 2, HEIGHT / 2 - h / 2, w, h)
-        ctx.fillStyle = 'white'
-        ctx.fillText(text, WIDTH / 2, HEIGHT / 2)
-        ctx.restore()
+        drawGameEntryLabel(interfaceCtx, gameEntry ?? {control: null, since: performance.now()})
     }
     static retry() {
         TutorialManager.switchTo(gameSettings.tutorial.id)
