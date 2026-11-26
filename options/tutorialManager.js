@@ -60,28 +60,26 @@ class TutorialManager {
         return true
     }
     // TASK-1616 (TUTORIAL PERF 3/7): THE NEXT TUTORIAL'S BOARD MADE AHEAD ON THE RESULT SCREEN. Next tutorial starts a new
-    // board whose first frames made its map-edge rock sprites and its surface cache's cell mask (the click freeze of
-    // artifacts/TASK-1614/causes.md, problem 2). While a won tutorial's result screen shows, the next tutorial's rock sprites
-    // are asked of the rock workers (MapDepth.rockKeysOf its stand-in board, Grid.prebuildBoardOf: off the main thread) and
-    // its cell mask is built a step a frame (Grid.prebuildCellMaskSteps, PREBUILD_STEP_MS each, in an animation frame
+    // board whose first frames made its surface cache's cell mask (the click freeze of artifacts/TASK-1614/causes.md,
+    // problem 2; TASK-1708: its map-edge rock sprites, asked of the rock workers here too, are gone). While a won
+    // tutorial's result screen shows, the next tutorial's cell mask (of its stand-in board, Grid.prebuildBoardOf) is built
+    // a step a frame (Grid.prebuildCellMaskSteps, PREBUILD_STEP_MS each, in an animation frame
     // callback: timers starved behind the busy result screen's frames, 7 steps in 3.3 s on the tutorial replay; the same
     // builders and keys as the board's own, so the board finds them kept or, its mask not finished, goes on with the same
     // build: cellMaskJob). Stops when the result screen hides but for Next tutorial's switch (TutorialManager.switching,
     // until the new board starts: then its own steps take over the build).
     static PREBUILD_STEP_MS = 24
     static prebuilds = 0
-    // The last prebuild: {id, rocks: sprites asked, steps, ms: its mask steps' time, done: the mask finished by it}.
+    // The last prebuild: {id, steps, ms: its mask steps' time, done: the mask finished by it}.
     static prebuildLog = null
     static prebuildNext(id) {
         const tutorial = id && tutorials.find(tutorial => tutorial.id === id)
         if (!tutorial || typeof otherSettings === 'undefined' || !otherSettings.atmosphericVisuals ||
-                typeof Grid === 'undefined' || typeof MapDepth === 'undefined')
+                typeof Grid === 'undefined')
             return
         const map = tutorial.map
         ++TutorialManager.prebuilds
-        const rocks = MapDepth.rockKeysOf(Grid.prebuildBoardOf(map))
-        MapDepth.requestRockSprites(rocks)
-        const log = TutorialManager.prebuildLog = {id, rocks: rocks.length, calls: 0, steps: 0, ms: 0, done: false, at: performance.now(), doneAt: null}
+        const log = TutorialManager.prebuildLog = {id, calls: 0, steps: 0, ms: 0, done: false, at: performance.now(), doneAt: null}
         if (Grid.liveCellLayer !== true)
             return
         const steps = Grid.prebuildCellMaskSteps(map), shown = tutorialResultInterface

@@ -1416,7 +1416,7 @@ class Grid extends SpritesGroup {
         return {key: [W, H, a, d, e, f, basis.offset.x, basis.offset.y, basis.r, w, h, reach].join(), a, d, e, f, reach}
     }
     // TASK-1455: a stand-in board of map (a GameMap) for the geometry of a board not yet made: its arr's cells have only
-    // hexagon.calcPos() and building.isMapEdge (TASK-1616: shared by prebuildCellMaskSteps and MapDepth.rockKeysOf).
+    // hexagon.calcPos() and building.isMapEdge (TASK-1616: shared by prebuildCellMaskSteps).
     static prebuildBoardOf(map) {
         const w = map.mapSize.x, h = map.mapSize.y, shape = map.mapShape
         const board = Object.create(Grid.prototype)
@@ -11061,7 +11061,7 @@ class Grid extends SpritesGroup {
             ++kind[0]
             kind[1] += piece
             kind[2] = Math.max(kind[2], piece)
-            // (TASK-1615: a piece waiting for the rock workers: nothing more to do in this frame)
+            // (TASK-1615: a piece waiting for a worker, the underlay's: nothing more to do in this frame)
             if (wait || raster && ++rasters >= job.allow)
                 break
         } while (!done && performance.now() - start + piece < START_STEP_MS)
@@ -11079,7 +11079,7 @@ class Grid extends SpritesGroup {
     }
     // TASK-1633 (LEVEL LOAD 3/5): after a start hold that built its view (holdStartFrame 'built'), until the board's
     // builds are done (the surface cache made and lit, nothing in boardBuildsPending: the surface cache, the lit tiles,
-    // the rest snapshot, the rock sprites; for Grid.LOAD_GUARD_SETTLE_MS), a frame that would draw the board partial is not drawn: the screen keeps
+    // the rest snapshot; for Grid.LOAD_GUARD_SETTLE_MS), a frame that would draw the board partial is not drawn: the screen keeps
     // the frame it shows (the board's last whole frame, else the menu's) while what that frame needs is made (the lit
     // tiles queued as drawLitView queues them, the surface cache's step as Grid.draw queues it; a view the light map no
     // longer holds made again by planLitView's tasks, but at the cache's scale while the cache is built: the frames
@@ -11182,7 +11182,7 @@ class Grid extends SpritesGroup {
     }
     // TASK-1633: whether the board's builds are under way (as visualsPerf's frame.loadPending names them): the surface cache
     // (queued, building, split, patched, layered, dirty, or built unlit), the lit tiles (queued, a view unbuilt, patched or
-    // with a layer job), the lit view's rest snapshot, the rock sprites asked of the workers.
+    // with a layer job), the lit view's rest snapshot.
     boardBuildsPending() {
         if (this.surfaceCacheQueued || this.surfaceCacheBuild || this.surfaceSplitJob || this.surfacePatchJob || this.surfaceLayerJob ||
                 this.surfaceCacheDirty || this.surfaceCache && !this.surfaceCacheLit)
@@ -11190,9 +11190,7 @@ class Grid extends SpritesGroup {
         const v = this.litView
         if (this.litTilesQueued || v && (v.unbuilt || v.patch || v.layerJob))
             return true
-        if (v && v.rest && v.rest.done !== LIT_REST_BANDS)
-            return true
-        return !!MapDepth.rockWorker?.pending?.size
+        return !!(v && v.rest && v.rest.done !== LIT_REST_BANDS)
     }
     // TASK-1655: the board's lamps' overlays (atmosphericLighting.lampOverlaySteps) and the crop boxes of their shade and glow
     // (atmosphericLighting.cropBox, read by the tiles' bloom: drawCropped), a step or box a piece of the start hold.
@@ -11224,7 +11222,7 @@ class Grid extends SpritesGroup {
     // the canvas's centre first (as queueLitTiles orders them).
     *startBuildSteps(t) {
         // TASK-1655 (Grid.startPieceSplits): the work of the first held frames in smaller pieces (each its own piece, so a
-        // held frame runs as many as START_STEP_MS allows): the prologue's three parts, the team-colour images of the units
+        // held frame runs as many as START_STEP_MS allows): the prologue's parts, the team-colour images of the units
         // the view's board state takes (captureSurfaceState made them all in the 'view' piece: 90-200 ms here, the user's
         // 263-275 ms held frame), the lamps' overlays and their crop boxes (the first tile's bloom read them: 50-90 ms) and
         // the tiles a step at a time (litTileStep, the steps litTile runs at once). The same builders, calls and order.
@@ -11233,14 +11231,8 @@ class Grid extends SpritesGroup {
         atmosphericBackground.syncKey()
         if (splits)
             yield ['prologue', false]
-        // TASK-1615: the board's rock sprites (its tiles' slab sides draw them) asked of the rock workers first, made while the
-        // owned tiles, light map and view are; the tiles wait for them ('rock' pieces, MapDepth.rockSpriteSteps), so no tile
-        // makes a sprite inside its frame (without workers they are made here a pixel row a piece).
+        // The board's slab geometry (and its underlay raster asked of the underlay worker) first.
         mapDepth.ensureGeometry(this)
-        if (splits)
-            yield ['prologue', false]
-        const rocks = mapDepth.rockKeys()
-        MapDepth.requestRockSprites(rocks)
         if (splits)
             yield ['prologue', false]
         // The owned tiles the cells drawn at t show (drawTile); the other owners' are built a tile a task after the first
@@ -11298,7 +11290,7 @@ class Grid extends SpritesGroup {
         yield ['view', false]
         const ox = Math.round(t.e - view.e), oy = Math.round(t.f - view.f)
         // TASK-1617: the edge tiles the first lit frame draws (drawLitEdges' runs of this view at t: no stand-in squares yet)
-        // copied while the frames wait for the rock workers (else after them, before the tiles): ~230 canvases and their copies
+        // copied before the tiles (TASK-1708: the rock workers they waited for are gone): ~230 canvases and their copies
         // were made inside that frame. 'edges' pieces (a few tiles each), heavy to rasterize (copies).
         const runs = []
         for (const run of view.edges) {
@@ -11308,16 +11300,6 @@ class Grid extends SpritesGroup {
         }
         const edges = atmosphericLighting.edgeTilesAheadSteps(this, t, runs, cw, ch)
         let edgesDone = !Grid.startEdgeTiles
-        for (const wait of MapDepth.rockSpriteSteps(rocks)) {
-            if (view !== this.litView)
-                return
-            if (wait && !edgesDone) {
-                edgesDone = edges.next().done
-                yield ['edges', true]
-                continue
-            }
-            yield ['rock', false, wait]
-        }
         while (!edgesDone) {
             if (view !== this.litView)
                 return
@@ -11589,7 +11571,7 @@ class Grid extends SpritesGroup {
         return this.copyZoomImage(canvas, t, bitmap)
     }
     // The slab's footprint in world space grown by margin: its top face (mapDepth's outline), that face moved down by the
-    // side depth, the side faces between them (TASK-1612: and the rock past the board's side vertices) and, around the top
+    // side depth, the side faces between them and, around the top
     // and bottom outlines and the slab's vertical edges at the outline's points, bands margin wide with round ends; each
     // wound as the outline is, so that the path clipped (nonzero) is their union. Kept per outline and margin. Undefined
     // without an outline.
@@ -11622,18 +11604,9 @@ class Grid extends SpritesGroup {
         const bottom = loop.map(p => ({x: p.x, y: p.y + depth}))
         add(loop)
         add(bottom)
-        // (TASK-1583: the sides down to sideDepth, the atmospheric rock skirt's reach)
+        // (the sides down to sideDepth)
         for (const face of mapDepth.faces)
             add([face.begin, face.end, {x: face.end.x, y: face.end.y + depth}, {x: face.begin.x, y: face.begin.y + depth}])
-        // (TASK-1612: and past the board's side vertices, as far as an open face's rock reaches, MapDepth.rockSideReach)
-        const reach = MapDepth.rockSideReach()
-        for (const face of mapDepth.faces) {
-            const open = face.open || '', e = face.end, b = face.begin
-            if (open.includes('e'))
-                add([{x: e.x - reach, y: e.y}, e, {x: e.x, y: e.y + depth}, {x: e.x - reach, y: e.y + depth}])
-            if (open.includes('b'))
-                add([b, {x: b.x + reach, y: b.y}, {x: b.x + reach, y: b.y + depth}, {x: b.x, y: b.y + depth}])
-        }
         if (margin > 0) {
             const band = (a, b) => {
                 const dx = b.x - a.x, dy = b.y - a.y, k = margin / Math.hypot(dx, dy)

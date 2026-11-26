@@ -3248,7 +3248,7 @@ const atmosphericLighting = {
     },
     // TASK-1617 (Grid.startBuildSteps): the edge tiles board's first lit frame at camera t will draw for runs (its lit view's
     // edges on the cw x ch canvas, drawLitEdges' runs), copied ahead a few tiles a step (a generator), with the light map the
-    // frame draws (lightMapReady): the start hold makes them while it waits for the rock workers, not the first lit frame
+    // frame draws (lightMapReady): the start hold makes them, not the first lit frame
     // (~230 copies, two new canvases a tile, in that one frame on the tutorial replay). The same copies drawEdgeTiles makes.
     EDGE_AHEAD_STEP: 8,
     *edgeTilesAheadSteps(board, t, runs, cw, ch) {

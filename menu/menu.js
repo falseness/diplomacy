@@ -4049,25 +4049,6 @@ const menuPrebuild = {
             maps.push(setup.selectedMap)
         return maps.filter(Boolean)
     },
-    // TASK-1632: every board the menu can start, for their rock sprites (MapDepth.rockAheadAdd): each tutorial, each hot seat
-    // map, and a co-op board of each generated radius (its hexagonal shape is all its rock sprites take of it).
-    rockMaps() {
-        const boards = tutorials.map(t => t.map)
-        for (const list of Object.values(typeof maps !== 'undefined' ? maps : {}))
-            for (const map of list || [])
-                boards.push(map)
-        if (typeof coopHexMapShape === 'function' && typeof baselineRadius === 'function') {
-            const radii = new Set()
-            for (let humans = 1; humans <= 12; ++humans)
-                for (const size of ['tiny', 'normal', 'big'])
-                    try {
-                        radii.add(baselineRadius(humans, size))
-                    } catch (e) {}
-            for (const R of radii)
-                boards.push({mapSize: {x: 2 * R + 1, y: 2 * R + 1}, mapShape: coopHexMapShape(R)})
-        }
-        return boards.filter(map => map && map.mapSize)
-    },
     // TASK-1632: the unit colours to prebuild: the next boards' (colours) first, then every tutorial's and hot seat map's.
     unitColours(colours) {
         const all = new Map(colours), boards = tutorials.map(t => t.map)
@@ -4091,14 +4072,6 @@ const menuPrebuild = {
                 const rgb = coopPlayerColor(slot)
                 colours.set(rgb.r + ',' + rgb.g + ',' + rgb.b, rgb)
             }
-        // TASK-1632: the next boards' rock sprites asked of the rock workers first (off the main thread, while the rest is
-        // built here), then every other board's the menu can start (rockMaps), a board's keys a piece.
-        if (typeof MapDepth !== 'undefined' && MapDepth.rockWorkersOn()) {
-            for (const map of maps) {
-                MapDepth.rockAheadAdd(MapDepth.rockKeysOf(Grid.prebuildBoardOf(map)), true)
-                yield 'rockKeys'
-            }
-        }
         // TASK-1669: the variants in pieces of their own too (split).
         yield* atmosphericLighting.prebuildOwnedSteps([...colours.values()], true)
         // The masks only serve the cell layer (Grid.cellLayerOn).
@@ -4127,11 +4100,6 @@ const menuPrebuild = {
         if (typeof Grid !== 'undefined' && Grid.prebuildLitPartsSteps)
             for (const _ of Grid.prebuildLitPartsSteps())
                 yield 'litParts'
-        if (typeof MapDepth !== 'undefined' && MapDepth.rockWorkersOn())
-            for (const map of this.rockMaps()) {
-                MapDepth.rockAheadAdd(MapDepth.rockKeysOf(Grid.prebuildBoardOf(map)))
-                yield 'rockKeys'
-            }
         // TASK-1473: the lamps' overlays (any board, co-op too), once the game sprites are cached; planned again then.
         const sprites = typeof gameSpritesLoaded !== 'undefined'
         if (sprites && gameSpritesLoaded) {

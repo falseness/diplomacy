@@ -354,7 +354,7 @@
     // unpacking, TutorialManager.start, co-op map generation; Grid's constructor and the phases below excluded), grid-build
     // (Grid's constructor), tile-variants (the atmospheric neutral / fog / owned tile variants: atmosphericLighting.tileVariant, stoneVariant,
     // fogVariant, tileDetail, ownedTile, prewarmOwnedTiles), underlay (MapDepth: geometry, underlay cache, atmospheric sides,
-    // rim, shadow, rock sprites), lit-tiles (the lit view's tiles and the start hold: taskSources' lit-tiles methods), sectors
+    // rim, shadow, underlay worker), lit-tiles (the lit view's tiles and the start hold: taskSources' lit-tiles methods), sectors
     // (unit sectors and lit tile sectors built / stored / received from the Worker), sprites (SpriteCache, sprite
     // images, spill / lift sprites, an <img> drawn), surface-cache, light-map and sky (named apart: not phases of the
     // ticket's list; the tool counts them under other with their own figures). Time no wrapper sees (the frame's other
@@ -422,7 +422,7 @@
                 for (const n of ['rebuild', 'buildFaces', 'ensureGeometry', 'renderUnderlay', 'createUnderlayCache', 'drawCacheRegion', 'drawUnderlay',
                         'renderAtmosphericSides', 'createAtmosphericShadow', 'drawAtmosphericShadow', 'renderRim', 'drawRim'])
                     wrap(MapDepth.prototype, n, 'underlay')
-                for (const n of ['buildRockSprite', 'rockSpriteOf', 'rockWorkerDone', 'requestRockSprites', 'underlayWorkerDone']) wrap(MapDepth, n, 'underlay')
+                for (const n of ['underlayWorkerDone']) wrap(MapDepth, n, 'underlay')
             }
             if (G) {
                 for (const n of ['litTile', 'holdStartFrame', 'holdLoadFrame', 'stepLitView', 'queueLitTiles', 'setLitView', 'litLayerStep', 'drawLitLayerRaster', 'renderLitCellSprites'])
@@ -462,7 +462,7 @@
     })()
     // TASK-1631: the board's builds still under way at a frame's end (frame.loadPending): surface (the surface cache queued,
     // building, split, patched, layered or dirty), lit (lit tiles queued, the lit view unbuilt / patched / its layer job),
-    // litRest (the lit view's rest snapshot not done), rock (MapDepth rock sprites asked of the workers).
+    // litRest (the lit view's rest snapshot not done).
     const loadPendingOf = () => {
         const g = typeof grid !== 'undefined' ? grid : null
         if (!g) return null
@@ -472,7 +472,6 @@
         const v = g.litView
         if (g.litTilesQueued || v && (v.unbuilt || v.patch || v.layerJob)) out.push('lit')
         if (v && v.rest && typeof LIT_REST_BANDS !== 'undefined' && v.rest.done !== LIT_REST_BANDS) out.push('litRest')
-        if (typeof MapDepth !== 'undefined' && MapDepth.rockWorker?.pending?.size) out.push('rock')
         return out
     }
     drawAll = function(...args) {

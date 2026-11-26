@@ -1772,7 +1772,7 @@ class GameManager {
     static updateCameraBorders() {
         // TASK-1633: a board whose map edge is not made yet (map.start's clearValues: boardPending) gets its bounds and
         // surface bounds (MapDepth.boundsOf, as rebuild sets them: the scale limits and fit below read them), not a rebuild
-        // of its slab (geometry, underlay raster, rock sprites: 50-100 ms, made by map.start's own call once the map edge is).
+        // of its slab (geometry, underlay raster: 50-100 ms, made by map.start's own call once the map edge is).
         if (this.boardPending)
             Object.assign(mapDepth, mapDepth.boundsOf(grid))
         else
