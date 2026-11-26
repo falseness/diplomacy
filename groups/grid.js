@@ -277,7 +277,7 @@ class Grid extends SpritesGroup {
         this.unitGroundEpoch = 0
         this.zoomQuietUntil = 0
         this.levelWork = {zoomFrames: 0, settleFrames: 0, settled: 0, stretchedDrawn: 0, heldFrames: 0, heldSquares: 0,
-            budgetStops: 0, quietStops: 0, skippedRasters: 0, restFrames: 0, ends: {},
+            budgetStops: 0, quietStops: 0, skippedRasters: 0, levelRasters: 0, rasterSquares: 0, restFrames: 0, ends: {},
             // TASK-1575: fades started, ended at full opacity, dropped (stretched again, off screen, a zoom, the level changed,
             // over the draw cap), the frames drawing fades and the squares they drew fading.
             fadesStarted: 0, fadesDone: 0, fadesDropped: 0, fadeFrames: 0, fadeSquares: 0, fadeDraws: 0,
@@ -6575,7 +6575,8 @@ class Grid extends SpritesGroup {
     // Which of squares (u, v at level) the levels of src (stretchSources) cover whole: {covered: Set of 'u,v', need: Map of the
     // sectors to draw for them}, each square from the best level that covers it whole. partial: the squares none covers whole
     // get every level's sectors meeting them (need) too.
-    stretchCover(level, squares, src, partial = false) {
+    // TASK-1711: levelOf (a Map): each covered square's level ('u,v' -> level).
+    stretchCover(level, squares, src, partial = false, levelOf = null) {
         const covered = new Set(), need = new Map()
         for (const {u, v} of squares) {
             const x0 = u * LIT_TILE / level, y0 = v * LIT_TILE / level, x1 = (u + 1) * LIT_TILE / level, y1 = (v + 1) * LIT_TILE / level
@@ -6602,6 +6603,7 @@ class Grid extends SpritesGroup {
             }
             if (found) {
                 covered.add(u + ',' + v)
+                levelOf?.set(u + ',' + v, found[0].level)
                 for (const e of found)
                     need.set(e.key, e)
                 continue
@@ -7121,7 +7123,11 @@ class Grid extends SpritesGroup {
             return false
         ++this.drawSerial
         this.noteFrameView(ctx)
-        this.zoomRaster = undefined
+        // TASK-1711: the raster of the frame before the gesture is one of its frames' sources (captureLevelZoomRaster), while
+        // the board's ground is the one it shows (unitGroundEpoch, as a kept sector's: stretchable).
+        const raster = this.zoomRaster?.levels && Grid.levelZoomRasters && this.zoomRaster.canvas.width === cw &&
+            this.zoomRaster.canvas.height === ch && this.zoomRaster.epoch === this.unitGroundEpoch ? this.zoomRaster : undefined
+        this.zoomRaster = raster
         if (!atmosphericBackground.opaqueOver(ctx))
             ctx.clearRect(canvas.offset.x, canvas.offset.y, width, height)
         atmosphericBackground.draw(ctx)
@@ -7139,8 +7145,13 @@ class Grid extends SpritesGroup {
         const squares = this.levelSquares(level, cw, ch, ox, oy)
         // The camera's own level drawn as the others (at the exact offset t.e, t.f).
         const src = this.stretchSources(level, t, cw, ch, true)
-        const cover = this.stretchCover(level, squares, src, true)
-        this.drawStretchedSectors(ctx, t, squares, src, cover, cw, ch, ox, oy, true)
+        let cover
+        if (raster)
+            cover = this.drawZoomSquares(ctx, t, squares, src, raster, cw, ch, ox, oy)
+        else {
+            cover = this.stretchCover(level, squares, src, true)
+            this.drawStretchedSectors(ctx, t, squares, src, cover, cw, ch, ox, oy, true)
+        }
         // TASK-1576 (Grid.zoomBuilds): a square drawn from a sector of the camera's own level (built at the held level in this
         // gesture, or kept) is exact (stretchCover takes the camera's level first); not an overlay (its ground is the
         // underlay's scaled picture). The others are scaled pictures (stretched levels or the underlay).
@@ -7171,6 +7182,93 @@ class Grid extends SpritesGroup {
         this.countGestureFrame()
         this.zoomBuildFrame(ctx, t, cw, ch, squares.length - exact.size)
         return true
+    }
+    // TASK-1711: a zoom frame's squares (u, v at the camera's level t.a) with the raster of the frame before the gesture
+    // (captureLevelZoomRaster, magnified t.a / raster.a) as one more source. A square is drawn as before
+    // (drawStretchedSectors: the best level of src (stretchSources) that covers it whole, else the underlay with the levels'
+    // sectors meeting it) unless that picture is magnified past LEVEL_ZOOM_RASTER_MAGNIFY (the level's, or the underlay's and
+    // the partial level's where none covers it whole) and the raster covers the square, less magnified: then from the
+    // raster (drawZoomRasterSquares; the other squares clipped, the underlay under them as before: stretched sectors leave
+    // seams of sky without it). (Not where the levels or the underlay are sharp enough: a raster drawn downscaled from a
+    // whole canvas each frame cost ~40 ms more on a software canvas.) Without raster squares the frame is drawn exactly as
+    // before. Returns the cover.
+    drawZoomSquares(ctx, t, squares, src, raster, cw, ch, ox, oy) {
+        const level = t.a, k = t.a / raster.a, limit = LEVEL_ZOOM_RASTER_MAGNIFY + 1e-6
+        // (the raster's box at the camera now: a world point at raster device x is at t.e + k (x - raster.e))
+        const b = raster.box, x0 = t.e + k * (b.x - raster.e), y0 = t.f + k * (b.y - raster.f)
+        const x1 = x0 + k * b.w, y1 = y0 + k * b.h, e = raster.edge
+        const fromRaster = [], rects = [], rest = []
+        const under = this.zoomUnderlayMagnification(level)
+        // (no square's picture past the limit, or none more magnified than the raster: the frame as before, nothing more done)
+        const most = Math.max(under, ...src.levels.map(L => level / L))
+        if (most <= limit || k >= most - 1e-6) {
+            const cover = this.stretchCover(level, squares, src, true)
+            this.drawStretchedSectors(ctx, t, squares, src, cover, cw, ch, ox, oy, true)
+            return cover
+        }
+        // Each square's picture as before: the first level of src covering it whole (stretchCover's choice), else the underlay
+        // with the sectors of the first level meeting it (stretchCover's partial cover).
+        const best = new Map()
+        this.stretchCover(level, squares, src, false, best)
+        for (const sq of squares) {
+            let was = best.get(sq.u + ',' + sq.v)
+            if (was === undefined) {
+                const L = this.levelMeeting(level, sq, src)
+                was = Math.max(under, L ? level / L : 0)
+            }
+            else
+                was = Math.max(1, level / was)
+            const r = was > limit && k < was - 1e-6 ? this.unitSquareRect(sq.u, sq.v, ox, oy, cw, ch) : null
+            // (the raster covers the square's board: within its box, or past a side of it that is the slab's band)
+            if (r && r.x < x1 && r.y < y1 && r.x + r.w > x0 && r.y + r.h > y0 && (e.l || r.x >= x0 - 1e-3) && (e.t || r.y >= y0 - 1e-3) &&
+                    (e.r || r.x + r.w <= x1 + 1e-3) && (e.b || r.y + r.h <= y1 + 1e-3)) {
+                fromRaster.push(sq)
+                rects.push(r)
+            }
+            else
+                rest.push(sq)
+        }
+        // (unclipped without raster squares: as before)
+        const cover = this.stretchCover(level, rest, src, true)
+        if (rest.length)
+            this.drawStretchedSectors(ctx, t, rest, src, cover, cw, ch, ox, oy, !rects.length)
+        if (rects.length) {
+            this.drawZoomRasterSquares(ctx, raster, rects, k, x0, y0)
+            for (const {u, v} of fromRaster)
+                cover.covered.add(u + ',' + v)
+            this.levelWork.rasterSquares += fromRaster.length
+        }
+        return cover
+    }
+    // TASK-1711: the first level of src (stretchSources) with a sector meeting square sq (u, v at level), as stretchCover's
+    // partial cover draws; null without one.
+    levelMeeting(level, {u, v}, src) {
+        const x0 = u * LIT_TILE / level, y0 = v * LIT_TILE / level, x1 = (u + 1) * LIT_TILE / level, y1 = (v + 1) * LIT_TILE / level
+        for (const L of src.levels) {
+            const map = src.by.get(L), s = LIT_TILE / L
+            for (let sv = Math.floor(y0 / s + 1e-6); sv <= Math.ceil(y1 / s - 1e-6) - 1; ++sv)
+                for (let su = Math.floor(x0 / s + 1e-6); su <= Math.ceil(x1 / s - 1e-6) - 1; ++su)
+                    if (map.get(su + ',' + sv))
+                        return L
+        }
+        return null
+    }
+    // TASK-1711: the magnification (device pixels per source pixel) the zoom underlay (drawZoomUnderlay) is drawn at with camera
+    // scale a: the surface cache's raster, else the stand-in preview; Infinity without either.
+    zoomUnderlayMagnification(a) {
+        const cache = this.surfaceCache, b = this.surfaceCacheBounds
+        if (cache && b && !this.surfaceSplitJob)
+            return a * b.width / cache.width
+        return this.standInPreviewFits() ? a / this.standInPreview.scale : Infinity
+    }
+    // TASK-1711: the zoom raster (captureLevelZoomRaster) drawn on ctx clipped to rects (device), its box at x0, y0 magnified k.
+    drawZoomRasterSquares(ctx, raster, rects, k, x0, y0) {
+        const b = raster.box
+        ctx.save()
+        clipToDeviceRects(ctx, rects)
+        ctx.drawImage(raster.canvas, b.x, b.y, b.w, b.h, x0, y0, k * b.w, k * b.h)
+        ctx.restore()
+        this.countLevelDraws(1)
     }
     // TASK-1576 (ZOOMFADE 3/5, Grid.zoomBuilds): EXACT SECTORS BUILT IN A ZOOM GESTURE. Each zoom frame notes the camera's level
     // (zoomBuild: {level, scale, frames}); from the second frame in a row at the same level (the wheel or fingers paused, the
@@ -10841,19 +10939,17 @@ class Grid extends SpritesGroup {
                 !this.zoomRasterSource || zoomRasterTweens())
             return
         // TASK-1562: the gesture's frames draw the levels kept (drawZoomSectors): no raster.
-        if (this.levelsOn()) {
+        // TASK-1711: but the board of the frame before the gesture, when one copy makes it (captureLevelZoomRaster).
+        if (this.levelsOn() && !Grid.levelZoomRasters) {
             ++this.levelWork.skippedRasters
             return
         }
         const t = mainCtx.getTransform(), cw = mainCanvas.width, ch = mainCanvas.height
         if (t.b !== 0 || t.c !== 0 || t.a <= 0 || t.d <= 0 || !cw || !ch)
             return
-        let canvas = this.zoomRasterCanvas
-        if (!canvas || canvas.width !== cw || canvas.height !== ch) {
-            canvas = this.zoomRasterCanvas = document.createElement('canvas')
-            canvas.width = cw
-            canvas.height = ch
-        }
+        if (this.levelsOn())
+            return this.captureLevelZoomRaster(t, cw, ch)
+        const canvas = this.zoomRasterCanvasOf(cw, ch)
         // The raster's part a frame draws (box, device pixels): a copy holds nothing past the slab's band (copyZoomBoard).
         let box = this.copyZoomBoard(canvas, t), steps = null
         if (box)
@@ -10887,6 +10983,52 @@ class Grid extends SpritesGroup {
             ++this.zoomHoldStarts
             this.startZoomReplay(steps, t, this.zoomRaster)
         }
+    }
+    // The zoom raster's canvas, cw x ch (kept for the next gesture).
+    zoomRasterCanvasOf(cw, ch) {
+        let canvas = this.zoomRasterCanvas
+        if (!canvas || canvas.width !== cw || canvas.height !== ch) {
+            canvas = this.zoomRasterCanvas = document.createElement('canvas')
+            canvas.width = cw
+            canvas.height = ch
+        }
+        return canvas
+    }
+    // TASK-1711 (ZOOM SHARP 2/2, Grid.levelZoomRasters): a zoom gesture's frames drawn from the levels kept (drawZoomSectors)
+    // stretched a coarser level (up to LEVEL_MAX_MAGNIFY) or the underlay (the surface cache, its stand-in preview at
+    // STANDIN_SCALE) where no level close to the camera's covered a square: a small zoom showed a picture magnified 2-4x.
+    // Now the board of the frame on screen at the gesture's first input is kept as the zoom raster (one copy: the held
+    // frame's bitmap, copyZoomBoard; else its recorded calls made again when few and current, replayZoomBoard; else its
+    // board snapshot, copyZoomImage; never the stepped replay or a hold) and the gesture's frames draw each square from the
+    // least magnified of it and the levels (drawZoomSectors: the raster magnified by the gesture's own zoom only). None (the
+    // levels as before) when that frame was not drawn at its camera's level: a zoom frame, a settle or rest frame with
+    // stretched or held squares, a stand-in or ground fill frame.
+    captureLevelZoomRaster(t, cw, ch) {
+        const st = this.squareStates
+        if (this.levelSettle || st && st.serial === this.drawSerial &&
+                (st.mode === 'zoom' || st.stretch.length || st.held.length) || this.frameSurface === 'standin' || this.frameSurface === 'fill') {
+            ++this.levelWork.skippedRasters
+            return
+        }
+        const canvas = this.zoomRasterCanvasOf(cw, ch)
+        let box = this.copyZoomBoard(canvas, t)
+        if (box)
+            ++this.zoomBoardCopies
+        else {
+            const {source, stale} = this.zoomSourceFor(t, cw, ch)
+            if (source && !stale && source.calls.length <= Grid.ZOOM_REPLAY_SYNC_CALLS && (box = this.replayZoomBoard(canvas, t, source)))
+                ++this.zoomBoardReplays
+            else if (source?.bitmap && (box = this.copyZoomImage(canvas, t, source.bitmap)))
+                ++this.zoomBitmapCopies
+        }
+        if (!box || !box.w || !box.h) {
+            ++this.levelWork.skippedRasters
+            return
+        }
+        // (edge: the box's sides that are the slab's band, not the canvas's: nothing of the board past them)
+        const edge = {l: box.x > 0, t: box.y > 0, r: box.x + box.w < cw, b: box.y + box.h < ch}
+        this.zoomRaster = {canvas, box, edge, a: t.a, d: t.d, e: t.e, f: t.f, pending: false, held: 0, levels: true, epoch: this.unitGroundEpoch}
+        ++this.levelWork.levelRasters
     }
     // TASK-1517: whether drawAll draws nothing this frame: the gesture's zoom raster is still made in steps
     // (startZoomReplay; pending), so the canvas keeps the frame on screen at the input, its interface drawn once, for at
@@ -14377,6 +14519,12 @@ Grid.SETTLE_HOLD_TASK_MS = 24
 // TASK-1576 (ZOOMFADE 3/5): exact sectors built in a zoom gesture at the camera's held level (Grid.zoomBuildFrame); false: as
 // 62e4d355 (nothing built in a gesture).
 Grid.zoomBuilds = true
+// TASK-1711 (ZOOM SHARP 2/2): a zoom gesture's frames on the levels draw the board of the frame before the gesture too,
+// scaled, where no level is less magnified (Grid.captureLevelZoomRaster, drawZoomSquares); false: as db707064.
+Grid.levelZoomRasters = true
+// TASK-1711: a zoom frame's square whose picture would be magnified past this is drawn from the zoom raster when it is less
+// magnified (Grid.drawZoomSquares).
+const LEVEL_ZOOM_RASTER_MAGNIFY = 1.5
 // TASK-1576 EXIT (artifacts/TASK-1576/residuals.md): the lit path's builds in a gesture (zoomBuildQueue's planLitView: the
 // camera's light map, lit view, tiles and the unit sectors on them) FLAGGED OFF: on the phone capture they staged a light map the
 // frames after a low zoom (surface cache path) then finished at once (a 0.9-1 s frame) and slowed the quick settles; the surface

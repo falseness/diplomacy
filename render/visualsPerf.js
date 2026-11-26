@@ -645,6 +645,8 @@
         drawStandInRect: () => (g, source, args, area) => addStandIn('standin', area),
         drawZoomUnderlay: () => (g, source, args, area) => addStandIn('zoom-underlay', area),
         drawZoomRaster: board => (g, source, args, area) => { if (source === board.zoomRaster?.canvas) addStandIn('zoom-raster', area) },
+        // TASK-1711: the raster of the frame before a zoom gesture drawn in the levels' zoom frame (Grid.drawZoomRasterSquares).
+        drawZoomRasterSquares: () => (g, source, args, area) => addStandIn('zoom-raster', area),
         // TASK-1562: the sectors of other levels stretched to the camera (and the underlay under them).
         drawStretchedSectors: () => (g, source, args, area) => addStandIn('stretched', area),
         // TASK-1565: a unit sector whose ground is a stand-in (the surface cache magnified or its preview: Grid.drawStandInSector),
@@ -668,7 +670,7 @@
     // unless started with {magnify: false}.
     const MAGNIFY_BUCKETS = [[1.05, '<=1.05'], [1.5, '<=1.5'], [2, '<=2'], [4, '<=4'], [8, '<=8'], [Infinity, '>8']]
     const MAGNIFY_KINDS = {drawSurfaceCache: 'surface-cache', drawSurfaceCacheRect: 'surface-cache', drawStandIn: 'standin', drawStandInRect: 'standin',
-        drawZoomUnderlay: 'underlay', drawZoomRaster: 'zoom-raster', drawStretchedSectors: 'level-sector', drawSceneLayer: 'scene-layer',
+        drawZoomUnderlay: 'underlay', drawZoomRaster: 'zoom-raster', drawZoomRasterSquares: 'zoom-raster', drawStretchedSectors: 'level-sector', drawSceneLayer: 'scene-layer',
         drawLitLayer: 'lit-layer', drawLitTileAt: 'lit-tile', drawUnitSectorAt: 'unit-sector', drawStandInSector: 'sector-standin',
         drawHeldFrame: 'held-frame', drawOverlaySnapshot: 'overlay', drawOverlayLayer: 'overlay'}
     let magnifyOn = true, compositeName = null, magnifyMain = []
@@ -1226,8 +1228,8 @@
             if (target && target.draw) target.draw = labelled(target.draw, 'borders')
         // TASK-1557: the compositing functions (their drawImage copies of kept pictures are not live board calls) and the
         // stand-in classifiers.
-        for (const name of ['drawSurfaceCache', 'drawSurfaceCacheRect', 'drawStandIn', 'drawStandInRect', 'drawZoomUnderlay', 'drawZoomRaster', 'drawStretchedSectors',
-            'drawSceneLayer', 'drawLitLayer', 'drawLitTileAt', 'drawUnitSectorAt', 'drawStandInSector', 'drawHeldFrame', 'drawOverlaySnapshot', 'drawOverlayLayer']) {
+        for (const name of ['drawSurfaceCache', 'drawSurfaceCacheRect', 'drawStandIn', 'drawStandInRect', 'drawZoomUnderlay', 'drawZoomRaster', 'drawZoomRasterSquares',
+            'drawStretchedSectors', 'drawSceneLayer', 'drawLitLayer', 'drawLitTileAt', 'drawUnitSectorAt', 'drawStandInSector', 'drawHeldFrame', 'drawOverlaySnapshot', 'drawOverlayLayer']) {
             const original = proto[name]
             if (!original) continue
             proto[name] = function(...args) {
