@@ -24,7 +24,9 @@
         // TASK-1557 (see sectorCounters below)
         layerFullRebuild: {}, layerRebuildCauses: {}, liveBoardCalls: {text: 0, units: 0, ground: 0, lighting: 0, other: 0}, standInPx: 0, standInPxBy: {},
         // TASK-1568 (see groundFill below)
-        groundFillPx: 0})
+        groundFillPx: 0,
+        // TASK-1710 (see magnifyDraw below)
+        magnify: {}})
     let work = freshWork()
     const originalLoop = gameLoop, originalDraw = drawAll
     gameLoop = function(timestamp) {
@@ -81,6 +83,8 @@
             // TASK-1568: on-screen board pixels (device, the main canvas) drawn as the board's plain ground fill for a square
             // without its tile (visualsPerf.groundFill: TASK-1571 Grid.drawGroundFill).
             frame.work.groundFillPx = Math.round(work.groundFillPx)
+            // TASK-1710: the frame's board pixels by magnification (magnifyFrameEnd).
+            frame.work.magnify = magnifyOn ? magnifyFrameEnd() : null
             frame.work.standInPxBy = Object.fromEntries(Object.entries(work.standInPx ? work.standInPxBy : {}).map(([k, v]) => [k, Math.round(v)]))
             frame.work.layerFullRebuildCount = Object.values(work.layerFullRebuild).reduce((a, b) => a + b, 0)
             // TASK-1562: the board squares of the frame drawn at the camera's level (exact) and not (stretched from another
@@ -652,6 +656,89 @@
             if (f > 1.001) addStandIn('surface-magnified', area)
             else if (f < 0.999) addStandIn('surface-minified', area, false)
         }}
+    // TASK-1710 (ZOOM SHARP 1/2): MAGNIFICATION METER. work.magnify: the main canvas's board pixels (device) of the frame (and
+    // the tasks since the previous one) by the magnification they were drawn at, in buckets <=1.05, <=1.5, <=2, <=4, <=8, >8
+    // ({px, by: {kind: px}} each). A board drawImage is one made in a compositing function (compositeName: the innermost,
+    // MAGNIFY_KINDS names its source kind); its magnification = destination device size / source pixel size (the larger of
+    // x and y; a minified draw counts in <=1.05). A picture drawn so on another canvas (a sector, a layer, a snapshot) keeps
+    // the magnifications it was drawn with (magnifyRecords: per canvas, [kind, magnification, px] entries, the latest canvas
+    // area's worth): drawn from, its entries are spread over the destination in proportion, each magnified again by the
+    // draw's own; the main canvas's record is the last frame's (a copy of it, a held frame, keeps them). Pictures made before
+    // the capture or in a Worker have no record (their own draw's magnification only). Recording only: on with the capture
+    // unless started with {magnify: false}.
+    const MAGNIFY_BUCKETS = [[1.05, '<=1.05'], [1.5, '<=1.5'], [2, '<=2'], [4, '<=4'], [8, '<=8'], [Infinity, '>8']]
+    const MAGNIFY_KINDS = {drawSurfaceCache: 'surface-cache', drawSurfaceCacheRect: 'surface-cache', drawStandIn: 'standin', drawStandInRect: 'standin',
+        drawZoomUnderlay: 'underlay', drawZoomRaster: 'zoom-raster', drawStretchedSectors: 'level-sector', drawSceneLayer: 'scene-layer',
+        drawLitLayer: 'lit-layer', drawLitTileAt: 'lit-tile', drawUnitSectorAt: 'unit-sector', drawStandInSector: 'sector-standin',
+        drawHeldFrame: 'held-frame', drawOverlaySnapshot: 'overlay', drawOverlayLayer: 'overlay'}
+    let magnifyOn = true, compositeName = null, magnifyMain = []
+    const magnifyRecords = new WeakMap()
+    const magnifyBucket = m => MAGNIFY_BUCKETS.find(([limit]) => m <= limit + 1e-9)[1]
+    const addMagnify = (kind, m, px) => {
+        const b = work.magnify[magnifyBucket(m)] ||= {px: 0, by: {}}
+        b.px += px
+        b.by[kind] = (b.by[kind] || 0) + px
+        magnifyMain.push([kind, m, px])
+    }
+    const sourceSize = source => [source.naturalWidth || source.videoWidth || source.width, source.naturalHeight || source.videoHeight || source.height]
+    // The device-pixel magnification of drawImage(source, ...args) on g.
+    const magnificationOf = (g, source, args) => {
+        const [w0, h0] = sourceSize(source)
+        let sw = w0, sh = h0, dw = w0, dh = h0
+        if (args.length === 8) [sw, sh, dw, dh] = [args[2], args[3], args[6], args[7]]
+        else if (args.length === 4) [dw, dh] = [args[2], args[3]]
+        const t = g.getTransform()
+        const mx = sw ? Math.abs(dw) * Math.hypot(t.a, t.b) / Math.abs(sw) : 1, my = sh ? Math.abs(dh) * Math.hypot(t.c, t.d) / Math.abs(sh) : 1
+        return Math.max(mx, my)
+    }
+    // A board picture drawn on g (area: device MP of the destination, cut to the canvas and its clips).
+    const magnifyDraw = (g, source, args, area) => {
+        if (!area) return
+        const m = magnificationOf(g, source, args), px = area * 1e6
+        const rec = magnifyRecords.get(source), entries = rec && rec.total > 0 ? rec.entries.map(([k, mi, p]) => [k, mi * m, px * p / rec.total]) :
+            [[MAGNIFY_KINDS[compositeName] || compositeName || 'board', m, px]]
+        if (g.canvas === mainCanvas) {
+            for (const [k, mi, p] of entries) addMagnify(k, mi, p)
+            return
+        }
+        const cap = g.canvas.width * g.canvas.height
+        let target = magnifyRecords.get(g.canvas)
+        if (!target) magnifyRecords.set(g.canvas, target = {entries: [], total: 0})
+        // (a draw over the whole canvas replaces what it showed)
+        if (px >= cap * 0.999 && g.globalCompositeOperation !== 'destination-over') { target.entries = []; target.total = 0 }
+        for (const e of entries) { target.entries.push(e); target.total += e[2] }
+        if (target.total > cap) {
+            const keep = cap / target.total
+            target.entries = target.entries.map(([k, mi, p]) => [k, mi, p * keep]).filter(e => e[2] >= 1)
+            target.total = target.entries.reduce((a, e) => a + e[2], 0)
+        }
+        // (merge equal entries: a sector drawn from many tiles)
+        if (target.entries.length > 64) {
+            const merged = new Map()
+            for (const [k, mi, p] of target.entries) { const key = k + '|' + mi.toFixed(3); const e = merged.get(key); if (e) e[2] += p; else merged.set(key, [k, mi, p]) }
+            target.entries = [...merged.values()]
+        }
+    }
+    // A clear of a canvas's whole area drops its record.
+    const magnifyClear = (g, area) => {
+        if (g.canvas !== mainCanvas && area * 1e6 >= g.canvas.width * g.canvas.height * 0.999) magnifyRecords.delete(g.canvas)
+    }
+    // At a frame's end: its work.magnify rounded; the main canvas's record = the frame's board pictures (when it drew any).
+    const magnifyFrameEnd = () => {
+        const out = {}
+        for (const [, bucket] of MAGNIFY_BUCKETS) {
+            const b = work.magnify[bucket]
+            if (b) out[bucket] = {px: Math.round(b.px), by: Object.fromEntries(Object.entries(b.by).map(([k, v]) => [k, Math.round(v)]))}
+        }
+        if (typeof mainCanvas !== 'undefined') {
+            const total = magnifyMain.reduce((a, e) => a + e[2], 0)
+            if (total) magnifyRecords.set(mainCanvas, {entries: magnifyMain, total})
+            // (a frame drawn live, no picture: exact)
+            else if (work.drawnMainMegapixels > 0) magnifyRecords.delete(mainCanvas)
+        }
+        magnifyMain = []
+        return out
+    }
     const draw = (g, area, image = false) => {
         if (area === null) { work.unboundedDraws++; area = g.canvas.width * g.canvas.height / 1e6 }
         const group = BOARD_GROUPS[layer]
@@ -757,18 +844,20 @@
     // TASK-1557: and with the compositing state and stand-in classifier they were recorded under (a recorded frame's calls,
     // such as a level-of-detail frame's, are made after the compositing functions returned): 'layer|compositing|kind'.
     if (typeof canvasCallLabels !== 'undefined')
-        canvasCallLabels = {current: () => compositing || standInKind ? layer + '|' + (compositing ? 1 : 0) + '|' + (standInKind || '') : layer,
+        // TASK-1710: and the compositing function (compositeName): 'layer|compositing|kind|name'.
+        canvasCallLabels = {current: () => compositing || standInKind ? layer + '|' + (compositing ? 1 : 0) + '|' + (standInKind || '') + '|' + (compositeName || '') : layer,
             within: (label, fn) => {
-                const outer = layer, outerCompositing = compositing, outerSource = standInSource, outerKind = standInKind
+                const outer = layer, outerCompositing = compositing, outerSource = standInSource, outerKind = standInKind, outerName = compositeName
                 const parts = String(label).split('|')
                 layer = parts[0]
-                if (parts.length === 3) {
+                if (parts.length >= 3) {
                     compositing = +parts[1]
                     standInKind = parts[2] || null
                     standInSource = standInKind && typeof grid !== 'undefined' ? STAND_IN_KINDS[standInKind](grid) : null
+                    compositeName = parts[3] || null
                 }
                 try { return fn() }
-                finally { layer = outer; compositing = outerCompositing; standInSource = outerSource; standInKind = outerKind }
+                finally { layer = outer; compositing = outerCompositing; standInSource = outerSource; standInKind = outerKind; compositeName = outerName }
             }}
     drawMain = labelled(drawMain, 'frame')
     drawInterface = labelled(drawInterface, 'interface')
@@ -788,6 +877,7 @@
                 blend(this, area)
                 draw(this, area, true)
                 if (standInSource && this.canvas === mainCanvas) standInSource(this, source, args, area)
+                if (magnifyOn && (compositing || magnifyRecords.has(source))) magnifyDraw(this, source, args, area)
             }
             if (isCanvas(source) && sw * sh > 1e6 && uploaded.get(source) !== (versions.get(source) || 0)) {
                 uploaded.set(source, versions.get(source) || 0)
@@ -878,7 +968,9 @@
         proto.clearRect = (clearRect => function(x, y, w, h) {
             if (active) {
                 drawn(this)
-                draw(this, boxArea(this, x, y, w, h))
+                const area = boxArea(this, x, y, w, h)
+                draw(this, area)
+                if (magnifyOn && area !== null) magnifyClear(this, area)
             }
             return clearRect.apply(this, arguments)
         })(proto.clearRect)
@@ -1140,21 +1232,22 @@
             if (!original) continue
             proto[name] = function(...args) {
                 if (!active) return original.apply(this, args)
-                const outer = standInSource, outerKind = standInKind
+                const outer = standInSource, outerKind = standInKind, outerName = compositeName
                 if (!outer && STAND_IN_KINDS[name]) { standInSource = STAND_IN_KINDS[name](this); standInKind = name }
                 ++compositing
+                compositeName = name
                 try { return original.apply(this, args) }
-                finally { --compositing; standInSource = outer; standInKind = outerKind }
+                finally { --compositing; standInSource = outer; standInKind = outerKind; compositeName = outerName }
             }
         }
         // (Board drawing made inside them is live again: the patched cells drawn over the surface cache.)
         if (proto.drawPatchCells) {
             const patchCells = proto.drawPatchCells
             proto.drawPatchCells = function(...args) {
-                const outer = compositing, source = standInSource, kind = standInKind
-                compositing = 0; standInSource = null; standInKind = null
+                const outer = compositing, source = standInSource, kind = standInKind, name = compositeName
+                compositing = 0; standInSource = null; standInKind = null; compositeName = null
                 try { return patchCells.apply(this, args) }
-                finally { compositing = outer; standInSource = source; standInKind = kind }
+                finally { compositing = outer; standInSource = source; standInKind = kind; compositeName = name }
             }
         }
         sectorCounters.wrap(proto)
@@ -1707,6 +1800,8 @@
             samples:[], inputs:[], visibility:[], longGaps:[], invalidReasons:[]}
         if (document.hidden || !document.hasFocus()) report.invalidReasons.push('initial visibility/focus')
         lastInput=null;lastInputType=null;pointerState=null
+        // TASK-1710: the magnification meter (off with {magnify: false}).
+        magnifyOn = metadata.magnify !== false; magnifyMain = []
         const target=report
         sourceIdentity.then(sources=>{target.sourceHashes=sources})
         // TASK-1574: Grid.frameView for the swap counters while sampling.
@@ -1783,7 +1878,19 @@
     }
     // TASK-1568: devicePx board pixels of the main canvas drawn as the plain ground fill for squares without a tile.
     const groundFill=devicePx=>{if(active&&devicePx>0)work.groundFillPx+=devicePx}
-    const api=window.visualsPerf={phases:phaseTimers.segments,start,stop,groundFill,paired,compare,diagnostics,setSegment:value=>{segment=value},cancel:()=>{cancelled=true;stop()},export:()=>api.lastExport||stop()}
+    // TASK-1710: the meter's own check: fn's drawing counted as a compositing function named name draws it (an active capture's
+    // frame work kept apart), returns the buckets work.magnify would hold.
+    const magnifyProbe=(name,fn)=>{
+        if(!active) throw Error('magnifyProbe needs an active capture')
+        const kept=work.magnify,keptMain=magnifyMain,keptMainRecord=magnifyRecords.get(mainCanvas)
+        work.magnify={};magnifyMain=[];++compositing;const outerName=compositeName;compositeName=name
+        try{fn()}finally{--compositing;compositeName=outerName}
+        const out=magnifyFrameEnd()
+        work.magnify=kept;magnifyMain=keptMain
+        if(keptMainRecord) magnifyRecords.set(mainCanvas,keptMainRecord); else magnifyRecords.delete(mainCanvas)
+        return out
+    }
+    const api=window.visualsPerf={phases:phaseTimers.segments,start,stop,groundFill,paired,compare,diagnostics,magnifyProbe,setSegment:value=>{segment=value},cancel:()=>{cancelled=true;stop()},export:()=>api.lastExport||stop()}
     window.addEventListener('load',()=>{
         const panel=create('section');panel.id='visuals-perf-controls'
         panel.style.cssText='position:fixed;left:8px;bottom:8px;z-index:99999;background:#182333;color:white;padding:8px;font:12px sans-serif;max-width:calc(100vw - 32px)'
