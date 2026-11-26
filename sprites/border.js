@@ -331,6 +331,25 @@ class MapDepth {
         slab: {depth: {left: 1.42, right: 1.43}, out: {left: 0.065, right: 0.075}, bulge: 0.07, jag: {amount: 0.03, step: 0.22}, round: 0.2, lip: 0.08, shade: 0.15,
             sample: {from: 0.1, to: 0.5, width: 1.3}, columns: [7, 0, 2, 4], glow: {alpha: 0.12, falloff: 0.12}, cool: 0.5, corner: {depth: 1.05, reach: 0.28, skin: 0.015, out: 0.045, tip: 0.07, fill: 0.2, bend: 4.5, ridge: {width: 0.08, height: 0.6}}}
     }
+    // TASK-1707: the board's exposed lower edges (bottom, left and right) drawn as TASK-1115's 3D hex prisms again (the user's
+    // 'simply hexagons 3dish' bottom border, client fc56b9ac): with PRISM on, renderAtmosphericSides fills each lower face
+    // (sides 2, 3, 4) depth deep with PRISM_FACES' gradient [lit top edge, face, foot] (2 lower right, away from the
+    // upper-left key light; 3 bottom; 4 lower left, towards it; a bottom face in a notch between protruding cells, notch)
+    // and the drop shadow is fc56b9ac's (PRISM_SHADOW, cast by the slab depth deep); no rock skirt, side lips, corner rock,
+    // cracks or gold rim (the rock machinery stays, unused: rockKeys is empty, sideDepth the slab's depth).
+    static PRISM = true
+    static PRISM_FACES = {
+        2: ['#7f8496', '#3c4256', '#262b3a'],
+        3: ['#a6a6b8', '#4e5468', '#3a3e50'],
+        4: ['#c8b4a8', '#706260', '#54484a'],
+        notch: ['#70758a', '#3e4458', '#20252f']
+    }
+    static PRISM_FACE_EDGE = 0.16
+    static PRISM_SHADOW = {
+        color: 'rgba(4, 8, 20, 0.8)',
+        layers: [{blur: 0.6, x: 0.9, y: 1.2}, {blur: 0.2, x: 0.35, y: 0.45}],
+        raster: 4
+    }
     static rockSprites = null
     // TASK-1697: the bottom face's stone the side lips sample (slabPixelSteps), per hex radius and row of the period
     static slabStone = null
@@ -700,13 +719,13 @@ class MapDepth {
             }
         const shadowPadding = this.shadowBlur * 2
         // (TASK-1612: sideways, also the rock's reach past the board's side vertices, MapDepth.rockSideReach)
-        const side = Math.max(shadowPadding, MapDepth.rockSideReach() + 1 / MapDepth.ROCK.raster)
+        const side = MapDepth.PRISM ? shadowPadding : Math.max(shadowPadding, MapDepth.rockSideReach() + 1 / MapDepth.ROCK.raster)
         return {
             bounds: {
                 left: minX - side,
                 right: maxX + side,
                 top: minY - shadowPadding,
-                bottom: maxY + Math.max(this.depth, this.rockDepth) + this.shadowOffset + shadowPadding
+                bottom: maxY + (MapDepth.PRISM ? this.depth : Math.max(this.depth, this.rockDepth)) + this.shadowOffset + shadowPadding
             },
             surfaceBounds: {left: minX, right: maxX, top: minY, bottom: maxY}
         }
@@ -938,10 +957,13 @@ class MapDepth {
     }
     // The depth the slab's sides reach below its edges: the rock skirt with atmospheric visuals, else the slab's.
     get sideDepth() {
+        if (MapDepth.PRISM)
+            return this.depth
         return typeof otherSettings !== 'undefined' && otherSettings.atmosphericVisuals ? Math.max(this.depth, this.rockDepth) : this.depth
     }
     renderAtmosphericSides(ctx) {
         if (!otherSettings.atmosphericVisuals) return
+        if (MapDepth.PRISM) return this.renderPrismSides(ctx)
         // Only exposed edges have faces. Paint before terrain/fog so no face can
         // cover a foreground neighbour. Keep existing depth, bounds and hit areas.
         ctx.save()
@@ -970,6 +992,44 @@ class MapDepth {
         for (const {path, color} of this.rimRibbons || []) {
             ctx.fillStyle = color
             ctx.fill(path)
+        }
+        ctx.restore()
+    }
+    // TASK-1707: fc56b9ac's atmospheric sides (TASK-1115): every exposed lower edge a flat prism face depth deep, a vertical
+    // gradient a face (PRISM_FACES), no outlines. Painted before terrain/fog so no face covers a foreground neighbour.
+    renderPrismSides(ctx) {
+        ctx.save()
+        const t = ctx.getTransform()
+        const axisAligned = t.b === 0 && t.c === 0 && t.a > 0 && t.d > 0
+        const depth = this.depth
+        for (const face of this.faces) {
+            if (face.side < 2 || face.side > 4) continue
+            if (axisAligned && (
+                    Math.max(face.begin.x, face.end.x) * t.a + t.e < -1 ||
+                    Math.min(face.begin.x, face.end.x) * t.a + t.e > ctx.canvas.width + 1 ||
+                    (Math.max(face.begin.y, face.end.y) + depth) * t.d + t.f < -1 ||
+                    Math.min(face.begin.y, face.end.y) * t.d + t.f > ctx.canvas.height + 1) ||
+                    this.outsideClipWindow(face.begin, face.end, {x: face.end.x, y: face.end.y + depth}, {x: face.begin.x, y: face.begin.y + depth}))
+                continue
+            // One gradient a face and context: a rebuild of the surface cache or its patch draws with the first build's.
+            face.prismGradients ||= new WeakMap()
+            let shade = face.prismGradients.get(gradientContext(ctx))
+            if (!shade) {
+                const colors = MapDepth.PRISM_FACES[face.notch ? 'notch' : face.side]
+                shade = ctx.createLinearGradient(0, Math.min(face.begin.y, face.end.y), 0, Math.max(face.begin.y, face.end.y) + depth)
+                shade.addColorStop(0, colors[0])
+                shade.addColorStop(MapDepth.PRISM_FACE_EDGE, colors[1])
+                shade.addColorStop(1, colors[2])
+                face.prismGradients.set(gradientContext(ctx), shade)
+            }
+            ctx.fillStyle = shade
+            ctx.beginPath()
+            ctx.moveTo(face.begin.x, face.begin.y)
+            ctx.lineTo(face.end.x, face.end.y)
+            ctx.lineTo(face.end.x, face.end.y + depth)
+            ctx.lineTo(face.begin.x, face.begin.y + depth)
+            ctx.closePath()
+            ctx.fill()
         }
         ctx.restore()
     }
@@ -1010,6 +1070,9 @@ class MapDepth {
     }
     // TASK-1615: the rock sprites the board's faces draw (renderAtmosphericSides), once each: [{key, side, kx, ky, open}].
     rockKeys() {
+        // (TASK-1707: none drawn with the prism sides)
+        if (MapDepth.PRISM)
+            return []
         const keys = new Map()
         for (const face of this.faces) {
             if (face.side < 2 || face.side > 4) continue
@@ -1257,6 +1320,9 @@ class MapDepth {
     // at the vertex column bulges past it; the side outline's lumps (buildRockSprite sideOutline) reach up to it.
     // (TASK-1662: the side walls (ROCK.wall) reach less far; this stays the bound the slab's box and the faces' culling take.)
     static rockSideReach(r = basis.r) {
+        // (TASK-1707: the prism sides stay within their faces' columns)
+        if (MapDepth.PRISM)
+            return 0
         const R = MapDepth.ROCK, PX = R.period.columns * 1.5 * r, nx = Math.max(1, Math.round(PX / (R.chunk.x * r)))
         return R.chunk.dome * PX / nx
     }
@@ -1712,12 +1778,12 @@ class MapDepth {
         this.atmosphericShadow = undefined
     }
     createAtmosphericShadow() {
-        const config = MapDepth.ATMOSPHERIC_SHADOW
+        const config = MapDepth.PRISM ? MapDepth.PRISM_SHADOW : MapDepth.ATMOSPHERIC_SHADOW
         const b = this.surfaceBounds
         const pad = Math.max(...config.layers.map(layer => layer.blur * 1.5 + Math.max(layer.x, layer.y))) * basis.r
         const left = b.left - pad, top = b.top - pad
         // TASK-1583: cast by the rock skirt's foot with atmospheric visuals (sideDepth, the foot's mean depth).
-        const depth = otherSettings.atmosphericVisuals ? (MapDepth.ROCK.scallop.depth + MapDepth.ROCK.scallop.amplitude / 2 - Math.sqrt(3) / 4) * basis.r : this.depth
+        const depth = otherSettings.atmosphericVisuals && !MapDepth.PRISM ? (MapDepth.ROCK.scallop.depth + MapDepth.ROCK.scallop.amplitude / 2 - Math.sqrt(3) / 4) * basis.r : this.depth
         const w = b.right - b.left + 2 * pad, h = b.bottom - b.top + depth + 2 * pad
         const k = config.raster / basis.r
         const canvas = document.createElement('canvas')
