@@ -14,8 +14,10 @@ function fogShowsPortalPreview(building) {
 }
 // TASK-1499: the grid's deferred cache, layer and light tasks draw the board as its frames do: with the cells of an own
 // kill not landed yet in their state before it (attackFx.withHeldCells).
+// TASK-1713: while the camera pans, the tasks share a frame's pan budget (Grid.panTask).
 function gridTask(fn) {
-    return () => typeof attackFx !== 'undefined' ? attackFx.withHeldCells(fn) : fn()
+    const run = () => typeof attackFx !== 'undefined' ? attackFx.withHeldCells(fn) : fn()
+    return () => typeof Grid !== 'undefined' && Grid.panBudgets ? Grid.panTask(run) : run()
 }
 class Cell {
     // The texts are made when first read: loading a board builds every cell, and the server's rules
@@ -301,7 +303,7 @@ class Grid extends SpritesGroup {
         // (AHEAD_TILE_STEPS), stopCalls (aheadCallsLeft), stopMp (aheadMpLeft), stopTime (AHEAD_WORKER_FRAME_MS), stopQueue (the
         // Worker's queue full); TASK-1565 pass 6: whole (lit tiles recorded whole, Grid.litTileWhole); pass 7: levelSteps, levelStepMs
         // (a settle's lit tile steps with the Worker drawing, bounded by their time).
-        this.aheadWork = {tiles: 0, tilesMoving: 0, units: 0, unitsMoving: 0, cancelled: 0, queued: 0, ring: 0, tileSteps: 0, tileStepCalls: 0,
+        this.aheadWork = {stopPan: 0, tiles: 0, tilesMoving: 0, units: 0, unitsMoving: 0, cancelled: 0, queued: 0, ring: 0, tileSteps: 0, tileStepCalls: 0,
             composed: 0, tileStepMs: 0, stopSteps: 0, stopCalls: 0, stopMp: 0, stopTime: 0, stopQueue: 0, litTasks: 0, litOtherView: 0,
             litZooming: 0, litDefers: 0, litBehind: 0, whole: 0, levelSteps: 0, levelStepMs: 0,
             // TASK-1568: the lit tasks that deferred (litTaskDefers, moving or not) by the condition that held (each true one
@@ -5159,7 +5161,8 @@ class Grid extends SpritesGroup {
                 steps.return()
             }
             else if (steps) {
-                const start = performance.now(), budget = drawn ? LIT_LAYER_TASK_MS : Infinity
+                // (TASK-1713: while the camera pans, within the pan interval's room: Grid.panCap)
+                const start = performance.now(), budget = Grid.panCap(drawn ? LIT_LAYER_TASK_MS : Infinity)
                 let last = 0, step
                 ++job.tasks
                 do {
@@ -7672,8 +7675,9 @@ class Grid extends SpritesGroup {
             return
         }
         const start = performance.now(), calls = {n: 0, max: burst ? UNIT_SECTOR_BURST_CALLS : timed ? Infinity : left ? left.calls : UNIT_SECTOR_TASK_CALLS}
-        const ms = burst ? (levels ? LEVEL_BURST_MS : UNIT_SECTOR_BURST_MS) : timed ? timedMs - Grid.levelFrameWork.unitMs :
-            left ? LEVEL_TASK_MS : UNIT_SECTOR_TASK_MS
+        // (TASK-1713: while the camera pans, within the pan interval's room, Grid.panCap: a burst's squares over its frames)
+        const ms = Grid.panCap(burst ? (levels ? LEVEL_BURST_MS : UNIT_SECTOR_BURST_MS) : timed ? timedMs - Grid.levelFrameWork.unitMs :
+            left ? LEVEL_TASK_MS : UNIT_SECTOR_TASK_MS)
         if (burst)
             ++this.unitSectorWork.bursts
         let last = 0
@@ -7732,10 +7736,22 @@ class Grid extends SpritesGroup {
                 ++this.aheadWork.stopMp
                 break
             }
+            // TASK-1713: while the camera pans, no new build whose measured time (Grid.unitBuildMs) is past the room left
+            // (ms, Grid.panCap) unless no unit sector was built for PAN_STARVE_MS: the next frame's task goes on (its frame
+            // queues it: unitSectorWanted).
+            if (Grid.panBudgets && Grid.panningNow() && performance.now() - start + Grid.unitBuildMs() > ms &&
+                    performance.now() - Grid.unitBuildAt < PAN_STARVE_MS) {
+                ++this.aheadWork.stopPan
+                this.unitSectorWanted ||= {...job, list: job.list.slice(k), onCanvas: Math.max(0, (job.onCanvas || 0) - k)}
+                spend()
+                return
+            }
             const {u, v} = job.list[k]
             const t0 = performance.now()
-            if (this.buildUnitSector(job, u, v, calls))
+            if (this.buildUnitSector(job, u, v, calls)) {
                 last = performance.now() - t0
+                Grid.unitBuildTimed(last)
+            }
             if (ahead && !inWorker)
                 Grid.aheadMpSpend(AHEAD_SECTOR_MP)
         }
@@ -8244,11 +8260,14 @@ class Grid extends SpritesGroup {
                     ;(missing ||= new Set()).add(u + ',' + v)
                     continue
                 }
-                const built0 = !this.litHas(view, u, v) && Grid.frameCallsNow()
+                const built0 = !this.litHas(view, u, v) && Grid.frameCallsNow(), time0 = built0 !== false ? performance.now() : 0
                 const tile = this.litTile(view, u, v, true)
                 // TASK-1572 (Grid.litFrameBudget): a tile the frame built itself: its real calls (litFrameTileCalls).
                 if (built0 !== false && Grid.frameCallsNow() > built0)
                     Grid.litFrameTileBuilt(Grid.frameCallsNow() - built0)
+                // TASK-1713: and its time (Grid.litFrameTileMs: a panning frame's own builds within PAN_FRAME_MS)
+                if (built0 !== false && this.litHas(view, u, v))
+                    Grid.litFrameTileTimed(performance.now() - time0)
                 this.useSector(view, u, v)
                 if (inBoard) {
                     // A tile the edge runs meet stays live (the frame lights the runs over it before the units).
@@ -9063,14 +9082,15 @@ class Grid extends SpritesGroup {
                 ++this.litViewJobsDropped
                 return
             }
-            const start = performance.now()
+            // (TASK-1713: while the camera pans, within the pan interval's room: Grid.panCap)
+            const start = performance.now(), budget = Grid.panCap(LIT_VIEW_TASK_MS)
             let last = 0, step
             ++job.tasks
             do {
                 const t0 = performance.now()
                 step = job.steps.next()
                 last = performance.now() - t0
-            } while (!step.done && performance.now() - start + last <= LIT_VIEW_TASK_MS)
+            } while (!step.done && performance.now() - start + last <= budget)
             if (step.done)
                 job.view = step.value
             else
@@ -9468,9 +9488,17 @@ class Grid extends SpritesGroup {
                             this.queueLitTileSteps()
                         return
                     }
-                    const t0 = performance.now(), n0 = Grid.frameCallsNow()
                     const index = this.litTileJob && this.litTileJob.view === view && this.litTileJob.u === u && this.litTileJob.v === v ?
                         this.litTileJob.count : 0
+                    // TASK-1713: while the camera pans, no step past the pan interval's room (Grid.panCap; the task's first step
+                    // runs), nor a step whose kind (its index in the tile's steps) took more than PAN_FRAME_MS lately
+                    // (Grid.litStepSlow) unless its tile waited PAN_STARVE_MS for it: the tile under way goes on in the next
+                    // frame's task, or in the pause after the pan.
+                    if (steps && Grid.panCap(Infinity) < last || Grid.litStepSlow(index) && Grid.panningNow() && !Grid.panStarved(view, u, v)) {
+                        ++this.aheadWork.stopPan
+                        return
+                    }
+                    const t0 = performance.now(), n0 = Grid.frameCallsNow()
                     this.litStepHolder.calls = stepCalls
                     let done
                     try {
@@ -9480,6 +9508,9 @@ class Grid extends SpritesGroup {
                     }
                     last = performance.now() - t0
                     litTileStepCost.add(last)
+                    Grid.litStepTimed(index, last)
+                    if (done)
+                        Grid.panWaits.delete(u + ',' + v)
                     ++steps
                     if (levels && Grid.aheadInWorker()) {
                         Grid.levelFrameWork.ms += last
@@ -9505,6 +9536,11 @@ class Grid extends SpritesGroup {
             }
             if (!batch && performance.now() - start + litTileCost.ms > LIT_TASK_MS && !(atLeastOne && !built))
                 return
+            // TASK-1713: a whole tile (a first view's batch too) only while it fits the pan interval's room (one a task at least).
+            if (built && Grid.panCap(Infinity) < litTileCost.ms) {
+                ++this.aheadWork.stopPan
+                return
+            }
             this.litTile(view, u, v)
             ++built
         }
@@ -14381,6 +14417,9 @@ Grid.frameBuildCalls = 0
 Grid.lastFrameOwnCalls = 0
 Grid.frameCallsNow = () => typeof sectorDrawTotal !== 'undefined' ? sectorDrawTotal : 0
 Grid.frameBegin = () => {
+    // TASK-1713: a new frame interval: the pan budget again, and the tasks it held back queued for after this frame.
+    if (Grid.panBudgets)
+        Grid.panFrame()
     if (!Grid.sectorAhead)
         return
     if (typeof sectorCountDraws === 'function')
@@ -14411,6 +14450,126 @@ Grid.levelSpend = (calls, tileSteps = 0) => {
     Grid.levelWorkLeft()
     Grid.levelFrameWork.calls += calls
     Grid.levelFrameWork.tileSteps += tileSteps
+}
+// TASK-1713 (SMOOTH CAMERA 1/2): while the camera pans (a pan key's or edge scroll's speed, a glide, PAN_HOLD_MS after a camera
+// step: a drag's too; Grid.panningNow) the board's tasks
+// between two frames (every gridTask: lit tiles and their steps, unit sectors, the lit layer and view steps, the light map's)
+// share PAN_FRAME_MS of main-thread time a frame interval: a task asked once the interval's work reached it waits for the next
+// frame (Grid.panFrame queues it again after that frame), and the tasks' own budgets are cut to what the interval has left
+// (Grid.panCap: the unit sectors' 100-250 ms bursts, the lit layer's 40 ms, the lit view's 16 ms, the lit tiles' steps), each
+// task making one step at least, so nothing is skipped: the frames draw what is built (stand-in, live squares) meanwhile and the
+// work finishes in later frames. The user's 30 Hz capture (8_players_coop.json) had pan frames of 67-100 ms from such tasks
+// (artifacts/TASK-1713/cause.md). Not in a zoom gesture (its own budgets, TASK-1711/1714) nor with the camera at rest.
+// false: as TASK-1711.
+Grid.panBudgets = true
+const PAN_FRAME_MS = 12
+// (a pan's pauses between key presses, a drag's still moments: the budget holds PAN_HOLD_MS after the last camera step)
+const PAN_HOLD_MS = 250
+// (a held task queued again at most this long after it was held when no frame is drawn meanwhile)
+const PAN_WAIT_MS = 100
+Grid.panWork = {frame: -1, ms: 0, taskStart: null, held: [], timer: null, heldTasks: 0, frames: 0, maxMs: 0}
+Grid.panningNow = () => {
+    const screen = typeof gameEvent !== 'undefined' ? gameEvent.screen : undefined
+    if (!screen || screen.zoomGesture || screen.surfaceZooming)
+        return false
+    // (Screen.move sets surfacePanUntil 160 ms past each camera step; not surfacePanFrames: only some frame paths count it
+    // down, and a zoom's frames after a pan left it set at rest)
+    return !!(screen.speedX || screen.speedY || screen.glide || performance.now() < (screen.surfacePanUntil || 0) - 160 + PAN_HOLD_MS)
+}
+Grid.panTask = run => {
+    const w = Grid.panWork
+    if (w.taskStart !== null || !Grid.panningNow())
+        return run()
+    if (w.frame !== Grid.frameNo) {
+        w.frame = Grid.frameNo
+        w.ms = 0
+    }
+    if (w.ms >= PAN_FRAME_MS) {
+        w.held.push(run)
+        ++w.heldTasks
+        w.timer ??= setTimeout(() => {
+            w.timer = null
+            Grid.panRelease()
+        }, PAN_WAIT_MS)
+        return
+    }
+    const t0 = w.taskStart = performance.now()
+    try {
+        return run()
+    }
+    finally {
+        w.taskStart = null
+        w.ms += performance.now() - t0
+        w.maxMs = Math.max(w.maxMs, w.ms)
+    }
+}
+// The tasks held back go again (each through Grid.panTask: the new interval's budget, or at once with the camera at rest).
+Grid.panRelease = () => {
+    const w = Grid.panWork, held = w.held
+    if (!held.length)
+        return
+    w.held = []
+    for (const run of held)
+        setTimeout(() => Grid.panTask(run))
+}
+Grid.panFrame = () => {
+    const w = Grid.panWork
+    w.frame = Grid.frameNo
+    w.ms = 0
+    if (w.held.length) {
+        if (w.timer !== null) {
+            clearTimeout(w.timer)
+            w.timer = null
+        }
+        Grid.panRelease()
+    }
+}
+// TASK-1713: a lit tile step's time by its index in the tile's steps (its last LIT_STEP_SAMPLES), whether that kind of step
+// took more than PAN_FRAME_MS in any of them (a step's cost varies by kind and by tile: one kind took 36 ms where the mean is ~5,
+// artifacts/TASK-1713/preview/d1-head.json; the same kind 5 ms on one tile, 45-74 ms on another after a zoom out,
+// proof1-2/an), and the tiles a pan held a slow step back for (since when: Grid.panStarved).
+const LIT_STEP_SAMPLES = 16
+Grid.litStepMs = new Map()
+Grid.litStepTimed = (index, ms) => {
+    const recent = Grid.litStepMs.get(index) || []
+    recent.push(ms)
+    if (recent.length > LIT_STEP_SAMPLES)
+        recent.shift()
+    Grid.litStepMs.set(index, recent)
+}
+Grid.litStepSlow = index => Grid.panBudgets && Math.max(0, ...(Grid.litStepMs.get(index) || [])) > PAN_FRAME_MS
+// (a slow step goes when its tile has waited PAN_STARVE_MS: a long pan still finishes its tiles, a slow step at most that often;
+// the capture's arrow holds are 0.1-1.1 s, so their slow steps run in the pauses between them)
+const PAN_STARVE_MS = 3000
+Grid.panWaits = new Map()
+Grid.panStarved = (view, u, v) => {
+    const key = u + ',' + v, now = performance.now(), since = Grid.panWaits.get(key)
+    if (since === undefined || since.view !== view) {
+        Grid.panWaits.set(key, {view, at: now})
+        return false
+    }
+    if (now - since.at < PAN_STARVE_MS)
+        return false
+    Grid.panWaits.delete(key)
+    return true
+}
+// TASK-1713: a unit sector build's time (the most of the last LIT_FRAME_TILE_SAMPLES, unitSectorTask) and when one last ended.
+Grid.unitBuildSamples = []
+Grid.unitBuildAt = 0
+Grid.unitBuildTimed = ms => {
+    const recent = Grid.unitBuildSamples
+    recent.push(ms)
+    if (recent.length > LIT_FRAME_TILE_SAMPLES)
+        recent.shift()
+    Grid.unitBuildAt = performance.now()
+}
+Grid.unitBuildMs = () => Math.max(0, ...Grid.unitBuildSamples)
+// The ms a task's loop may still take now (ms, cut to the pan interval's room while the camera pans; at least 0).
+Grid.panCap = ms => {
+    const w = Grid.panWork
+    if (!Grid.panBudgets || w.taskStart === null || !Grid.panningNow())
+        return ms
+    return Math.max(0, Math.min(ms, PAN_FRAME_MS - w.ms - (performance.now() - w.taskStart)))
 }
 // TASK-1561: debug turned on or off keeps the other state's unit sectors aside (Grid.unitSectorPlan), in a share of the
 // budget; the index of debug in the unit sectors' key.
@@ -14502,7 +14661,24 @@ Grid.litFrameTilesFit = board => {
     const calls = Math.floor((LIT_FRAME_BUILD_CALLS - between - own) / tile)
     const composed = board && board.aheadComposed?.serial === board.drawSerial ? board.aheadComposed.n : 0
     const mp = Math.floor((LIT_FRAME_BUILD_MP - Grid.aheadPrevMp() - Grid.levelFrameWork.mp - composed * AHEAD_COMPOSE_MP) / LIT_FRAME_TILE_MP)
-    return Math.max(0, Math.min(LIT_FRAME_TILE_CAP, calls, mp))
+    return Math.max(0, Math.min(LIT_FRAME_TILE_CAP, calls, mp, Grid.panFrameTiles()))
+}
+// TASK-1713: the tiles a panning frame may build itself: those its measured build time (the most of the last
+// LIT_FRAME_TILE_SAMPLES frame builds, Grid.litFrameTileMs) fits in PAN_FRAME_MS (the user's 30 Hz capture: a pan frame
+// building one tile took 78-90 ms, the next frame 100 ms late); its other squares without a tile get their stand-in or the
+// ground fill, as the squares past LIT_FRAME_TILE_CAP do, and the tasks build them (Grid.panTask's budget). Not panning, or
+// no build measured yet: LIT_FRAME_TILE_CAP.
+Grid.litFrameTileMs = []
+Grid.litFrameTileTimed = ms => {
+    const recent = Grid.litFrameTileMs
+    recent.push(ms)
+    if (recent.length > LIT_FRAME_TILE_SAMPLES)
+        recent.shift()
+}
+Grid.panFrameTiles = () => {
+    if (!Grid.panBudgets || !Grid.litFrameTileMs.length || !Grid.panningNow())
+        return LIT_FRAME_TILE_CAP
+    return Math.floor(PAN_FRAME_MS / Math.max(...Grid.litFrameTileMs))
 }
 // TASK-1572 (Grid.litFillOverlays): the squares a lit frame fills (drawLitView, drawLevelStandIn's fill) want an overlay unit
 // sector (queueUnitSectors), drawn over the fill, so their units and texts are not drawn live in every frame till the tile
