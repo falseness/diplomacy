@@ -1417,6 +1417,20 @@ function buildMoveHintSprites(r) {
     moveHintSprites.r = r
     moveHintSprites.builds++
 }
+// The move hint's pulsing gold hex (its fill and outline sprites) at screen x, y for hex radius r and pulse 0..1 (TASK-1717;
+// TASK-1723's tip draws its 'to' hex with it). Returns the outline sprite's scale.
+function paintMoveHintHex(ctx, x, y, r, pulse) {
+    const M = MOVE_HINT
+    if (!moveHintSprites || moveHintSprites.r !== r)
+        buildMoveHintSprites(r)
+    const {fill, outline} = moveHintSprites
+    ctx.globalAlpha = M.fill.alpha[0] + (M.fill.alpha[1] - M.fill.alpha[0]) * pulse
+    ctx.drawImage(fill.canvas, x - fill.anchor.x, y - fill.anchor.y)
+    ctx.globalAlpha = 1
+    const k = (M.outline.r[0] + (M.outline.r[1] - M.outline.r[0]) * pulse) * r / outline.radius
+    ctx.drawImage(outline.canvas, x - outline.anchor.x * k, y - outline.anchor.y * k, outline.canvas.width * k, outline.canvas.height * k)
+    return k
+}
 function drawTutorialMoveHint(ctx) {
     const target = tutorialMoveHintTarget()
     if (!target) {
@@ -1438,17 +1452,10 @@ function drawTutorialMoveHint(ctx) {
     clock.elapsed += Math.max(0, Math.min(50, now - clock.last))
     clock.last = now
     const pulse = 0.5 - 0.5 * Math.cos(clock.elapsed / CLICK_HINT.pulseMs * Math.PI * 2)
-    if (!moveHintSprites || moveHintSprites.r !== r)
-        buildMoveHintSprites(r)
-    const {fill, outline, arrow} = moveHintSprites
     ctx.save()
     ctx.setTransform(1, 0, 0, 1, 0, 0)
-    ctx.globalAlpha = M.fill.alpha[0] + (M.fill.alpha[1] - M.fill.alpha[0]) * pulse
-    ctx.drawImage(fill.canvas, x - fill.anchor.x, y - fill.anchor.y)
-    ctx.globalAlpha = 1
-    const k = (M.outline.r[0] + (M.outline.r[1] - M.outline.r[0]) * pulse) * r / outline.radius
-    const ow = outline.canvas.width * k, oh = outline.canvas.height * k
-    ctx.drawImage(outline.canvas, x - outline.anchor.x * k, y - outline.anchor.y * k, ow, oh)
+    const k = paintMoveHintHex(ctx, x, y, r, pulse)
+    const {outline, arrow} = moveHintSprites
     // The arrow: highest at the pulse's low, dropping into the hex as the pulse peaks.
     const tip = {x, y: y - M.arrow.tip * r - M.arrow.bob * r * (1 - pulse)}
     ctx.drawImage(arrow.canvas, tip.x - arrow.anchor.x, tip.y - arrow.anchor.y)
@@ -1458,6 +1465,219 @@ function drawTutorialMoveHint(ctx) {
         arrow: {tip, bounds: {x: tip.x - 0.55 * s, y: tip.y - 1.25 * s, width: 1.1 * s, height: 1.25 * s}},
         pulse, elapsed: clock.elapsed, fillAlpha: M.fill.alpha[0] + (M.fill.alpha[1] - M.fill.alpha[0]) * pulse,
         outlineR: k * outline.radius, builds: moveHintSprites.builds}
+}
+
+// TASK-1723 (TIP 3/4): the active tutorial tip step (TutorialTips.step, options/tutorialManager.js) in the concept 2B style,
+// drawn first in drawInterfaceTo so the HUD stays above it: the screen dimmed about TIP_ARROW.dim except the step's 'from' and
+// 'to' hexes (soft edges); the 'from' hex outlined with a dashed cream line on a dark brown stroke with a gold glow; the 'to'
+// hex with the move hint's pulsing gold hex (paintMoveHintHex); a thick curved gold arrow with a brown outline and a gold
+// glow from the 'from' hex to the 'to' hex, bending away from the nearest other unit, a soft shine travelling along it once
+// per CLICK_HINT.pulseMs on the tip's own clock (from its first painted frame, 50 ms/frame cap; reset when no step shows).
+// One step at a time; nothing is drawn after the last step or a deviation (TutorialTips ends the tip). Screen space from the
+// cells' transform (as drawTutorialClickHint's hexOf), so the marks follow pan and zoom; no input is taken (clicks reach the
+// board). The dim, the 'from' outline and the arrow are one offscreen canvas (tipStepOverlay) rebuilt only when the screen
+// size, the hexes' screen positions or the bend change; no board cache is touched.
+// drawTutorialHints.tip = {step, steps, from, to, arrow: {start, tip, control, bend}, pulse, shine} (null when none).
+const TIP_ARROW = {
+    dim: 0.55,
+    // In hex radii (r): the holes' radius and soft edge; the 'from' outline's radius, the brown / cream widths, the dash and
+    // gap, the glow; the arrow's start and tip distance from the hex centres, the bend (share of the chord), the shaft and
+    // outline widths, the head's length and half width, the glow; the shine's radius.
+    hole: {r: 1.0, edge: 0.12},
+    from: {r: 0.95, brown: 0.11, cream: 0.05, dash: 0.2, gap: 0.13, glow: 0.3},
+    arrow: {start: 0.12, tip: 0.3, bend: 0.16, shaft: 0.26, outline: 0.06, head: 0.62, halfHead: 0.4, glow: 0.3},
+    shine: {r: 0.22, alpha: 0.85},
+}
+let tipStepOverlay = null
+// The active step's screen layout, or null when no step shows.
+function tutorialTipLayout() {
+    if (typeof TutorialTips === 'undefined' || !TutorialTips.running || TutorialTips.offer || TutorialManager.switching ||
+            tutorialResultInterface.visible || whooseTurn !== TUTORIAL_HUMAN_SLOT || gameEvent.waitingMode ||
+            (typeof turnPlaybackView !== 'undefined' && turnPlaybackView.active))
+        return null
+    const step = TutorialTips.step
+    if (!step)
+        return null
+    const screenOf = c => {
+        const t = biasToTransition(c.x, c.y)
+        return {x: (t.x * basis.offset.x - canvas.offset.x) * canvas.scale, y: (t.y * basis.offset.y - canvas.offset.y) * canvas.scale}
+    }
+    const r = basis.r * canvas.scale, A = TIP_ARROW.arrow
+    const from = {cell: {x: step.from.x, y: step.from.y}, ...screenOf(step.from), r}
+    const to = {cell: {x: step.to.x, y: step.to.y}, ...screenOf(step.to), r}
+    const dx = to.x - from.x, dy = to.y - from.y, length = Math.hypot(dx, dy) || 1
+    const ux = dx / length, uy = dy / length, nx = -uy, ny = ux
+    const start = {x: from.x + ux * A.start * r, y: from.y + uy * A.start * r}
+    const tip = {x: to.x - ux * A.tip * r, y: to.y - uy * A.tip * r}
+    // The bend: away from the nearest unit (any player's) other than those on the step's cells, measured from the chord's
+    // middle; with none, towards the screen's top.
+    const mid = {x: (start.x + tip.x) / 2, y: (start.y + tip.y) / 2}
+    let nearest = null
+    for (const player of players)
+        for (const u of player && player.units || []) {
+            if (!u || u.killed || !u.coord || coordsEqually(u.coord, step.from) || coordsEqually(u.coord, step.to))
+                continue
+            const p = screenOf(u.coord), d = Math.hypot(p.x - mid.x, p.y - mid.y)
+            if (!nearest || d < nearest.d)
+                nearest = {d, p, cell: {x: u.coord.x, y: u.coord.y}}
+        }
+    const side = nearest ? ((nearest.p.x - mid.x) * nx + (nearest.p.y - mid.y) * ny > 0 ? -1 : 1) : (ny > 0 ? -1 : 1)
+    const chord = Math.hypot(tip.x - start.x, tip.y - start.y)
+    const bend = side * A.bend * chord
+    // A quadratic curve whose middle is 'bend' off the chord: control = mid + 2 * bend * n.
+    const control = {x: mid.x + 2 * bend * nx, y: mid.y + 2 * bend * ny}
+    return {stepIndex: TutorialTips.stepIndex, steps: TutorialTips.tip.steps.length, from, to, r, start, tip, control, bend,
+        nearest: nearest && nearest.cell}
+}
+function tipCurvePoint(L, t) {
+    const a = (1 - t) * (1 - t), b = 2 * t * (1 - t), c = t * t
+    return {x: a * L.start.x + b * L.control.x + c * L.tip.x, y: a * L.start.y + b * L.control.y + c * L.tip.y}
+}
+// The arrow's head base: where the curve is a head's length (straight-line) short of the tip, and the tip's direction.
+function tipArrowHead(L) {
+    const head = TIP_ARROW.arrow.head * L.r
+    let t = 1
+    for (let i = 0; i < 40; i++) {
+        const p = tipCurvePoint(L, t)
+        if (Math.hypot(L.tip.x - p.x, L.tip.y - p.y) >= head)
+            break
+        t -= 0.025
+    }
+    t = Math.max(0.05, t)
+    const base = tipCurvePoint(L, t), dx = L.tip.x - base.x, dy = L.tip.y - base.y, d = Math.hypot(dx, dy) || 1
+    return {t, base, ux: dx / d, uy: dy / d}
+}
+function buildTipStepOverlay(L, key) {
+    const T = TIP_ARROW, S = TUTORIAL_HINT_STYLE, r = L.r
+    let overlay = tipStepOverlay
+    if (!overlay) {
+        const canvas = document.createElement('canvas')
+        overlay = tipStepOverlay = {canvas, ctx: canvas.getContext('2d'), key: null, builds: 0}
+    }
+    const {canvas, ctx} = overlay
+    if (canvas.width !== WIDTH || canvas.height !== HEIGHT) {
+        canvas.width = WIDTH
+        canvas.height = HEIGHT
+    }
+    ctx.save()
+    ctx.setTransform(1, 0, 0, 1, 0, 0)
+    ctx.clearRect(0, 0, WIDTH, HEIGHT)
+    ctx.fillStyle = 'rgba(0, 0, 0, ' + T.dim + ')'
+    ctx.fillRect(0, 0, WIDTH, HEIGHT)
+    // The holes: each hex erased through its blurred shadow (the hex drawn off the canvas), so the edge is soft without filters.
+    ctx.globalCompositeOperation = 'destination-out'
+    const off = 2 * (WIDTH + HEIGHT) + 4 * r
+    ctx.shadowColor = 'black'
+    ctx.shadowBlur = 2 * T.hole.edge * r
+    ctx.shadowOffsetX = off
+    ctx.fillStyle = 'black'
+    for (const hex of [L.from, L.to]) {
+        clickHintHexPath(ctx, hex.x - off, hex.y, T.hole.r * r)
+        ctx.fill()
+    }
+    ctx.shadowOffsetX = 0
+    ctx.globalCompositeOperation = 'source-over'
+    // The 'from' outline: a dark brown stroke with the gold glow, a dashed cream line on it.
+    const F = T.from
+    ctx.lineJoin = 'round'
+    ctx.strokeStyle = S.outline
+    ctx.lineWidth = F.brown * r
+    ctx.shadowColor = S.glow
+    ctx.shadowBlur = F.glow * r
+    clickHintHexPath(ctx, L.from.x, L.from.y, F.r * r)
+    ctx.stroke()
+    ctx.shadowColor = 'rgba(0, 0, 0, 0)'
+    ctx.shadowBlur = 0
+    ctx.strokeStyle = TUTORIAL_HINT_STYLE.top
+    ctx.lineWidth = F.cream * r
+    ctx.setLineDash([F.dash * r, F.gap * r])
+    ctx.lineCap = 'butt'
+    clickHintHexPath(ctx, L.from.x, L.from.y, F.r * r)
+    ctx.stroke()
+    ctx.setLineDash([])
+    // The arrow: the shaft along the curve to the head's base, the head a triangle; brown under (with the glow), gold over.
+    const A = T.arrow, head = tipArrowHead(L), shaft = A.shaft * r, rim = A.outline * r
+    const px = -head.uy, py = head.ux, half = A.halfHead * r
+    const headPath = grow => {
+        ctx.beginPath()
+        ctx.moveTo(L.tip.x + head.ux * grow, L.tip.y + head.uy * grow)
+        ctx.lineTo(head.base.x + px * (half + grow) - head.ux * grow * 0.5, head.base.y + py * (half + grow) - head.uy * grow * 0.5)
+        ctx.lineTo(head.base.x - px * (half + grow) - head.ux * grow * 0.5, head.base.y - py * (half + grow) - head.uy * grow * 0.5)
+        ctx.closePath()
+    }
+    const shaftPath = () => {
+        // The curve from start to the head's base (de Casteljau split at t).
+        const t = head.t
+        const c = {x: L.start.x + (L.control.x - L.start.x) * t, y: L.start.y + (L.control.y - L.start.y) * t}
+        ctx.beginPath()
+        ctx.moveTo(L.start.x, L.start.y)
+        ctx.quadraticCurveTo(c.x, c.y, head.base.x + head.ux * shaft * 0.3, head.base.y + head.uy * shaft * 0.3)
+    }
+    ctx.lineCap = 'round'
+    ctx.lineJoin = 'round'
+    ctx.strokeStyle = ctx.fillStyle = S.outline
+    ctx.shadowColor = S.glow
+    ctx.shadowBlur = A.glow * r
+    ctx.lineWidth = shaft + 2 * rim
+    shaftPath()
+    ctx.stroke()
+    headPath(rim * 1.6)
+    ctx.fill()
+    ctx.shadowColor = 'rgba(0, 0, 0, 0)'
+    ctx.shadowBlur = 0
+    // Brown again without the glow so the glow does not wash over the outline's inner half.
+    shaftPath()
+    ctx.stroke()
+    headPath(rim * 1.6)
+    ctx.fill()
+    ctx.strokeStyle = ctx.fillStyle = S.gold
+    ctx.lineWidth = shaft
+    shaftPath()
+    ctx.stroke()
+    headPath(0)
+    ctx.fill()
+    ctx.restore()
+    canvas.contentVersion = (canvas.contentVersion || 0) + 1 // TASK-1554 (InterfaceRecorder)
+    overlay.key = key
+    overlay.builds++
+}
+function drawTutorialTip(ctx) {
+    const L = tutorialTipLayout()
+    if (!L) {
+        drawTutorialTip.clock = null
+        drawTutorialHints.tip = null
+        return
+    }
+    const now = typeof performance !== 'undefined' ? performance.now() : Date.now()
+    const clock = drawTutorialTip.clock ||= {last: now, elapsed: 0}
+    clock.elapsed += Math.max(0, Math.min(50, now - clock.last))
+    clock.last = now
+    const pulse = 0.5 - 0.5 * Math.cos(clock.elapsed / CLICK_HINT.pulseMs * Math.PI * 2)
+    const key = [WIDTH, HEIGHT, L.from.x, L.from.y, L.to.x, L.to.y, L.r, L.bend].join(',')
+    if (!tipStepOverlay || tipStepOverlay.key !== key || tipStepOverlay.canvas.width !== WIDTH ||
+            tipStepOverlay.canvas.height !== HEIGHT)
+        buildTipStepOverlay(L, key)
+    ctx.save()
+    ctx.setTransform(1, 0, 0, 1, 0, 0)
+    ctx.drawImage(tipStepOverlay.canvas, 0, 0)
+    paintMoveHintHex(ctx, L.to.x, L.to.y, L.r, pulse)
+    // The shine: a soft cream spot sliding along the shaft once per pulse, fading in and out at the ends.
+    const head = tipArrowHead(L), phase = (clock.elapsed / CLICK_HINT.pulseMs) % 1
+    const at = tipCurvePoint(L, phase * head.t), sr = TIP_ARROW.shine.r * L.r
+    const shineAlpha = TIP_ARROW.shine.alpha * Math.sin(Math.PI * phase)
+    const glow = ctx.createRadialGradient(at.x, at.y, 0, at.x, at.y, sr)
+    glow.addColorStop(0, 'rgba(255, 251, 230, ' + shineAlpha.toFixed(3) + ')')
+    glow.addColorStop(1, 'rgba(255, 251, 230, 0)')
+    ctx.fillStyle = glow
+    ctx.beginPath()
+    ctx.arc(at.x, at.y, sr, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.restore()
+    const P = p => ({x: p.x, y: p.y})
+    drawTutorialHints.tip = {step: L.stepIndex, steps: L.steps, from: {...L.from.cell, sx: L.from.x, sy: L.from.y, r: L.r},
+        to: {...L.to.cell, sx: L.to.x, sy: L.to.y, r: L.r}, arrow: {start: P(L.start), tip: P(L.tip), control: P(L.control),
+        bend: L.bend, nearest: L.nearest}, pulse, shine: {x: at.x, y: at.y, phase, alpha: shineAlpha},
+        elapsed: clock.elapsed, builds: tipStepOverlay.builds, key, moveHintBuilds: moveHintSprites.builds}
 }
 
 // TASK-1554: the interface (HUD buttons, timer, panels, hints) is drawn into a cached canvas of the main canvas's size and
@@ -1675,6 +1895,12 @@ function drawInterfaceTo(interfaceCtx) {
         interfaceCtx.restore()
         return
     }
+
+    // TASK-1723: the active tutorial tip step dims the board under the HUD.
+    if (gameSettings.tutorial)
+        drawTutorialTip(interfaceCtx)
+    else
+        drawTutorialHints.tip = null
 
     nextTurnButton.draw(interfaceCtx)
 
