@@ -958,7 +958,12 @@ class SetupSettingsTree extends GameSettingsTree {
         return this.isCoop ? {playerCount: this.playersSlider.value,
             options: {seed: this.mapSlider.value, size: this.sizeSlider.realValue.toLowerCase()}} : null
     }
+    // TASK-1655 / TASK-1727: the co-op map of the values shown made ahead by the generation Worker (coopMapPrefetch: the
+    // latest values; nothing without a Worker), so a start (hot seat) or a lobby create (online) does not generate it.
     draw(ctx) {
+        const coop = typeof coopMapPrefetch === 'function' && this.coopGeneration
+        if (coop)
+            coopMapPrefetch(coop.playerCount, coop.options)
         const layout = this.setup
         setupDrawFrame(ctx, layout, this.title)
         for (const spec of this.rows) setupDrawRow(ctx, spec.box, layout, spec.icon, spec.name, spec.hint)
@@ -974,14 +979,6 @@ class HotseatSettingsTree extends SetupSettingsTree {
             primary: {label: 'Start', clickFunc: _menu.setTree, parameters: _menu.startGame, callThis: _menu},
             option: {key: 'timerCheckBox', text: 'dynamic timer', name: 'Dynamic timer',
                 hint: 'Turn time from your units, towns and gold'}})
-    }
-    // TASK-1655: the co-op map of the values shown made ahead by the generation Worker (coopMapPrefetch: the latest values;
-    // nothing without a Worker), so the start does not generate it.
-    draw(ctx) {
-        const coop = typeof coopMapPrefetch === 'function' && this.coopGeneration
-        if (coop)
-            coopMapPrefetch(coop.playerCount, coop.options)
-        super.draw(ctx)
     }
 }
 
@@ -1036,6 +1033,20 @@ class CreateLobbyTree extends OnlineGameSettings {
         const {coop, mapName, variantIndex} = selectedMap
         return coop ? generateCoopGame(coop.humans, {seed: coop.seed, size: coop.size}) : maps[mapName][variantIndex]
     }
+    // TASK-1727: mapOf's map with a co-op map from the generation Worker (generateCoopGameAsync: made ahead by the
+    // screen's prefetch, else when the Worker answers; generateCoopGame only without a Worker): the map, or a promise of
+    // it while the Worker makes it.
+    static mapOfAsync(selectedMap) {
+        const {coop} = selectedMap
+        if (!coop || typeof generateCoopGameAsync !== 'function')
+            return CreateLobbyTree.mapOf(selectedMap)
+        let map, resolve
+        const now = generateCoopGameAsync(coop.humans, {seed: coop.seed, size: coop.size}, made => {
+            map = made
+            resolve?.(made)
+        })
+        return now ? map : new Promise(r => resolve = r)
+    }
     // TASK-1726: 'Loading…' over the button from the first frame after the click till the answer; the board (a co-op map's
     // generation: seconds for 12 big) is built after that frame (menuActionWithLabel).
     create() {
@@ -1049,7 +1060,16 @@ class CreateLobbyTree extends OnlineGameSettings {
         let ack
         try {
             const options = this.startOptions
-            const board = GameManager.buildOnlineBoard(CreateLobbyTree.mapOf(options.selectedMap), options.fog)
+            let map = CreateLobbyTree.mapOfAsync(options.selectedMap)
+            if (map instanceof Promise) {
+                // (the label stays up meanwhile: menuActionWithLabel's alive)
+                map = await map
+                if (this.menu.selectedTree !== this) {
+                    this.creating = false
+                    return
+                }
+            }
+            const board = GameManager.buildOnlineBoard(map, options.fog)
             ack = await onlineSession.createLobby(board, options.mapName, this.asyncMovesCheckBox.mark)
         } catch (error) {
             console.error(error)
