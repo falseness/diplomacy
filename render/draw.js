@@ -460,6 +460,7 @@ function drawTutorialHints(ctx) {
     drawTutorialHints.texts = []
     drawTutorialHints.arrow = null
     drawTutorialHints.paint = null
+    drawTutorialHints.move = null
     if (!gameSettings.tutorial || gameSettings.tutorial.id !== 'tutorial-0' || TutorialManager.switching)
         return
     const unit = Math.min(WIDTH, HEIGHT)
@@ -491,6 +492,9 @@ function drawTutorialHints(ctx) {
             return
         }
     }
+
+    // TASK-1717: the move hint (concept B) on the cell tutorialMoveHintTarget picks, under the goal and labels.
+    drawTutorialMoveHint(ctx)
 
     // The goal box, shrunk if needed to fit between the menu and i buttons.
     const goal = [
@@ -1066,6 +1070,139 @@ function paintTutorialClickHint(ctx, hex, layout, beam, key) {
     ctx.stroke()
     ctx.restore()
     drawTutorialHints.clickPaint = {elapsed, fade, pulse, builds: clickHintOverlay.builds, key, font: clickHintOverlay.captionFont}
+}
+
+// TASK-1717: tutorial 0's move hint in the concept B style (no text, no darkening): on the cell tutorialMoveHintTarget picks
+// (the KOHb's own cell for an attack) a warm gold fill with a soft edge, a flat-topped hex outline (dark brown under gold, a
+// thin cream inner line, a gold glow) and a gold arrow with a brown outline pointing down into the hex's top edge. The fill's
+// alpha and the outline's radius pulse and the arrow bobs once per CLICK_HINT.pulseMs on the hint's own clock (from its first
+// painted frame; reset when the hint goes). The fill, outline and arrow are sprites rebuilt only when the hex radius changes
+// (moveHintSprites); a frame draws three images in screen space. Nothing is drawn when the hex is off screen.
+// drawTutorialHints.move = {target, hex: {x, y, r}, arrow: {tip, bounds}, pulse} (null when none).
+const MOVE_HINT = {
+    // In hex radii (r): the fill's radius and soft edge (blur sigma), its alpha range; the outline's radius range, the brown
+    // and gold stroke widths, the cream line's width and inset, the glow's blur; the arrow's size, its tip above the hex
+    // centre at rest and the bob's height. The arrow's points in arrow sizes (s), its outline width and glow blur.
+    fill: {r: 0.9, edge: 0.15, alpha: [0.16, 0.39], color: 'rgb(255, 207, 58)'},
+    outline: {r: [0.93, 0.98], brown: 0.13, gold: 0.07, cream: 0.021, creamInset: 0.0175, glow: 0.36},
+    arrow: {size: 0.75, tip: 0.6, bob: 0.25, stroke: 0.08, glow: 0.3,
+        points: [[0, 0], [-0.55, -0.55], [-0.2, -0.55], [-0.2, -1.25], [0.2, -1.25], [0.2, -0.55], [0.55, -0.55]]},
+    cream: 'rgb(255, 251, 230)',
+}
+let moveHintSprites = null
+function moveHintSprite(name, width, height) {
+    const sprites = moveHintSprites
+    const sprite = sprites[name] ||= {canvas: document.createElement('canvas')}
+    sprite.canvas.width = Math.max(1, Math.ceil(width))
+    sprite.canvas.height = Math.max(1, Math.ceil(height))
+    sprite.canvas.contentVersion = (sprite.canvas.contentVersion || 0) + 1 // TASK-1554 (InterfaceRecorder)
+    sprite.ctx = sprite.canvas.getContext('2d')
+    return sprite
+}
+// The sprites for hex radius r (device pixels), each with its anchor (the point drawn at the hex centre / the arrow tip).
+function buildMoveHintSprites(r) {
+    const M = MOVE_HINT, S = TUTORIAL_HINT_STYLE
+    moveHintSprites ||= {builds: 0}
+    // The fill: a hex at full alpha with a soft edge (the shadow of a hex drawn off the sprite, so it works without filters).
+    const edge = M.fill.edge * r, fillR = M.fill.r * r, fillHalf = fillR + 3 * edge + 2
+    const fill = moveHintSprite('fill', 2 * fillHalf, 2 * fillHalf)
+    fill.anchor = {x: fillHalf, y: fillHalf}
+    const off = 4 * fillHalf
+    fill.ctx.shadowColor = M.fill.color
+    fill.ctx.shadowBlur = 2 * edge
+    fill.ctx.shadowOffsetX = off
+    fill.ctx.fillStyle = 'black'
+    clickHintHexPath(fill.ctx, fillHalf - off, fillHalf, fillR)
+    fill.ctx.fill()
+    // The outline at its largest radius (a frame scales it down to the pulse's radius): the brown stroke with the gold glow
+    // (twice, the glow is strong), the gold stroke and the cream inner line.
+    const O = M.outline, outR = O.r[1] * r, glow = O.glow * r, outHalf = outR + O.brown * r + 2 * glow + 2
+    const outline = moveHintSprite('outline', 2 * outHalf, 2 * outHalf)
+    outline.anchor = {x: outHalf, y: outHalf}
+    outline.radius = outR
+    const o = outline.ctx
+    o.lineJoin = 'round'
+    o.strokeStyle = S.outline
+    o.lineWidth = O.brown * r
+    o.shadowColor = S.glow
+    o.shadowBlur = glow
+    clickHintHexPath(o, outHalf, outHalf, outR)
+    o.stroke()
+    o.stroke()
+    o.shadowColor = 'rgba(0, 0, 0, 0)'
+    o.shadowBlur = 0
+    o.stroke()
+    o.strokeStyle = S.gold
+    o.lineWidth = O.gold * r
+    o.stroke()
+    o.strokeStyle = M.cream
+    o.lineWidth = Math.max(1, O.cream * r)
+    clickHintHexPath(o, outHalf, outHalf, outR - O.gold * r / 2 + O.creamInset * r / 2)
+    o.stroke()
+    // The arrow pointing down, its tip at the anchor.
+    const A = M.arrow, s = A.size * r, aGlow = A.glow * s, pad = A.stroke * s + 2 * aGlow + 2
+    const arrow = moveHintSprite('arrow', 1.1 * s + 2 * pad, 1.25 * s + 2 * pad)
+    arrow.anchor = {x: 0.55 * s + pad, y: 1.25 * s + pad}
+    const a = arrow.ctx
+    a.beginPath()
+    A.points.forEach(([x, y], i) => i ? a.lineTo(arrow.anchor.x + x * s, arrow.anchor.y + y * s) :
+        a.moveTo(arrow.anchor.x + x * s, arrow.anchor.y + y * s))
+    a.closePath()
+    a.lineJoin = 'round'
+    a.lineWidth = A.stroke * s
+    a.strokeStyle = S.outline
+    a.shadowColor = S.glow
+    a.shadowBlur = aGlow
+    a.stroke()
+    a.shadowColor = 'rgba(0, 0, 0, 0)'
+    a.shadowBlur = 0
+    a.fillStyle = S.gold
+    a.fill()
+    a.stroke()
+    moveHintSprites.r = r
+    moveHintSprites.builds++
+}
+function drawTutorialMoveHint(ctx) {
+    const target = tutorialMoveHintTarget()
+    if (!target) {
+        drawTutorialMoveHint.clock = null
+        return
+    }
+    const t = biasToTransition(target.x, target.y)
+    const x = (t.x * basis.offset.x - canvas.offset.x) * canvas.scale
+    const y = (t.y * basis.offset.y - canvas.offset.y) * canvas.scale
+    const r = basis.r * canvas.scale, M = MOVE_HINT
+    const raised = M.arrow.tip * r + M.arrow.bob * r, arrowTop = y - raised - 1.25 * M.arrow.size * r
+    // Off screen: neither the hex nor the arrow meets the screen.
+    if (x + r < 0 || x - r > WIDTH || Math.min(y - r, arrowTop) > HEIGHT || y + r < 0) {
+        drawTutorialMoveHint.clock = null
+        return
+    }
+    const now = typeof performance !== 'undefined' ? performance.now() : Date.now()
+    const clock = drawTutorialMoveHint.clock ||= {last: now, elapsed: 0}
+    clock.elapsed += Math.max(0, Math.min(50, now - clock.last))
+    clock.last = now
+    const pulse = 0.5 - 0.5 * Math.cos(clock.elapsed / CLICK_HINT.pulseMs * Math.PI * 2)
+    if (!moveHintSprites || moveHintSprites.r !== r)
+        buildMoveHintSprites(r)
+    const {fill, outline, arrow} = moveHintSprites
+    ctx.save()
+    ctx.setTransform(1, 0, 0, 1, 0, 0)
+    ctx.globalAlpha = M.fill.alpha[0] + (M.fill.alpha[1] - M.fill.alpha[0]) * pulse
+    ctx.drawImage(fill.canvas, x - fill.anchor.x, y - fill.anchor.y)
+    ctx.globalAlpha = 1
+    const k = (M.outline.r[0] + (M.outline.r[1] - M.outline.r[0]) * pulse) * r / outline.radius
+    const ow = outline.canvas.width * k, oh = outline.canvas.height * k
+    ctx.drawImage(outline.canvas, x - outline.anchor.x * k, y - outline.anchor.y * k, ow, oh)
+    // The arrow: highest at the pulse's low, dropping into the hex as the pulse peaks.
+    const tip = {x, y: y - M.arrow.tip * r - M.arrow.bob * r * (1 - pulse)}
+    ctx.drawImage(arrow.canvas, tip.x - arrow.anchor.x, tip.y - arrow.anchor.y)
+    ctx.restore()
+    const s = M.arrow.size * r
+    drawTutorialHints.move = {target: {x: target.x, y: target.y, attack: target.attack}, hex: {x, y, r},
+        arrow: {tip, bounds: {x: tip.x - 0.55 * s, y: tip.y - 1.25 * s, width: 1.1 * s, height: 1.25 * s}},
+        pulse, elapsed: clock.elapsed, fillAlpha: M.fill.alpha[0] + (M.fill.alpha[1] - M.fill.alpha[0]) * pulse,
+        outlineR: k * outline.radius, builds: moveHintSprites.builds}
 }
 
 // TASK-1554: the interface (HUD buttons, timer, panels, hints) is drawn into a cached canvas of the main canvas's size and
