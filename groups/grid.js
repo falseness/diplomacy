@@ -3480,6 +3480,8 @@ class Grid extends SpritesGroup {
             const stage = donor.surfaceCacheBuild ? donor.surfaceCacheBuild.stage : donor.surfaceSplitJob ? 'split' : 'patch'
             const shown = grid
             grid = donor
+            // TASK-1714: a donor's pieces are not held (Grid.heavyHeld): its frames wait for it.
+            Grid.heavyBypass = true
             try {
                 // A build whose board changed (the AI turn's) is started over at once, not after its stage under way (steps
                 // drawing the changed board into a build that is dropped when they end: surfaceCacheBuildStep).
@@ -3509,6 +3511,7 @@ class Grid extends SpritesGroup {
                 } while (performance.now() - start < budget - SURFACE_STEP_MS)
             } finally {
                 grid = shown
+                Grid.heavyBypass = false
             }
             this.surfaceDonorMs += performance.now() - start
             ;(this.surfaceDonorLog ||= []).push([Math.round(start), stage, Math.round(performance.now() - start)])
@@ -3567,7 +3570,9 @@ class Grid extends SpritesGroup {
         }
     }
     // A build of the cache raster into canvas (reused at the same size) at the board's geometry now.
-    startSurfaceCacheBuild(canvas) {
+    // TASK-1714: stepped (a build between frames, Grid.smoothBudgets): the first stage's run ahead on a new canvas as the build's
+    // first steps (SURFACE_CACHE_STAGE_STEPS[0]: the same calls in the same order; 40-160 ms in one task here), not at once.
+    startSurfaceCacheBuild(canvas, stepped = false) {
         mapDepth.ensureGeometry(this)
         const geometry = this.getSurfaceCacheGeometry()
         if (geometry.cacheWidth <= 0 || geometry.cacheHeight <= 0)
@@ -3592,8 +3597,12 @@ class Grid extends SpritesGroup {
         // later build on it, which starts from the context state the first stage leaves (TASK-1280 tools/idem.js):
         // with atmospheric visuals a new canvas runs the first stage once ahead (the build's first stage clears it),
         // so its first build draws what every later build on it draws.
-        if (fresh && otherSettings.atmosphericVisuals)
-            SURFACE_CACHE_STAGES[0](this, build)
+        if (fresh && otherSettings.atmosphericVisuals) {
+            if (stepped && Grid.smoothBudgets)
+                build.steps = SURFACE_CACHE_STAGE_STEPS[0](this, build)
+            else
+                SURFACE_CACHE_STAGES[0](this, build)
+        }
         return build
     }
     finishSurfaceCacheBuild(build) {
@@ -3717,6 +3726,10 @@ class Grid extends SpritesGroup {
         // TASK-1626: a split the board changed under finished first (settleSplit).
         if (this.surfaceSplitJob)
             this.settleSplit()
+        // TASK-1714: no task queued while its next piece is a heavy one that waits (Grid.heavyWaits): a queued surface task holds
+        // the lit tasks' turns (litTaskDefers) though it would do nothing.
+        if (this.surfaceHeavyWaits())
+            return
         // TASK-1372: the cache's split, a step a task (surfaceSplitStep).
         if (this.surfaceSplitJob) {
             this.surfaceCacheQueued = true
@@ -3724,7 +3737,8 @@ class Grid extends SpritesGroup {
             setTimeout(gridTask(() => {
                 this.surfaceCacheQueued = false
                 // TASK-1562: none after a zoom (Grid.zoomQuiet: its finish composes the whole cache, ~14 MP).
-                if (free() && (!Grid.zoomQuiet() || this.cacheUrgent()))
+                // TASK-1714: a first cache's (cacheUrgent) steps heavy pieces (40-95 ms here: Grid.heavyHeld).
+                if (free() && (!Grid.zoomQuiet() || this.cacheUrgent()) && !Grid.heavyHeld(this.surfaceSplitJob))
                     this.surfaceSplitStep()
             }))
             return
@@ -3734,7 +3748,7 @@ class Grid extends SpritesGroup {
             return
         this.surfaceCacheQueued = true
         this.surfaceQueuedKind = 'build'
-        setTimeout(gridTask(() => {
+        const task = () => {
             this.surfaceCacheQueued = false
             // A board replaced meanwhile (another game or tutorial started) builds nothing: its units read the new grid.
             if (!free())
@@ -3755,13 +3769,44 @@ class Grid extends SpritesGroup {
             const start = performance.now(), calls0 = Grid.frameCallsNow()
             const gesture = Grid.urgentGestureCalls && !quiet && (gameEvent.screen.zoomGesture || gameEvent.screen.surfaceZooming)
             const room = gesture ? AHEAD_FRAME_TOTAL - Grid.lastFrameCalls : Infinity
+            // TASK-1714: while the camera is busy (Grid.smoothNow: it moves, zooms, or a zoom's or start's quiet lasts) a task of
+            // at most SMOOTH_TASK_MS (and within the pan interval's room: Grid.panCap), and no more steps once a heavy piece waits
+            // (Grid.heavyHeldNow).
+            const ms = Math.min(Grid.panCap(budget), Grid.smoothBudgets && Grid.smoothNow() ? SMOOTH_TASK_MS : Infinity)
+            Grid.heavyHeldNow = false
             do {
                 if (!this.standInPreviewStep(quiet ? ZOOM_QUIET_STEP_MS : SURFACE_STEP_MS))
                     this.surfaceCacheBuildStep(quiet ? ZOOM_QUIET_STEP_MS : SURFACE_STEP_MS)
-            } while (!quiet && (this.surfaceCacheBuild || this.standInWanted()) && performance.now() - start < budget - SURFACE_STEP_MS &&
-                Grid.frameCallsNow() - calls0 < room)
+            } while (!quiet && (this.surfaceCacheBuild || this.standInWanted()) && performance.now() - start < ms - SURFACE_STEP_MS &&
+                Grid.frameCallsNow() - calls0 < room && !Grid.heavyHeldNow)
+            // TASK-1714: so a busy camera's frame interval still gets up to SMOOTH_CHAIN_MS of a larger budget's steps (the frames
+            // waiting for the cache: Grid.donorTaskMs), the next task of SMOOTH_TASK_MS queued at once (frames and input between
+            // them; a panning frame's are TASK-1713's pan budget's).
+            if (ms < budget && Grid.smoothBudgets && !quiet && !gesture && !Grid.heavyHeldNow && this.surfaceCacheBuild && !this.surfaceCacheQueued) {
+                if (this.surfaceChainFrame !== Grid.frameNo) {
+                    this.surfaceChainFrame = Grid.frameNo
+                    this.surfaceChainMs = 0
+                }
+                this.surfaceChainMs += performance.now() - start
+                if (this.surfaceChainMs < Math.min(budget, SMOOTH_CHAIN_MS) - SURFACE_STEP_MS) {
+                    this.surfaceCacheQueued = true
+                    this.surfaceQueuedKind = 'build'
+                    this.surfaceChainTasks = (this.surfaceChainTasks || 0) + 1
+                    setTimeout(gridTask(task))
+                    return
+                }
+            }
             this.queueStandInTask()
-        }))
+        }
+        setTimeout(gridTask(task))
+    }
+    // TASK-1714: whether the surface cache's task would only wait now (Grid.heavyWaits: its next piece a heavy one): its split
+    // job's step, its finish (the stages and the mask done) or a HEAVY_STEP next in its steps.
+    surfaceHeavyWaits() {
+        if (this.surfaceSplitJob)
+            return Grid.heavyWaits(this.surfaceSplitJob)
+        const b = this.surfaceCacheBuild
+        return !!b && Grid.heavyWaits(b.steps ? b.steps.heavyNext ? b.steps : null : b.stage === SURFACE_CACHE_STAGES.length && b.masked ? b : null)
     }
     // TASK-1565 (Grid.sectorAhead): while the board has no surface cache (its first build, or a rebuild: the frames at the
     // cache's scales draw the stand-in and sectors on it) the build does not wait for a zoom's quiet or the camera at rest
@@ -3787,7 +3832,10 @@ class Grid extends SpritesGroup {
             this.surfaceCacheDirty = false
             if (this.surfaceCache && (this.wholeSurfaceMatches() || this.patchSurfaceCache()))
                 return
-            build = this.startSurfaceCacheBuild(this.surfaceCache)
+            // (TASK-1714: a first build on the canvas the start hold made, surfaceCacheAhead)
+            const ahead = this.surfaceCacheAhead
+            this.surfaceCacheAhead = undefined
+            build = this.startSurfaceCacheBuild(this.surfaceCache || ahead, budget < Infinity)
             if (!build)
                 return
             // The stale raster is no longer drawn; its canvas is drawn over. TASK-1544: kept, coarser, as the stand-in.
@@ -3795,6 +3843,9 @@ class Grid extends SpritesGroup {
             this.surfaceCache = undefined
             this.surfaceCacheBuild = build
             this.withLitState(build, () => this.captureSurfaceState())
+            // TASK-1714: a new canvas's first stage run ahead, in steps (startSurfaceCacheBuild), first.
+            if (build.steps)
+                return
         }
         else if (!this.surfaceCacheBuildHolds(build)) {
             this.surfaceCacheBuild = undefined
@@ -3827,6 +3878,9 @@ class Grid extends SpritesGroup {
             // TASK-1562: the finish (several MP: the patch buffer, the cell layer) and the whole stages (the bake) wait between
             // frames for the camera at rest and a zoom's quiet over (Grid.cameraBusy).
             if (budget < Infinity && Grid.cameraBusy() && !this.cacheUrgent())
+                return
+            // TASK-1714: and a first cache's (cacheUrgent) a heavy piece (the patch buffer, the cell layer: ~60 ms here).
+            if (budget < Infinity && Grid.heavyHeld(build))
                 return
             this.finishSurfaceCacheStep(build)
             return
@@ -4435,6 +4489,10 @@ class Grid extends SpritesGroup {
     standInPreviewStep(budget) {
         if (!this.standInWanted())
             return false
+        // TASK-1714: between frames (not in the start hold that makes it: Grid.startStandIns) its steps (40-440 ms here: the tiles
+        // drawn flat, the lamps' overlays, their raster) wait while the camera moves, zooms or a start's quiet lasts (Grid.heavyHeld).
+        if (Grid.heavyHeld(this.standInHold ||= {}))
+            return false
         const p = this.standInPreview
         if (p && this.standInFits(p) && this.standInMatches(p)) {
             const g = p.ctx
@@ -4450,9 +4508,17 @@ class Grid extends SpritesGroup {
         if (!build && !(build = this.standInBuild = this.startStandInPreview()))
             return false
         const start = performance.now()
+        // TASK-1714: a heavy piece held (Grid.heavyHeld): no step made (false: the cache's build step goes instead, no task
+        // queued again for the preview).
+        const before = Grid.heavyHeldNow
+        Grid.heavyHeldNow = false
         const done = runStandInSteps(this, build, budget)
+        const held = Grid.heavyHeldNow
+        Grid.heavyHeldNow = before || held
         build.ms += performance.now() - start
         ++build.tasks
+        if (held && !done)
+            return false
         if (done) {
             build.steps = undefined
             build.doneAt = performance.now()
@@ -7676,8 +7742,10 @@ class Grid extends SpritesGroup {
         }
         const start = performance.now(), calls = {n: 0, max: burst ? UNIT_SECTOR_BURST_CALLS : timed ? Infinity : left ? left.calls : UNIT_SECTOR_TASK_CALLS}
         // (TASK-1713: while the camera pans, within the pan interval's room, Grid.panCap: a burst's squares over its frames)
-        const ms = Grid.panCap(burst ? (levels ? LEVEL_BURST_MS : UNIT_SECTOR_BURST_MS) : timed ? timedMs - Grid.levelFrameWork.unitMs :
-            left ? LEVEL_TASK_MS : UNIT_SECTOR_TASK_MS)
+        // (TASK-1714: a burst while the camera is busy, Grid.smoothNow, within SMOOTH_TASK_MS a task, the next queued at once: a
+        // zoom's burst was 140 ms here)
+        const ms = Math.min(Grid.panCap(burst ? (levels ? LEVEL_BURST_MS : UNIT_SECTOR_BURST_MS) : timed ? timedMs - Grid.levelFrameWork.unitMs :
+            left ? LEVEL_TASK_MS : UNIT_SECTOR_TASK_MS), burst && Grid.smoothBudgets && Grid.smoothNow() ? SMOOTH_TASK_MS : Infinity)
         if (burst)
             ++this.unitSectorWork.bursts
         let last = 0
@@ -9640,9 +9708,27 @@ class Grid extends SpritesGroup {
             setTimeout(gridTask(() => {
                 this.litTilesQueued = false
                 // TASK-1576: in a zoom gesture only for its held level's builds (Grid.zoomBuildOpen), in their scope.
-                if (this === grid && otherSettings.atmosphericVisuals && !this.litView &&
-                        !(gameEvent.screen.surfaceZooming && !Grid.zoomBuildOpen(true)) && !this.litTaskDefers(snapshots, true))
+                if (!(this === grid && otherSettings.atmosphericVisuals && !this.litView &&
+                        !(gameEvent.screen.surfaceZooming && !Grid.zoomBuildOpen(true)) && !this.litTaskDefers(snapshots, true)))
+                    return
+                // TASK-1714: while the camera is busy (Grid.smoothNow) the map's fine steps (the same calls in the same order: a
+                // coarse step was 50-225 ms here after a deep zoom out) within SMOOTH_TASK_MS, the next task queued at once.
+                if (!Grid.smoothBudgets || !Grid.smoothNow()) {
                     Grid.zoomBuildRun(() => atmosphericLighting.stepLightMap(this), true)
+                    return
+                }
+                let done = false
+                Grid.zoomBuildRun(() => {
+                    const start = performance.now()
+                    let piece = 0
+                    do {
+                        const begin = performance.now()
+                        done = atmosphericLighting.stepLightMap(this, undefined, true)
+                        piece = performance.now() - begin
+                    } while (!done && performance.now() - start + piece < SMOOTH_TASK_MS)
+                }, true)
+                if (!done && this === grid && !this.litView)
+                    this.queueLitTiles(undefined)
             }))
             return
         }
@@ -11197,6 +11283,8 @@ class Grid extends SpritesGroup {
                 start: performance.now(), last: undefined, allow: 1}
             this.startRestFirst = true
             this.startRestFirstAt = undefined
+            // TASK-1714: a board started meanwhile ends the quiet of the one before (set again when this hold ends).
+            Grid.startQuietUntil = 0
             // TASK-1655 (Grid.startFirstFrameEmpty): the frame right after the start's task (GameManager.start: its gap holds
             // the whole task) runs no piece; they start with the next frame.
             if (Grid.startFirstFrameEmpty) {
@@ -11210,6 +11298,8 @@ class Grid extends SpritesGroup {
         const end = why => {
             this.startJob = null
             this.startEnd = why
+            // TASK-1714: the frame budget and heavy pieces' wait for START_QUIET_MS from the first frame drawn (Grid.smoothNow).
+            Grid.startQuietUntil = performance.now() + START_QUIET_MS
             return false
         }
         if (t.a !== job.t.a || t.b !== job.t.b || t.c !== job.t.c || t.d !== job.t.d || t.e !== job.t.e || t.f !== job.t.f ||
@@ -11533,6 +11623,40 @@ class Grid extends SpritesGroup {
                 break
             if (pending)
                 yield ['arrive', false, true]
+        }
+        // TASK-1714 (Grid.startStandIns): the surface cache's stand-in preview (standInPreviewStep: a step a piece, heavy to
+        // rasterize; its heavy pieces not held) made in the hold too: built between the first frames it was 50-615 ms tasks
+        // (its grout, its lamps' overlays) right after the co-op capture's start and its first zooms (artifacts/TASK-1714).
+        if (Grid.smoothBudgets && Grid.startStandIns)
+            for (;;) {
+                if (view !== this.litView)
+                    return
+                let stepped
+                Grid.heavyBypass = true
+                try {
+                    stepped = this.standInPreviewStep(0)
+                } finally {
+                    Grid.heavyBypass = false
+                }
+                if (!stepped)
+                    break
+                yield ['standIn', true]
+            }
+        // TASK-1714 (Grid.startCacheCanvas): the surface cache's canvas made and its first stage run ahead on it (as
+        // startSurfaceCacheBuild runs it on a new canvas: 40-160 ms right after the start here), a step a piece; the first build
+        // takes it (surfaceCacheAhead).
+        if (Grid.smoothBudgets && Grid.startCacheCanvas && !this.surfaceCache && !this.surfaceCacheBuild && !this.surfaceCacheAhead) {
+            const build = this.startSurfaceCacheBuild(undefined, true)
+            if (build) {
+                while (build.steps) {
+                    if (view !== this.litView)
+                        return
+                    if (build.steps.next().done)
+                        build.steps = undefined
+                    yield ['cacheAhead', true]
+                }
+                this.surfaceCacheAhead = build.canvas
+            }
         }
     }
     // Keeps a recorded frame's calls on the main canvas (beginLodFrame) as the board on the canvas now (the zoom raster's
@@ -13669,6 +13793,8 @@ const SURFACE_CACHE_STAGE_STEPS = {
         const tiles = atmosphericLighting.ownedTileMap()
         for (const _ of atmosphericLighting.ownedFillSteps(atmosphericLighting.ownedFills().filter(fill => !tiles.has(fill))))
             yield
+        // TASK-1714: the grout (one path of every cell) a heavy piece (HEAVY_STEP).
+        yield HEAVY_STEP
         grid.drawHexagons(build.ctx, {k: 0, n: 0, grout: true})
         yield RASTER_STEP
         for (let k = 0; k < SURFACE_HEX_STEPS; ++k) {
@@ -13688,6 +13814,8 @@ const SURFACE_CACHE_STAGE_STEPS = {
             grid.drawFogOfWar(build.ctx)
             yield RASTER_STEP
         }
+        // TASK-1714: the rim and the stage's raster (the shadows' and fog's drawing flushed: ~80 ms here) a heavy piece.
+        yield HEAVY_STEP
         mapDepth.renderRim(build.ctx)
         grid.flushSurfaceBuild(build)
     },
@@ -13726,12 +13854,22 @@ function runStandInSteps(board, p, budget) {
     const start = performance.now()
     let piece = 0
     do {
+        // TASK-1714: a piece that cannot be cut (HEAVY_STEP before it): in a run of its own, when Grid.heavyHeld lets it.
+        if (p.steps.heavyNext) {
+            if (Grid.heavyHeld(p.steps))
+                return false
+            p.steps.heavyNext = false
+        }
         const begin = performance.now(), step = p.steps.next()
         if (step.done)
             return true
         if (step.value === RASTER_STEP)
             board.flushSurfaceBuild(p)
         piece = performance.now() - begin
+        if (step.value === HEAVY_STEP && Grid.smoothBudgets) {
+            p.steps.heavyNext = true
+            return false
+        }
     } while (performance.now() - start + piece < budget)
     return false
 }
@@ -13743,6 +13881,9 @@ function* standInPreviewSteps(grid, p) {
     mapDepth.renderUnderlay(g, p.scale)
     mapDepth.renderAtmosphericSides(g)
     yield RASTER_STEP
+    // TASK-1714: the grout (one path of every cell: its trace and raster ~350 ms after the co-op capture's start here) a heavy
+    // piece (HEAVY_STEP).
+    yield HEAVY_STEP
     grid.drawHexagons(g, {k: 0, n: 0, grout: true})
     for (let k = 0; k < STANDIN_HEX_STEPS; ++k) {
         yield RASTER_STEP
@@ -13912,10 +14053,22 @@ function runSteps(steps, budget = Infinity) {
     const start = performance.now()
     let piece = 0
     do {
+        // TASK-1714: a piece that cannot be cut (HEAVY_STEP before it) in a run between frames: only in a run of its own, and
+        // not while the camera moves, zooms or a start's quiet lasts (Grid.heavyHeld; at most HEAVY_STARVE_MS).
+        if (steps.heavyNext) {
+            if (budget < Infinity && Grid.heavyHeld(steps))
+                return false
+            steps.heavyNext = false
+        }
         const begin = performance.now(), step = steps.next()
         if (step.done)
             return true
         piece = performance.now() - begin
+        if (step.value === HEAVY_STEP && Grid.smoothBudgets) {
+            steps.heavyNext = true
+            if (budget < Infinity)
+                return false
+        }
         // TASK-1518: a step heavy to rasterize ends the run (its raster comes at the task's end).
         if (step.value === RASTER_STEP)
             return false
@@ -14523,6 +14676,68 @@ Grid.panFrame = () => {
         }
         Grid.panRelease()
     }
+}
+// TASK-1714 (SMOOTH CAMERA 2/2): while the camera is busy (Grid.smoothNow: it pans, Grid.panningNow; it zooms, a zoom key held or
+// the gesture's frames; a zoom's quiet after it lasts, Grid.zoomQuiet: the level settle and ZOOM_QUIET_MS; or START_QUIET_MS
+// after a new board's first frame drawn, Grid.startQuietUntil, set by holdStartFrame) the surface cache's build tasks
+// (prepareSurfaceCache) take at most SMOOTH_TASK_MS each (a first cache's, cacheUrgent, took Grid.donorTaskMs 40 ms and more a
+// frame), and the surface cache's and its stand-in preview's pieces that cannot be cut wait (Grid.heavyHeld) until the camera is
+// at rest and the quiet over, or for at most HEAVY_STARVE_MS: HEAVY_STEP's (the grout, a stage's raster, the bake's draws), the
+// cache's start on a new canvas, its finish and split steps, and the preview's steps but in the start hold, which makes it
+// (Grid.startStandIns). The user's 30 Hz capture had 53-230 ms surface cache tasks between the frames of its first zooms and
+// after its start (artifacts/TASK-1714/cause.md). The other tasks keep TASK-1713's pan budget and their own (the zoom levels').
+// false: as TASK-1713.
+Grid.smoothBudgets = true
+const START_QUIET_MS = 2500
+const HEAVY_STARVE_MS = 8000
+Grid.startStandIns = true
+Grid.startCacheCanvas = true
+Grid.startQuietUntil = 0
+Grid.smoothWork = {held: 0, starved: 0, heavyRuns: 0}
+Grid.heavyHeldNow = false
+Grid.heavyBypass = false
+const SMOOTH_TASK_MS = 12
+// TASK-1714: a frame interval's chain of such tasks (prepareSurfaceCache) at most this long (ms).
+const SMOOTH_CHAIN_MS = 28
+// Whether the camera is busy: it pans (Grid.panningNow), zooms (a zoom key held, the gesture's frames), or a zoom's quiet or a
+// start's lasts.
+Grid.smoothNow = () => {
+    if (Grid.panningNow())
+        return true
+    if (!Grid.smoothBudgets)
+        return false
+    const screen = typeof gameEvent !== 'undefined' ? gameEvent.screen : undefined
+    if (screen && (screen.zoomGesture || screen.surfaceZooming || gameEvent.heldZoomKeys?.size > 0))
+        return true
+    return Grid.zoomQuiet() || performance.now() < Grid.startQuietUntil
+}
+// Whether holder's heavy piece would wait now (Grid.heavyHeld's answer, without ending its wait: it starts the wait's clock).
+Grid.heavyWaits = holder => {
+    if (!Grid.smoothBudgets || !holder || Grid.heavyBypass || !Grid.smoothNow())
+        return false
+    const now = performance.now()
+    holder.heavySince ??= now
+    return now - holder.heavySince < HEAVY_STARVE_MS
+}
+// Whether the heavy piece next in holder's work (steps, a build, a split job) waits now; it goes when it waited HEAVY_STARVE_MS.
+Grid.heavyHeld = holder => {
+    if (!Grid.smoothBudgets || !holder || Grid.heavyBypass || !Grid.smoothNow()) {
+        if (holder && holder.heavySince !== undefined) {
+            holder.heavySince = undefined
+            ++Grid.smoothWork.heavyRuns
+        }
+        return false
+    }
+    const now = performance.now()
+    holder.heavySince ??= now
+    if (now - holder.heavySince >= HEAVY_STARVE_MS) {
+        holder.heavySince = undefined
+        ++Grid.smoothWork.starved
+        return false
+    }
+    ++Grid.smoothWork.held
+    Grid.heavyHeldNow = true
+    return true
 }
 // TASK-1713: a lit tile step's time by its index in the tile's steps (its last LIT_STEP_SAMPLES), whether that kind of step
 // took more than PAN_FRAME_MS in any of them (a step's cost varies by kind and by tile: one kind took 36 ms where the mean is ~5,

@@ -7,6 +7,10 @@
 // canvas drawing at the task's end, so the time a step takes to run is only its recording, and a run of steps within a time
 // budget (runSteps, Grid.holdStartFrame) ends after such a step instead of packing more raster into the task.
 const RASTER_STEP = 'raster'
+// TASK-1714: the value a step of a generator yields before a piece that cannot be cut and is heavy to rasterize or compute
+// (a whole raster's draw, a stage's raster flushed): a run of steps between frames (runSteps, runStandInSteps) ends there,
+// and the piece waits while the camera moves, zooms or a start's quiet lasts (Grid.heavyHeld).
+const HEAVY_STEP = 'heavy'
 // TASK-1562: what ownedTileSteps yields between its pieces.
 const OWNED_TILE_PIECE = 'ownedTilePiece'
 const atmosphericLighting = {
@@ -2949,11 +2953,15 @@ const atmosphericLighting = {
                     this.addHexagons(ctx, cells.slice(i, i + this.BAKE_PATH_STEP_CELLS))
                     yield
                 }
+                // TASK-1714: the draw (with its raster, flush) a piece heavy to rasterize (HEAVY_STEP).
+                yield HEAVY_STEP
                 // (the map at the cache's scale taken again: a frame between the steps may have made the camera's)
                 if (!(map = this.lightMap(board, scale))) return false
                 ctx.save()
             }
             else {
+                yield HEAVY_STEP
+                if (!(map = this.lightMap(board, scale))) return false
                 ctx.save()
                 this.hexPath(ctx, cells)
             }
