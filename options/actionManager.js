@@ -30,6 +30,9 @@ class ActionManager {
             productionOrders: this.snapshotProductionOrders(),
             fogOfWar: this.snapshotFogOfWar()
         })
+        // TASK-1721: a red action in a tutorial follows or ends its tip (options/tutorialManager.js TutorialTips).
+        if (typeof TutorialTips !== 'undefined')
+            TutorialTips.actionStarted()
     }
     // The fog of war before the action: undo() puts it back, so it re-hides exactly what the undone action revealed
     // and keeps what earlier actions of the turn revealed (the state equals a replay of the turn without the action).
@@ -528,6 +531,9 @@ class ActionManager {
         }
         else
             refreshUndoVision()
+        // TASK-1721: an undone followed tip step is the tutorial tip's active step again.
+        if (typeof TutorialTips !== 'undefined')
+            TutorialTips.undone()
 
         if (otherSettings.moveCameraToUndoTarget)
             this.__moveCameraToUndoTarget()

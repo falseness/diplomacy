@@ -1,7 +1,7 @@
 {
   "format": 1,
   "algorithm": "sha256(path NUL bytes NUL ...)",
-  "rulesVersion": "a24ca287b818a8b5cd3e0c01960ddf3b024c7341d154625e3721126baa4230b8",
+  "rulesVersion": "d3c73d9f9236dacce11475d84e2453d1ac26d1cc91e7df5be4501cef98062db9",
   "scripts": [
     {
       "path": "options/assert.js",
@@ -30,23 +30,23 @@
     },
     {
       "path": "options/gamestart.js",
-      "sha256": "04332dacb344fc4579a1578247d6092e689dcb642d5b1b8ebfb1ae1db40ebc97",
-      "bytes": 102068
+      "sha256": "f40706ca4d64f801f18af28d033e1350dc6e178780c51db682f526aa4b208528",
+      "bytes": 102197
     },
     {
       "path": "options/tutorials.js",
-      "sha256": "06be76635127fcff9aa6011df5d1695408cae7b42e9c98e890740da72494598e",
-      "bytes": 59559
+      "sha256": "3aa912474f94973cf84263c38b83a3a61c3fd9a87d6f02ef248cd46a56bacf40",
+      "bytes": 60849
     },
     {
       "path": "options/tutorialProgress.js",
-      "sha256": "55d0a8460a126596f0c0514d4ab83875ac6ed55951aa27916131bade61d9795f",
-      "bytes": 1695
+      "sha256": "5c3caa9fab9980fc2b250ae2e7a935227c5e978cbaec252f520f72454a48f9a6",
+      "bytes": 2439
     },
     {
       "path": "options/tutorialManager.js",
-      "sha256": "1c21c5b400cb5e50fcff8a4276a51a4923cd71d44728d07097a9d1d2c57e3ca4",
-      "bytes": 11117
+      "sha256": "8f5a424b7db223c6f7923b089fde6afb7c67b20f1a7eff6aa74ea27211368c75",
+      "bytes": 19872
     },
     {
       "path": "options/save.js",
@@ -55,8 +55,8 @@
     },
     {
       "path": "options/actionManager.js",
-      "sha256": "d017917a98c4169b20fd71cba139499ca0f3db4703eb194d5d72d8bcbfafd668",
-      "bytes": 20537
+      "sha256": "3166344ed848d5ab822ddee55e90cca1e2283ebebc8cf865f476ae99e179bed4",
+      "bytes": 20917
     },
     {
       "path": "options/classManager.js",
@@ -330,8 +330,8 @@
     },
     {
       "path": "sprites/entities/units/unit/unit.js",
-      "sha256": "8431604a96166b2b6339ac022f318f98e8563b3c702715449df4b020c6366272",
-      "bytes": 10440
+      "sha256": "c71273f19b4402b7c031f7effa6d0ed275160523525eb518911e29e82ce113c8",
+      "bytes": 10856
     },
     {
       "path": "sprites/entities/units/noob.js",

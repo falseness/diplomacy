@@ -24,6 +24,8 @@ class TutorialManager {
         // TASK-1716: after the click hint, a selected red unit gets its move hint (tutorialMoveHintTarget) until red's
         // first hit on a blue unit (InterationWithUnit.hitUnit); a start (the menu, Retry) brings it back, an undo does not.
         TutorialManager.moveHint = id === 'tutorial-0'
+        // TASK-1721: a start (the menu, Retry, Next tutorial) is a new attempt: thinking clock, offer and tip reset.
+        TutorialTips.reset(id)
         const map = tutorial.map
         map.tutorial = {id: id}
         // 'surviveRounds' counts red's units only when the map gives red no town; 'coopVictory' and
@@ -205,3 +207,173 @@ class TutorialManager {
         menu.setTree(menu.tutorial)
     }
 }
+
+// TASK-1721 (TIP 1/4): THE TUTORIAL TIP'S STATE (the offer overlay is TASK-1722's, the drawing TASK-1723's). A tutorials
+// entry's tip (options/tutorials.js) is offered once red has thought tip.delayMs (OFFER_AGAIN_MS when this level's offer
+// was shown before: readTutorialTipSeen, options/tutorialProgress.js) on its own turn: the thinking clock (clockMs) runs
+// per attempt only on red's turn and stops while the AI plays (whooseTurn !== TUTORIAL_HUMAN_SLOT, gameEvent.waitingMode,
+// a turn playback), while the result screen, the pause menu or the menu shows, while document.hidden, and while the
+// offer or the tip is up. The offer shows only at the tip's start state: red's first turn of the attempt with no red
+// action taken (an Undo back to it counts again). keepThinking() hides it, the next offer due OFFER_AGAIN_MS of thinking
+// later; getTip() hides it and makes step 1 active. While a tip is active, a red unit's action from the active step's
+// 'from' onto its 'to' (ActionManager.startAction during Unit.sendInstructions: commandBegin / commandEnd) advances to
+// the next step and the last one ends the tip; any other red action ends it; an Undo of a followed step goes back to it.
+// The game loop calls frame(frameTime); tests stop that (hold = true) and drive the clock with advance(ms).
+class TutorialTips {
+    static OFFER_AGAIN_MS = 5 * 60 * 1000
+    // The longest wall time one frame adds (a stalled or throttled tab does not count as thinking).
+    static FRAME_CAP_MS = 1000
+    static hold = false
+    static memorySeen = new Set()
+    static reset(id) {
+        const tutorial = tutorials.find(tutorial => tutorial.id === id)
+        TutorialTips.id = id
+        TutorialTips.tip = tutorial && tutorial.tip || null
+        TutorialTips.startRound = tutorial && tutorial.startRound || 0
+        TutorialTips.clockMs = 0
+        TutorialTips.last = null
+        TutorialTips.nextDueMs = TutorialTips.tip ? (TutorialTips.wasSeen(id) ? TutorialTips.OFFER_AGAIN_MS : TutorialTips.tip.delayMs) : Infinity
+        TutorialTips.offer = false
+        TutorialTips.stepIndex = -1
+        TutorialTips.followed = []
+        TutorialTips.command = null
+        TutorialTips.actions = 0
+        TutorialTips.ended = null
+    }
+    static wasSeen(id) {
+        return TutorialTips.memorySeen.has(id) || (typeof readTutorialTipSeen === 'function' && readTutorialTipSeen().includes(id))
+    }
+    static get running() {
+        return typeof gameSettings !== 'undefined' && !!gameSettings.tutorial && !!TutorialTips.tip &&
+            gameSettings.tutorial.id === TutorialTips.id
+    }
+    static get active() {
+        return TutorialTips.running && TutorialTips.stepIndex >= 0
+    }
+    // The active step {from, to} or null.
+    static get step() {
+        return TutorialTips.active ? TutorialTips.tip.steps[TutorialTips.stepIndex] : null
+    }
+    static get due() {
+        return TutorialTips.running && TutorialTips.clockMs >= TutorialTips.nextDueMs
+    }
+    // The board is at the tip's start: red's first turn, no red action (actionManager is cleared at every turn start).
+    static atStart() {
+        return TutorialTips.running && whooseTurn === TUTORIAL_HUMAN_SLOT && gameRound === TutorialTips.startRound &&
+            !gameEvent.waitingMode && actionManager.arr.length === 0
+    }
+    static paused() {
+        if (!TutorialTips.running || TutorialTips.offer || TutorialTips.active)
+            return true
+        if (whooseTurn !== TUTORIAL_HUMAN_SLOT || gameEvent.waitingMode)
+            return true
+        if (typeof turnPlaybackView !== 'undefined' && turnPlaybackView.active)
+            return true
+        if ((typeof tutorialResultInterface !== 'undefined' && tutorialResultInterface.visible) ||
+                (typeof tutorialPauseInterface !== 'undefined' && tutorialPauseInterface.visible) ||
+                (typeof menu !== 'undefined' && menu && menu.visible))
+            return true
+        return typeof document !== 'undefined' && !!document.hidden
+    }
+    // Each game loop frame: the wall time since the last frame (at most FRAME_CAP_MS) counts unless paused.
+    static frame(now) {
+        const last = TutorialTips.last
+        TutorialTips.last = now
+        if (TutorialTips.hold || last === null || !TutorialTips.running)
+            return
+        TutorialTips.advance(Math.max(0, Math.min(now - last, TutorialTips.FRAME_CAP_MS)))
+    }
+    // Adds ms of thinking (none while paused), then makes the offer when it is due at the start state.
+    static advance(ms) {
+        if (!TutorialTips.paused())
+            TutorialTips.clockMs += ms
+        TutorialTips.check()
+    }
+    static check() {
+        if (TutorialTips.offer || TutorialTips.active || !TutorialTips.due || !TutorialTips.atStart())
+            return false
+        TutorialTips.offer = true
+        TutorialTips.memorySeen.add(TutorialTips.id)
+        if (typeof markTutorialTipSeen === 'function')
+            markTutorialTipSeen(TutorialTips.id)
+        return true
+    }
+    static keepThinking() {
+        if (!TutorialTips.offer)
+            return
+        TutorialTips.offer = false
+        TutorialTips.nextDueMs = TutorialTips.clockMs + TutorialTips.OFFER_AGAIN_MS
+    }
+    static getTip() {
+        if (!TutorialTips.offer)
+            return
+        TutorialTips.offer = false
+        TutorialTips.nextDueMs = TutorialTips.clockMs + TutorialTips.OFFER_AGAIN_MS
+        TutorialTips.stepIndex = 0
+        TutorialTips.followed = []
+        TutorialTips.ended = null
+    }
+    static end(reason) {
+        TutorialTips.stepIndex = -1
+        TutorialTips.followed = []
+        TutorialTips.ended = reason
+    }
+    static isRed(unit) {
+        return TutorialTips.running && whooseTurn === TUTORIAL_HUMAN_SLOT && (!unit || unit.playerColor === TUTORIAL_HUMAN_SLOT)
+    }
+    // Unit.sendInstructions around its interaction: the red unit's command from -> to.
+    static commandBegin(unit, from, to) {
+        TutorialTips.command = TutorialTips.isRed(unit) ? {from: {x: from.x, y: from.y}, to: {x: to.x, y: to.y}, acted: false} : null
+    }
+    static commandEnd() {
+        const command = TutorialTips.command
+        TutorialTips.command = null
+        if (command && command.acted)
+            TutorialTips.redAction(command)
+    }
+    // ActionManager.startAction: every recorded action (a unit's inside its command, a town's production on its own).
+    static actionStarted() {
+        if (TutorialTips.command)
+            TutorialTips.command.acted = true
+        else if (TutorialTips.isRed(null))
+            TutorialTips.redAction(null)
+    }
+    static redAction(command) {
+        ++TutorialTips.actions
+        if (TutorialTips.offer) {
+            // (the overlay takes the clicks; an action anyway answers it like keepThinking)
+            TutorialTips.keepThinking()
+            return
+        }
+        const step = TutorialTips.step
+        if (!step)
+            return
+        if (!command || !coordsEqually(command.from, step.from) || !coordsEqually(command.to, step.to)) {
+            TutorialTips.end('other action')
+            return
+        }
+        TutorialTips.followed.push(actionManager.arr.length)
+        if (++TutorialTips.stepIndex >= TutorialTips.tip.steps.length)
+            TutorialTips.end('done')
+    }
+    // ActionManager.undo after its pop: an undone followed step is the active one again.
+    static undone() {
+        const followed = TutorialTips.followed
+        if (TutorialTips.active && followed.length && actionManager.arr.length < followed[followed.length - 1]) {
+            followed.pop()
+            --TutorialTips.stepIndex
+        }
+    }
+    // For tests: {due, offer, step, stepIndex, clockMs, seen, nextDueMs, ...}.
+    static get state() {
+        const step = TutorialTips.step
+        return {id: TutorialTips.id || null, due: TutorialTips.due, offer: TutorialTips.offer,
+            step: step && {from: {...step.from}, to: {...step.to}}, stepIndex: TutorialTips.active ? TutorialTips.stepIndex : -1,
+            clockMs: TutorialTips.clockMs, nextDueMs: TutorialTips.nextDueMs, seen: TutorialTips.id ? TutorialTips.wasSeen(TutorialTips.id) : false,
+            atStart: TutorialTips.tip ? TutorialTips.atStart() : false, paused: TutorialTips.paused(), ended: TutorialTips.ended}
+    }
+}
+TutorialTips.reset(null)
+// A hidden tab's frames stop; the first frame after it adds nothing (frame: last null).
+if (typeof document !== 'undefined' && document && typeof document.addEventListener === 'function')
+    document.addEventListener('visibilitychange', () => { TutorialTips.last = null })

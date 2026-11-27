@@ -2009,6 +2009,8 @@ function gameLoop(frameTime) {
     }
 
     gameEvent.moveScreen(frameDuration, frameTime)
+    // TASK-1721: the tutorial tip's thinking clock (options/tutorialManager.js TutorialTips).
+    TutorialTips.frame(frameTime)
     // TASK-1518: drawAll called by this loop (Grid.holdStartFrame holds only such frames).
     gameLoopFrame = true
     try {

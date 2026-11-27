@@ -1201,20 +1201,26 @@ function createTutorial23Map() {
 
 const tutorials = [
     {id: 'tutorial-0', title: 'Tutorial 0: First Contact', pass: 'enemyUnitsDead', get map() { return createTutorial0Map() }},
-    {id: 'tutorial-16', title: 'Tutorial 1: Moving Around', pass: 'enemyLost', get map() { return createTutorial16Map() }},
-    {id: 'tutorial-17', title: 'Tutorial 2: Shield and Bow', pass: 'enemyLost', get map() { return createTutorial17Map() }},
-    {id: 'tutorial-1', title: 'Tutorial 3: Pick Your Targets', pass: 'enemyUnitsDead', get map() { return createTutorial1Map() }},
+    {id: 'tutorial-16', tip: {delayMs: 30000, steps: [{from: {x: 4, y: 4}, to: {x: 3, y: 3}}]},
+        title: 'Tutorial 1: Moving Around', pass: 'enemyLost', get map() { return createTutorial16Map() }},
+    {id: 'tutorial-17', tip: {delayMs: 30000, steps: [{from: {x: 4, y: 4}, to: {x: 6, y: 4}}]},
+        title: 'Tutorial 2: Shield and Bow', pass: 'enemyLost', get map() { return createTutorial17Map() }},
+    {id: 'tutorial-1', tip: {delayMs: 120000, steps: [{from: {x: 3, y: 3}, to: {x: 5, y: 3}}]},
+        title: 'Tutorial 3: Pick Your Targets', pass: 'enemyUnitsDead', get map() { return createTutorial1Map() }},
     {id: 'tutorial-7', title: 'Tutorial 4: High Ground', pass: 'enemyUnitsDead', get map() { return createTutorial7Map() }},
-    {id: 'tutorial-22', title: 'Tutorial 5: How to Capture', pass: 'enemyLost', get map() { return createTutorial22Map() }},
+    {id: 'tutorial-22', tip: {delayMs: 120000, steps: [{from: {x: 1, y: 4}, to: {x: 2, y: 5}}]},
+        title: 'Tutorial 5: How to Capture', pass: 'enemyLost', get map() { return createTutorial22Map() }},
     {id: 'tutorial-3', title: 'Tutorial 6: "No Assault Duty"', pass: 'enemyLost', get map() { return createTutorial3Map() }},
     {id: 'tutorial-18', title: 'Tutorial 7: Expand', pass: 'enemyLost', get map() { return createTutorial18Map() }},
     {id: 'tutorial-20', title: 'Tutorial 8: Rotate and Heal', pass: 'enemyTypesDead', types: ['Noob'],
         get map() { return createTutorial20Map() }},
     {id: 'tutorial-21', title: 'Tutorial 9: All as One', pass: 'coopVictory', startRound: 17,
         get map() { return createTutorial21Map() }},
-    {id: 'tutorial-23', title: 'Tutorial 10: Through the Lines', pass: 'demonUnitsDead', get map() { return createTutorial23Map() }},
+    {id: 'tutorial-23', tip: {delayMs: 300000, steps: [{from: {x: 2, y: 3}, to: {x: 2, y: 2}}, {from: {x: 2, y: 2}, to: {x: 3, y: 2}}, {from: {x: 1, y: 2}, to: {x: 1, y: 1}}, {from: {x: 1, y: 1}, to: {x: 3, y: 2}}]},
+        title: 'Tutorial 10: Through the Lines', pass: 'demonUnitsDead', get map() { return createTutorial23Map() }},
     {id: 'tutorial-2', title: 'Tutorial 11: Retreat and Rebuild', pass: 'enemyUnitsDead', get map() { return createTutorial2Map() }},
-    {id: 'tutorial-19', title: 'Tutorial 12: Puzzle Rush', pass: 'demonUnitsDead', startRound: 23,
+    {id: 'tutorial-19', tip: {delayMs: 300000, steps: [{from: {x: 2, y: 5}, to: {x: 3, y: 5}}, {from: {x: 3, y: 4}, to: {x: 2, y: 5}}, {from: {x: 2, y: 4}, to: {x: 3, y: 4}}, {from: {x: 3, y: 4}, to: {x: 3, y: 3}}, {from: {x: 3, y: 5}, to: {x: 3, y: 3}}, {from: {x: 2, y: 5}, to: {x: 3, y: 2}}, {from: {x: 2, y: 6}, to: {x: 2, y: 4}}]},
+        title: 'Tutorial 12: Puzzle Rush', pass: 'demonUnitsDead', startRound: 23,
         get map() { return createTutorial19Map() }},
     {id: 'tutorial-5', title: 'Tutorial 13: Hold the Walls', pass: 'demonUnitsDead', get map() { return createTutorial5Map() }},
     {id: 'tutorial-15', title: 'Tutorial 14: Fortify in Time', pass: 'surviveRounds', rounds: 16,
@@ -1224,6 +1230,10 @@ const tutorials = [
     {id: 'tutorial-6', title: 'Tutorial 16: Lose a Town, Win the War', pass: 'demonUnitsDead', startRound: 20,
         get map() { return createTutorial6Map() }},
 ]
+// TASK-1721: an entry may set tip: {delayMs, steps: [{from: {x, y}, to: {x, y}}]} (options/tutorialManager.js
+// TutorialTips): after delayMs of thinking on red's first turn (5 min once this level's offer was shown before) the
+// player is offered the tip; a step is the red unit on 'from' moving onto, attacking or shooting 'to' (board coords,
+// grid.arr[x][y]). Tutorial 12's delay is not the user's (they gave none): 5 min like tutorial 10.
 // An entry may set startRound: N (the game starts at gameRound N, so round counters and the
 // co-op wave schedule follow it) and suddenDeathRound (default the normal round 40).
 for (const tutorial of tutorials) {

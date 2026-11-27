@@ -34,3 +34,16 @@ function mergeTutorialPassed(list) {
     storeTutorialPassed(passed)
     return passed
 }
+// TASK-1721: the tutorials whose tip offer was shown in this browser (TutorialTips): localStorage key
+// diplomacyTutorialTipSeen holds {"seen": [ids]}, beside the progress key. Missing, corrupt or throwing storage reads [].
+const TUTORIAL_TIP_SEEN_KEY = 'diplomacyTutorialTipSeen'
+function readTutorialTipSeen() {
+    let data = null
+    try { data = JSON.parse(localStorage.getItem(TUTORIAL_TIP_SEEN_KEY)) } catch (error) { return [] }
+    return data && typeof data === 'object' ? normalizeTutorialIds(data.seen) : []
+}
+function markTutorialTipSeen(id) {
+    const seen = normalizeTutorialIds([...readTutorialTipSeen(), id])
+    try { localStorage.setItem(TUTORIAL_TIP_SEEN_KEY, JSON.stringify({seen})) } catch (error) {}
+    return seen
+}

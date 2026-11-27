@@ -173,7 +173,17 @@ class Unit extends Entity {
         const origin = {x: this.coord.x, y: this.coord.y}, facing = this.mirrorX
         this.attackCoord = null
         this.actionPath = null
-        let noNeedInstructionsEnough = this.interaction.sendInstructions(cell, this)
+        // TASK-1721: the tutorial tip's step check (options/tutorialManager.js TutorialTips) sees this command's from -> to.
+        const tips = typeof TutorialTips !== 'undefined' ? TutorialTips : null
+        if (tips)
+            tips.commandBegin(this, origin, cell.coord)
+        let noNeedInstructionsEnough
+        try {
+            noNeedInstructionsEnough = this.interaction.sendInstructions(cell, this)
+        } finally {
+            if (tips)
+                tips.commandEnd()
+        }
         this.faceAttackTarget(origin, facing)
         this.updateMovesBar()
         if (attack)
