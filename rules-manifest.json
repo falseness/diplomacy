@@ -1,7 +1,7 @@
 {
   "format": 1,
   "algorithm": "sha256(path NUL bytes NUL ...)",
-  "rulesVersion": "d3c73d9f9236dacce11475d84e2453d1ac26d1cc91e7df5be4501cef98062db9",
+  "rulesVersion": "16e4aa1f0d76eb0de66863d3948d3c2600751c78e454a2566e3062db347f72e2",
   "scripts": [
     {
       "path": "options/assert.js",
@@ -150,8 +150,8 @@
     },
     {
       "path": "render/draw.js",
-      "sha256": "0e6779e91fb096638fad9ffc5bb4b8ec26be601b620dd936582d0269da43c28f",
-      "bytes": 79374
+      "sha256": "3bcf89c6ee61fe34c1441a23f3c0d8a9774f0154a4699713bfc809c233d5eed5",
+      "bytes": 91119
     },
     {
       "path": "interface/entityinterface.js",
@@ -280,8 +280,8 @@
     },
     {
       "path": "events/events.js",
-      "sha256": "151b97be090375551415ccc8b11ef77c481f2d69e004a849efd271123965865e",
-      "bytes": 28386
+      "sha256": "b9488ee81484a9401505503d286016ae8cde7673e5d87820a73cad1ee0ca8e0d",
+      "bytes": 28840
     },
     {
       "path": "options/onlineHubRows.js",

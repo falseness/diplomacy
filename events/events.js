@@ -107,6 +107,9 @@ function keydown(event) {
     // Escape still toggles debug; every other key waits for Resume.
     if (isGamePaused() && event.keyCode != Events.kEscapeKeycode)
         return
+    // TASK-1722: the tutorial tip offer takes Esc (Keep thinking) and holds the game's press keys (render/draw.js).
+    if (typeof tutorialTipOfferKey === 'function' && tutorialTipOfferKey(event.keyCode))
+        return
     if (gameEvent.keyboardZoom(event))
         return
     gameEvent.keyboard(event.keyCode, event.shiftKey, event.repeat, event.timeStamp)
@@ -530,6 +533,9 @@ class Events {
     click(pos, realPos) {
         // TASK-1495: a click during a playback of AI turns skips it (the computed board at once).
         if (typeof turnPlaybackView !== 'undefined' && turnPlaybackView.skip())
+            return
+        // TASK-1722: while the tutorial tip offer is up only its buttons answer; other clicks are swallowed (render/draw.js).
+        if (typeof tutorialTipOfferClick === 'function' && tutorialTipOfferClick(pos))
             return
         let clickToButton = (gameSettings.tutorial && tutorialResultInterface.click(pos)) ||
             (gameSettings.tutorial && tutorialPauseInterface.click(pos)) ||

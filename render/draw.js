@@ -461,6 +461,9 @@ function drawTutorialHints(ctx) {
     drawTutorialHints.arrow = null
     drawTutorialHints.paint = null
     drawTutorialHints.move = null
+    // TASK-1722: the tip offer of any tutorial with a tip, painted by drawInterfaceTo after the HUD (drawTutorialHints.tipPaint).
+    drawTutorialHints.tipOffer = null
+    drawTutorialHints.tipPainter = drawTutorialTipOffer()
     if (!gameSettings.tutorial || gameSettings.tutorial.id !== 'tutorial-0' || TutorialManager.switching)
         return
     const unit = Math.min(WIDTH, HEIGHT)
@@ -1072,6 +1075,258 @@ function paintTutorialClickHint(ctx, hex, layout, beam, key) {
     drawTutorialHints.clickPaint = {elapsed, fade, pulse, builds: clickHintOverlay.builds, key, font: clickHintOverlay.captionFont}
 }
 
+// TASK-1722: the tutorial tip offer (TutorialTips.offer, options/tutorialManager.js) in the concept 1C1 style, painted by
+// drawInterfaceTo after the HUD so it covers it: the screen shaded about 0.5 black, a big glowing gold light bulb with rays
+// above 'Need a tip?' in the menu title font (TUTORIAL_HINT_STYLE: cream-to-gold fill, dark brown outline, gold glow) and two
+// buttons side by side: a gold gradient 'Get tip' with a small bulb icon and a brown outline, and a dark navy 'Keep thinking'
+// with a gold border and cream text. Laid out in the concept's 2561x1398 px (desktop 1707x932 at dpr 1.5) scaled by
+// tipOfferScale(); the whole picture is one reused offscreen canvas rebuilt only when the screen size or the font state
+// changes; a frame draws it fading in over TIP_OFFER.fadeMs of the offer's own clock. drawTutorialHints.tipOffer keeps the
+// buttons' click rects ({getTip, keepThinking}, null when no offer); tutorialTipOfferClick / tutorialTipOfferKey take the input.
+const TIP_OFFER = {
+    fadeMs: 300, shade: 'rgba(3, 3, 10, 0.5)', gold: 'rgb(255, 210, 63)', glow: 'rgb(255, 207, 58)', outline: 'rgb(36, 19, 0)',
+    cream: 'rgb(255, 251, 230)',
+    // The concept's px, relative to the screen centre: the bulb (centre dy, size), the title (dy, font), the buttons (dy of the
+    // top, width, height, the gap between them, fonts).
+    bulb: {dy: -120, size: 230}, title: {dy: 110, font: 104}, buttons: {dy: 200, width: 440, height: 115, gap: 60, font: 66, keepFont: 60},
+    // The content's extent (concept px round the centre) a screen must fit with a margin: x +-470, y -355..+315.
+    extent: {width: 1020, top: 380, bottom: 345},
+    // Concept px per screen px: the concept's own height; phones take it larger (tap targets), then all of it is fitted.
+    conceptHeight: 1398, mobileBoost: 1.6,
+}
+let tipOfferOverlay = null
+function tipOfferScale() {
+    const T = TIP_OFFER
+    let k = HEIGHT / T.conceptHeight
+    if (typeof mobilePhone !== 'undefined' && mobilePhone)
+        k *= T.mobileBoost
+    return Math.min(k, WIDTH / T.extent.width, HEIGHT / (2 * Math.max(T.extent.top, T.extent.bottom)))
+}
+// The layout in screen px: {k, cx, cy, bulb, title, getTip, keepThinking} (rects {x, y, width, height}).
+function tipOfferLayout() {
+    const T = TIP_OFFER, k = tipOfferScale(), cx = WIDTH / 2
+    // At the screen centre as in the concept, moved only as far as keeps the content on screen.
+    const cy = Math.min(HEIGHT - T.extent.bottom * k, Math.max(T.extent.top * k, HEIGHT / 2))
+    const B = T.buttons, top = cy + B.dy * k, w = B.width * k, h = B.height * k
+    return {k, cx, cy, bulb: {x: cx, y: cy + T.bulb.dy * k, size: T.bulb.size * k}, title: {x: cx, y: cy + T.title.dy * k, font: T.title.font * k},
+        getTip: {x: cx - B.gap / 2 * k - w, y: top, width: w, height: h},
+        keepThinking: {x: cx + B.gap / 2 * k, y: top, width: w, height: h}}
+}
+function tipOfferRoundRect(ctx, x, y, w, h, r) {
+    ctx.beginPath()
+    if (typeof ctx.roundRect === 'function')
+        ctx.roundRect(x, y, w, h, r)
+    else
+        roundedRectPath(ctx, x, y, w, h, r)
+}
+function tipOfferBulb(ctx, cx, cy, s) {
+    const T = TIP_OFFER
+    ctx.save()
+    ctx.translate(cx, cy)
+    ctx.shadowColor = T.glow
+    ctx.shadowBlur = s * 0.6
+    ctx.strokeStyle = T.gold
+    ctx.lineWidth = s * 0.07
+    ctx.lineCap = 'round'
+    for (let i = -3; i <= 3; i++) {
+        const a = -Math.PI / 2 + i * 0.42
+        ctx.beginPath()
+        ctx.moveTo(Math.cos(a) * s * 0.68, Math.sin(a) * s * 0.68 - s * 0.1)
+        ctx.lineTo(Math.cos(a) * s * 0.92, Math.sin(a) * s * 0.92 - s * 0.1)
+        ctx.stroke()
+    }
+    const g = ctx.createRadialGradient(-s * 0.12, -s * 0.25, s * 0.05, 0, -s * 0.1, s * 0.5)
+    g.addColorStop(0, T.cream)
+    g.addColorStop(1, 'rgb(255, 194, 26)')
+    ctx.beginPath()
+    ctx.arc(0, -s * 0.12, s * 0.44, Math.PI * 0.78, Math.PI * 2.22)
+    ctx.lineTo(s * 0.17, s * 0.42)
+    ctx.lineTo(-s * 0.17, s * 0.42)
+    ctx.closePath()
+    ctx.fillStyle = g
+    ctx.fill()
+    ctx.shadowBlur = 0
+    ctx.shadowColor = 'rgba(0, 0, 0, 0)'
+    ctx.lineWidth = s * 0.07
+    ctx.strokeStyle = T.outline
+    ctx.stroke()
+    ctx.fillStyle = 'rgb(120, 90, 40)'
+    tipOfferRoundRect(ctx, -s * 0.19, s * 0.44, s * 0.38, s * 0.2, s * 0.05)
+    ctx.fill()
+    ctx.stroke()
+    ctx.restore()
+}
+// The small bulb icon of 'Get tip' (a 100 px design, scaled by px / 100).
+function tipOfferSmallBulb(ctx, x, y, scale) {
+    const T = TIP_OFFER
+    ctx.save()
+    ctx.translate(x, y)
+    ctx.scale(scale, scale)
+    ctx.beginPath()
+    ctx.arc(0, -10, 34, Math.PI * 0.78, Math.PI * 2.22)
+    ctx.lineTo(13, 30)
+    ctx.lineTo(-13, 30)
+    ctx.closePath()
+    ctx.fillStyle = T.cream
+    ctx.fill()
+    ctx.lineWidth = 7
+    ctx.strokeStyle = 'rgb(48, 24, 0)'
+    ctx.stroke()
+    ctx.fillStyle = 'rgb(48, 24, 0)'
+    ctx.fillRect(-14, 34, 28, 12)
+    ctx.restore()
+}
+function tipOfferText(ctx, text, x, y, px) {
+    const T = TIP_OFFER
+    ctx.save()
+    ctx.font = clickHintFont(px)
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+    if ('letterSpacing' in ctx)
+        ctx.letterSpacing = px * 2 / 70 + 'px'
+    const g = ctx.createLinearGradient(0, y - px * 0.5, 0, y + px * 0.4)
+    g.addColorStop(0, TUTORIAL_HINT_STYLE.top)
+    g.addColorStop(1, TUTORIAL_HINT_STYLE.bottom)
+    ctx.lineJoin = 'round'
+    ctx.lineWidth = px * 5 / 70 * 2
+    ctx.strokeStyle = T.outline
+    ctx.shadowColor = T.glow
+    ctx.shadowBlur = px * 16 / 70
+    ctx.strokeText(text, x, y)
+    ctx.shadowBlur = 0
+    ctx.shadowColor = 'rgba(0, 0, 0, 0)'
+    ctx.fillStyle = g
+    ctx.fillText(text, x, y)
+    ctx.restore()
+}
+function buildTipOfferOverlay(layout, key) {
+    const T = TIP_OFFER
+    let overlay = tipOfferOverlay
+    if (!overlay) {
+        const canvas = document.createElement('canvas')
+        overlay = tipOfferOverlay = {canvas, ctx: canvas.getContext('2d'), key: null, builds: 0}
+    }
+    const {canvas, ctx} = overlay
+    if (canvas.width !== WIDTH || canvas.height !== HEIGHT) {
+        canvas.width = WIDTH
+        canvas.height = HEIGHT
+    }
+    const {k, cx, bulb, title, getTip, keepThinking} = layout
+    ctx.save()
+    ctx.setTransform(1, 0, 0, 1, 0, 0)
+    ctx.clearRect(0, 0, WIDTH, HEIGHT)
+    ctx.fillStyle = T.shade
+    ctx.fillRect(0, 0, WIDTH, HEIGHT)
+    tipOfferBulb(ctx, bulb.x, bulb.y, bulb.size)
+    tipOfferText(ctx, 'Need a tip?', title.x, title.y, title.font)
+    // 'Get tip': gold gradient, glow, brown outline, a light band on its upper half, the bulb icon left of the text.
+    {
+        const {x, y, width: w, height: h} = getTip, px = T.buttons.font * k
+        ctx.save()
+        ctx.shadowColor = T.glow
+        ctx.shadowBlur = h * 0.45
+        const g = ctx.createLinearGradient(0, y, 0, y + h)
+        g.addColorStop(0, 'rgb(255, 226, 120)')
+        g.addColorStop(0.55, 'rgb(240, 170, 30)')
+        g.addColorStop(1, 'rgb(190, 110, 10)')
+        tipOfferRoundRect(ctx, x, y, w, h, h * 0.28)
+        ctx.fillStyle = g
+        ctx.fill()
+        ctx.shadowBlur = 0
+        ctx.shadowColor = 'rgba(0, 0, 0, 0)'
+        ctx.lineWidth = h * 0.07
+        ctx.strokeStyle = T.outline
+        ctx.stroke()
+        tipOfferRoundRect(ctx, x + h * 0.08, y + h * 0.08, w - h * 0.16, h * 0.4, h * 0.2)
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.22)'
+        ctx.fill()
+        ctx.font = clickHintFont(px)
+        ctx.textAlign = 'center'
+        ctx.textBaseline = 'middle'
+        ctx.fillStyle = 'rgb(48, 24, 0)'
+        const tw = ctx.measureText('Get tip').width, iconW = px * 0.9
+        ctx.fillText('Get tip', x + w / 2 + iconW / 2, y + h / 2 + px * 0.04)
+        ctx.restore()
+        tipOfferSmallBulb(ctx, x + w / 2 - tw / 2 - iconW * 0.2, y + h / 2, px / 100)
+    }
+    // 'Keep thinking': dark navy, gold border, cream text.
+    {
+        const {x, y, width: w, height: h} = keepThinking
+        ctx.save()
+        tipOfferRoundRect(ctx, x, y, w, h, 32 * k)
+        ctx.fillStyle = 'rgba(16, 21, 48, 0.85)'
+        ctx.fill()
+        ctx.lineWidth = 5 * k
+        ctx.strokeStyle = 'rgb(214, 160, 60)'
+        ctx.stroke()
+        ctx.font = clickHintFont(T.buttons.keepFont * k)
+        ctx.textAlign = 'center'
+        ctx.textBaseline = 'middle'
+        ctx.fillStyle = 'rgb(236, 226, 200)'
+        ctx.fillText('Keep thinking', x + w / 2, y + h / 2)
+        ctx.restore()
+    }
+    ctx.restore()
+    canvas.contentVersion = (canvas.contentVersion || 0) + 1 // TASK-1554 (InterfaceRecorder)
+    overlay.key = key
+    overlay.builds++
+}
+// Lays the offer out (drawTutorialHints.tipOffer) and returns its painter, or null when no offer is up.
+function drawTutorialTipOffer() {
+    const up = typeof TutorialTips !== 'undefined' && TutorialTips.offer && TutorialTips.running &&
+        !TutorialManager.switching && !tutorialResultInterface.visible
+    if (!up) {
+        drawTutorialTipOffer.clock = null
+        drawTutorialHints.tipPaint = null
+        return null
+    }
+    const layout = tipOfferLayout()
+    drawTutorialHints.tipOffer = {getTip: {...layout.getTip}, keepThinking: {...layout.keepThinking}}
+    return ctx => paintTutorialTipOffer(ctx, layout)
+}
+function paintTutorialTipOffer(ctx, layout) {
+    // The offer's clock runs from its first painted frame, at most 50 ms a frame (as the click hint's).
+    const now = typeof performance !== 'undefined' ? performance.now() : Date.now()
+    const clock = drawTutorialTipOffer.clock ||= {last: now, elapsed: 0}
+    clock.elapsed += Math.max(0, Math.min(50, now - clock.last))
+    clock.last = now
+    const fade = Math.max(0, Math.min(1, clock.elapsed / TIP_OFFER.fadeMs))
+    const key = [WIDTH, HEIGHT, layout.k, clickHintFontLoaded()].join(',')
+    if (!tipOfferOverlay || tipOfferOverlay.key !== key || tipOfferOverlay.canvas.width !== WIDTH ||
+            tipOfferOverlay.canvas.height !== HEIGHT)
+        buildTipOfferOverlay(layout, key)
+    ctx.save()
+    ctx.setTransform(1, 0, 0, 1, 0, 0)
+    ctx.globalAlpha = fade
+    ctx.drawImage(tipOfferOverlay.canvas, 0, 0)
+    ctx.restore()
+    drawTutorialHints.tipPaint = {elapsed: clock.elapsed, fade, builds: tipOfferOverlay.builds, key}
+}
+// A click or tap while the offer is up (events/events.js Events.click): on a button it answers the offer; anywhere else it
+// is swallowed (nothing under the shade is selected). False when no offer is up.
+function tutorialTipOfferClick(pos) {
+    if (typeof TutorialTips === 'undefined' || !TutorialTips.offer || !TutorialTips.running)
+        return false
+    const rects = drawTutorialHints.tipOffer
+    const inside = r => r && pos && pos.x >= r.x && pos.x <= r.x + r.width && pos.y >= r.y && pos.y <= r.y + r.height
+    if (rects && inside(rects.getTip))
+        TutorialTips.getTip()
+    else if (rects && inside(rects.keepThinking))
+        TutorialTips.keepThinking()
+    return true
+}
+// A key while the offer is up (events/events.js keydown): Esc is Keep thinking; the game's press keys (Enter, Backspace, Z,
+// I) wait; the camera keys still work. True when the key was taken.
+function tutorialTipOfferKey(keyCode) {
+    if (typeof TutorialTips === 'undefined' || !TutorialTips.offer || !TutorialTips.running)
+        return false
+    if (keyCode === Events.kEscapeKeycode) {
+        TutorialTips.keepThinking()
+        return true
+    }
+    return gameEvent.isPressKeyCode(keyCode)
+}
+
 // TASK-1717: tutorial 0's move hint in the concept B style (no text, no darkening): on the cell tutorialMoveHintTarget picks
 // (the KOHb's own cell for an attack) a warm gold fill with a soft edge, a flat-topped hex outline (dark brown under gold, a
 // thin cream inner line, a gold glow) and a gold arrow with a brown outline pointing down into the hex's top edge. The fill's
@@ -1453,6 +1708,9 @@ function drawInterfaceTo(interfaceCtx) {
     // TASK-1681: tutorial 0's click hint darkens everything drawn so far (drawTutorialHints laid it out).
     if (typeof drawTutorialHints.paint === 'function')
         drawTutorialHints.paint(interfaceCtx)
+    // TASK-1722: the tip offer covers the HUD and the hints.
+    if (typeof drawTutorialHints.tipPainter === 'function')
+        drawTutorialHints.tipPainter(interfaceCtx)
 
     nextTurnPauseInterface.draw(interfaceCtx)
     if (gameSettings.tutorial) {
