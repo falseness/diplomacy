@@ -1,7 +1,7 @@
 {
   "format": 1,
   "algorithm": "sha256(path NUL bytes NUL ...)",
-  "rulesVersion": "8023a3ac66b5ed2ef2825b98288f86c52f58ed0cf229a465538fbd9c7538ce47",
+  "rulesVersion": "71af7d57dca567dadea2a1e8d6bc9d22d7af749239a347caa723879179e990b6",
   "scripts": [
     {
       "path": "options/assert.js",
@@ -45,8 +45,8 @@
     },
     {
       "path": "options/tutorialManager.js",
-      "sha256": "8f5a424b7db223c6f7923b089fde6afb7c67b20f1a7eff6aa74ea27211368c75",
-      "bytes": 19872
+      "sha256": "641a670d760701a575b4d8cfa3115a2b022eda17d01c51cb2d8b425d136376f9",
+      "bytes": 20312
     },
     {
       "path": "options/save.js",
@@ -120,8 +120,8 @@
     },
     {
       "path": "render/loadassets.js",
-      "sha256": "ffd372030d510e71085d4cd098823967c58328e5c1bbdaa13796a6b767326727",
-      "bytes": 50428
+      "sha256": "2e75793b6b009de88e22b91e18425f98816b64be63388d36196f6b77126b408b",
+      "bytes": 55628
     },
     {
       "path": "render/staticons.js",
@@ -150,8 +150,8 @@
     },
     {
       "path": "render/draw.js",
-      "sha256": "6300f1de963d5d502d234484e1aa1ca4ad06aa2a8be13a31565371849af2e390",
-      "bytes": 102805
+      "sha256": "a1af321188ee21ab72f43b18d55d8fafaf445b23bf43b402839f1ee42aea0e4f",
+      "bytes": 103418
     },
     {
       "path": "interface/entityinterface.js",
@@ -280,8 +280,8 @@
     },
     {
       "path": "events/events.js",
-      "sha256": "b9488ee81484a9401505503d286016ae8cde7673e5d87820a73cad1ee0ca8e0d",
-      "bytes": 28840
+      "sha256": "4bc2eedf9e1ef39c184c24e459c0a167bf4cd145ae7b386fbf3201c54f4b81ef",
+      "bytes": 29555
     },
     {
       "path": "options/onlineHubRows.js",
@@ -300,8 +300,8 @@
     },
     {
       "path": "menu/menu.js",
-      "sha256": "c5cceff4138c4059b2bcf2d497106b0279147d66ee26248d2eac86e2407b16ab",
-      "bytes": 194775
+      "sha256": "4ffe8f24a8b14a7963caf130b30c884311c83a9d2702a6e5a36c1a29c8a03ac0",
+      "bytes": 198071
     },
     {
       "path": "sprites/hexagon.js",

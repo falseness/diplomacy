@@ -152,6 +152,17 @@ function mousewheel(event) {
     let pos = getEventPos(event)
     gameEvent.mousewheel(pos, event.wheelDelta ?? -event.deltaY)
 }
+// TASK-1726: a click, tap or Enter on the 'Player N' overlay (NextTurnPauseInterface) dismisses it; the board's frame
+// that follows can take > 1 s on a slow phone (a game's first turn), so the next frame is the last picture with
+// 'Loading…' (render/loadassets.js holdGameFrameForLabel) and the board is drawn after it, with the label till it is
+// settled. Returns whether the overlay took the input (it is gone at once, so a second input reaches the board).
+function dismissNextTurnPause(pause) {
+    if (!pause.click())
+        return false
+    if (typeof holdGameFrameForLabel === 'function')
+        holdGameFrameForLabel()
+    return true
+}
 class Events {
     constructor(_barrackInterface, _townInterface, _entityInterface, 
             _statisticsInterface, _nextTurnPauseInterface) {
@@ -377,9 +388,9 @@ class Events {
                     nextTurn()
                     return
                 }
-                // Behind the 'Player N' overlay Enter only dismisses it, as a click does.
+                // Behind the 'Player N' overlay Enter only dismisses it, as a click does (TASK-1726: after the label's frame).
                 if (nextTurnPauseInterface.visible) {
-                    nextTurnPauseInterface.click()
+                    dismissNextTurnPause(nextTurnPauseInterface)
                     return
                 }
                 if (nextTurnButton.highlightButton) {
@@ -540,7 +551,7 @@ class Events {
         let clickToButton = (gameSettings.tutorial && tutorialResultInterface.click(pos)) ||
             (gameSettings.tutorial && tutorialPauseInterface.click(pos)) ||
             (typeof onlineResultInterface !== 'undefined' && onlineResultInterface.click(pos)) ||
-            this.interface.nextTurnPause.click(pos) ||
+            dismissNextTurnPause(this.interface.nextTurnPause) ||
             undoButton.click(pos) || backToMenuButton.click(pos) || 
             this.interface.statistics.click(pos) || this.interface.entity.click(pos) || 
             this.interface.barrack.click(pos) || this.interface.town.click(pos) || 

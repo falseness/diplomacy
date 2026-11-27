@@ -1036,8 +1036,14 @@ class CreateLobbyTree extends OnlineGameSettings {
         const {coop, mapName, variantIndex} = selectedMap
         return coop ? generateCoopGame(coop.humans, {seed: coop.seed, size: coop.size}) : maps[mapName][variantIndex]
     }
-    async create() {
+    // TASK-1726: 'Loading…' over the button from the first frame after the click till the answer; the board (a co-op map's
+    // generation: seconds for 12 big) is built after that frame (menuActionWithLabel).
+    create() {
         if (this.creating) return
+        menuActionWithLabel(() => this.createNow(), () => this.creating && this.menu.selectedTree === this)
+    }
+    async createNow() {
+        if (this.creating || this.menu.selectedTree !== this) return
         this.creating = true
         this.errorText.text = ''
         let ack
@@ -2210,10 +2216,12 @@ class OnlineHubTree {
         this.status = new Text(NaN, NaN, 1, '', MENU_THEME.text)
         this.list = new HubLists()
         this.list.onRow = row => {
+            // TASK-1726: the chosen card (my lobby: the return bar's Open) is the control whose 'Loading…' these show.
+            const control = this.rowControl(row)
             // lobby:join of my own lobby returns it, so both open the room.
-            if (row.kind === 'lobby' || row.kind === 'myLobby') this.joinLobby(row.id)
-            else if (row.kind === 'game') this.openGame(row.id)
-            else if (row.kind === 'finished') this.openReplay(row.id)
+            if (row.kind === 'lobby' || row.kind === 'myLobby') this.joinLobby(row.id, control)
+            else if (row.kind === 'game') this.openGame(row.id, control)
+            else if (row.kind === 'finished') this.openReplay(row.id, control)
         }
         this.list.onRowsChanged = () => this.layout()
         this.joining = false
@@ -2306,47 +2314,75 @@ class OnlineHubTree {
         this.feed?.stop()
         this.notice = ''
     }
-    // lobby:join, then the room; LOBBY_FULL, ALREADY_IN_LOBBY etc. show on the notice line.
-    async joinLobby(lobbyId) {
-        if (this.joining) return
-        this.joining = true
-        const ack = await onlineSession.joinLobby(lobbyId)
-        this.joining = false
-        if (this.menu.selectedTree !== this) return
-        if (!ack.ok) {
-            this.notice = lobbyJoinErrorText(ack.error)
-            this.setAccount(this.account)
-            return
+    // TASK-1726: a row's card rect as the pressed control ({rect}; my lobby: the return bar's Open button), or null.
+    rowControl(row) {
+        if (this.list.myLobby && this.list.myLobby.id === row.id && row.kind === 'myLobby')
+            return this.list.bar.openButton
+        for (const panel of this.list.panels) {
+            const index = panel.rows.indexOf(row)
+            if (index >= 0) return {rect: panel.rowRect(index)}
         }
-        this.menu.lobbyRoom.open(ack.lobby)
+        return null
+    }
+    // lobby:join, then the room; LOBBY_FULL, ALREADY_IN_LOBBY etc. show on the notice line.
+    // TASK-1726: 'Loading…' over the card from the first frame after the click till the answer (menuActionWithLabel).
+    joinLobby(lobbyId, control = Button.pressed) {
+        if (this.joining) return
+        menuActionWithLabel(async () => {
+            if (this.joining || this.menu.selectedTree !== this) return
+            this.joining = true
+            const ack = await onlineSession.joinLobby(lobbyId)
+            this.joining = false
+            if (this.menu.selectedTree !== this) return
+            if (!ack.ok) {
+                this.notice = lobbyJoinErrorText(ack.error)
+                this.setAccount(this.account)
+                return
+            }
+            this.menu.lobbyRoom.open(ack.lobby)
+        }, () => this.joining && this.menu.selectedTree === this, control)
     }
     // game:open; the first board enters the game (options/onlineLogic.js).
-    openGame(gameID) {
+    // TASK-1726: as every game entry (enterGame), 'Loading…' over the card from the first frame after the click till the
+    // board is settled, over the menu while the server's board is awaited (holdGameEntryLabel; gone on an error panel).
+    openGame(gameID, control = Button.pressed) {
         if (this.menu.selectedTree !== this || onlineSession.openGameID !== null) return
-        whenGameSpritesReady(() => {
-            if (this.menu.selectedTree === this && onlineSession.openGameID === null) openLobbyGame(gameID)
-        })
+        enterGame(() => {
+            if (this.menu.selectedTree !== this || onlineSession.openGameID !== null) return
+            openLobbyGame(gameID)
+            holdGameEntryLabel(() => this.menu.selectedTree === this && onlineSession.openGameID === gameID &&
+                !document.getElementById('online-recovery'), true)
+        }, control)
     }
     // game:replay of a finished game, then the replay viewer; exit comes back to the hub. Errors show on the notice line.
-    async openReplay(gameID) {
+    // TASK-1726: 'Loading…' over the card from the first frame after the click (enterGame) while the recording is
+    // awaited (holdGameEntryLabel) till the replay's board is settled.
+    openReplay(gameID, control = Button.pressed) {
         if (this.replaying) return
-        this.replaying = true
-        const ack = await onlineSession.replayGame(gameID)
-        this.replaying = false
-        if (this.menu.selectedTree !== this) return
-        if (ack.ok) this.showReplay(ack)
-        else this.showReplayError(ack.error)
+        enterGame(() => {
+            if (this.replaying || this.menu.selectedTree !== this) return
+            this.replaying = true
+            holdGameEntryLabel(() => this.replaying && this.menu.selectedTree === this)
+            onlineSession.replayGame(gameID).then(ack => {
+                this.replaying = false
+                if (this.menu.selectedTree !== this) return
+                if (ack.ok) this.openViewer(ack)
+                else this.showReplayError(ack.error)
+            })
+        }, control)
     }
-    // A game:replay recording in the replay viewer, exit back to the hub (also the game-over screen's 'Watch replay').
+    // A game:replay recording in the replay viewer, exit back to the hub (the game-over screen's 'Watch replay': TASK-1726,
+    // 'Loading…' from the first menu frame till the replay's board is settled, enterGame).
     showReplay(recording) {
-        whenGameSpritesReady(() => {
-            try {
-                new ReplayViewer(recording, this).open()
-                this.feed?.stop()
-            } catch (e) {
-                this.showReplayError(e.message)
-            }
-        })
+        enterGame(() => this.openViewer(recording), null)
+    }
+    openViewer(recording) {
+        try {
+            new ReplayViewer(recording, this).open()
+            this.feed?.stop()
+        } catch (e) {
+            this.showReplayError(e.message)
+        }
     }
     showReplayError(error) {
         this.notice = 'could not open the replay: ' + error
@@ -3828,6 +3864,9 @@ class Menu {
     set visible(boolean) {
         this.#visible = boolean
         this.setEvents(boolean)
+        // TASK-1726: a menu wait for an answer (holdGameEntryLabel, menuActionWithLabel) ends when a game is entered.
+        if (!boolean && typeof gameSpritesWaiting !== 'undefined' && gameSpritesWaiting?.alive)
+            gameSpritesWaiting = null
     }
     get visible() {
         return this.#visible
@@ -3929,6 +3968,7 @@ class Menu {
         } finally {
             ctx.restore()
         }
+        endPageLoadingLabel()
     }
     drawParts(ctx) {
         this.sky.draw(ctx)
@@ -3943,9 +3983,18 @@ class Menu {
     }
 }
 
+// TASK-1726: the page's 'Loading…' (index.html #pageLoading, on screen from the first paint) goes with the menu's first frame.
+let pageLoadingLabel = typeof document !== 'undefined' && document.getElementById ? document.getElementById('pageLoading') : null
+function endPageLoadingLabel() {
+    if (!pageLoadingLabel)
+        return
+    pageLoadingLabel.remove()
+    pageLoadingLabel = null
+}
 // While a game entry waits for the game sprites or its first frames (enterGame): 'Loading…' over the pressed control.
 Menu.prototype.drawGameSpritesWaiting = function(ctx) {
-    if (gameSpritesWaiting)
+    // (TASK-1726: a wait for an answer ends with it, gameSpritesWaitingAlive)
+    if (gameSpritesWaiting && gameSpritesWaitingAlive())
         drawGameEntryLabel(ctx, gameSpritesWaiting)
 }
 // TASK-1704: the one 'Loading…' look of every game entry ({control, since}): a dark pill over the pressed control (a

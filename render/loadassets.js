@@ -930,6 +930,100 @@ function enterGame(run, control = Button.pressed) {
 function gameEntryStarted(entry) {
     entry.board = typeof grid !== 'undefined' ? grid : null
 }
+// TASK-1726: an entry's run (enterGame) that waits for an answer (the server's game:open board, a replay recording) keeps
+// its label over the menu meanwhile: the pressed control's 'Loading…' (gameSpritesWaiting, drawn by the menu) while
+// alive() holds, till the game is entered (the menu hidden: Menu's visible setter) or alive() turns false (an error, the
+// screen left), when the entry goes too. follow: the entry's label follows a board replaced before it settled (an online
+// game: the server's boards, drawGameEntryLoading). Returns the marker (a later entry replaces it).
+function holdGameEntryLabel(alive, follow = false) {
+    const entry = gameEntry
+    if (entry)
+        entry.follow = follow
+    return gameSpritesWaiting = {control: entry ? entry.control : Button.pressed, since: entry ? entry.since : performance.now(),
+        alive, entry}
+}
+// TASK-1726: a menu action that waits or blocks (> 1 s on a slow device) and leads to another menu screen (lobby create /
+// join: the lobby room): 'Loading…' over the pressed control (the entry look, drawGameEntryLabel) from the first frame after
+// the input while alive() holds; run() is called after two frames, so a synchronous run (lobby create builds its board)
+// starts after the label is on screen. A later entry or menu wait replaces this one (its run is then not called).
+function menuActionWithLabel(run, alive, control = Button.pressed) {
+    const waiting = gameSpritesWaiting = {control, since: performance.now(), alive}
+    gameEntryLast = {since: waiting.since}
+    requestAnimationFrame(() => gameSpritesWaiting === waiting && requestAnimationFrame(() => {
+        if (gameSpritesWaiting !== waiting)
+            return
+        waiting.startAt = gameEntryLast.startAt = performance.now()
+        const pressed = Button.pressed
+        Button.pressed = control
+        try {
+            run()
+        } finally {
+            Button.pressed = pressed
+        }
+    }))
+    return waiting
+}
+// The menu's wait label ends when its alive() turns false (TASK-1726), with its entry.
+function gameSpritesWaitingAlive() {
+    const waiting = gameSpritesWaiting
+    if (!waiting || !waiting.alive || waiting.startAt === undefined && !waiting.entry || waiting.alive())
+        return !!waiting
+    gameSpritesWaiting = null
+    if (waiting.entry && gameEntry === waiting.entry)
+        gameEntry = null
+    if (gameEntryLast && gameEntryLast.since === waiting.since)
+        Object.assign(gameEntryLast, {endAt: performance.now(), end: 'answer'})
+    return false
+}
+// TASK-1726: an in-game input whose work blocks (back to the menu: > 1 s on a slow phone): the game's frames are held with
+// the label painted over the last picture (labelHold) from the first frame after the input, and run() is called two frames
+// later (its result, the menu, draws no game label; Menu.stopGame clears the entry). A second input before it runs
+// replaces this one (one run).
+function gameActionWithLabel(run) {
+    const now = performance.now()
+    const entry = gameEntry = {control: null, since: now, labelHold: Infinity}
+    gameEntryLast = {since: now}
+    requestAnimationFrame(() => gameEntry === entry && requestAnimationFrame(() => {
+        if (gameEntry !== entry)
+            return
+        entry.labelHold = 0
+        entry.startAt = gameEntryLast.startAt = performance.now()
+        run()
+    }))
+    return entry
+}
+// TASK-1726: an in-game input whose work is the next frame's drawing (the 'Player N' overlay dismissed: the turn's first
+// board frame, > 1 s on a slow phone): the next game frame is held with the label painted over the last picture (drawAll:
+// labelHold), the frames after it draw the board with the label till it is settled (drawGameEntryLoading).
+function holdGameFrameForLabel() {
+    const now = performance.now()
+    const entry = gameEntry = {control: null, since: now, startAt: now, board: typeof grid !== 'undefined' ? grid : null,
+        labelHold: 1}
+    gameEntryLast = {since: now, startAt: now}
+    return entry
+}
+// drawAll: whether this frame is the label's held frame (holdGameFrameForLabel).
+function gameEntryLabelHold() {
+    const entry = gameEntry
+    if (!entry || !(entry.labelHold > 0))
+        return false
+    // (the label painted over the first held frame only: the frames after it keep that picture)
+    if (entry.labelHold !== Infinity || !entry.held)
+        entry.onScreen = false
+    entry.held = true
+    --entry.labelHold
+    return true
+}
+// TASK-1726: a game frame held (Grid.holdStartFrame etc.: nothing drawn, the last frame stays) while an entry's label is
+// due and not on it yet (onScreen: drawn on a game frame before): the label painted over the held picture once (the next
+// drawn frame draws the whole screen again, with the label while it is due).
+function drawHeldEntryLabel(ctx) {
+    const entry = gameEntry
+    if (!entry || entry.onScreen)
+        return
+    entry.onScreen = true
+    drawGameEntryLabel(ctx, entry)
+}
 // The label over a game frame (drawInterface) while an entry's board is not settled (before its start: over the old
 // game's last frame, Retry / Next).
 function drawGameEntryLoading(ctx) {
@@ -937,6 +1031,7 @@ function drawGameEntryLoading(ctx) {
     if (!entry)
         return
     const board = typeof grid !== 'undefined' ? grid : null
+    entry.onScreen = true
     if (entry.startAt === undefined)
         return drawGameEntryLabel(ctx, entry)
     entry.board ??= board
@@ -945,6 +1040,9 @@ function drawGameEntryLoading(ctx) {
         if (gameEntryLast && gameEntryLast.since === entry.since)
             Object.assign(gameEntryLast, {endAt: performance.now(), end: why})
     }
+    // (TASK-1726: an online game's entry follows the boards the server sends till one is settled: holdGameEntryLabel)
+    if (entry.board !== board && entry.follow && board)
+        entry.board = board
     if (entry.board !== board)
         return end('board')
     if (!(board && board.boardBuildsPending && board.boardBuildsPending()))

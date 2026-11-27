@@ -200,6 +200,14 @@ class TutorialManager {
     static next() {
         TutorialManager.switchTo(TutorialManager.nextId())
     }
+    // TASK-1726: the pause menu's and result screen's 'Back to tutorials' (back to the menu: > 1 s on a slow phone) after the
+    // game's frame with 'Loading…' (render/loadassets.js gameActionWithLabel).
+    static backToTutorialsPressed() {
+        if (typeof gameActionWithLabel === 'function')
+            gameActionWithLabel(() => TutorialManager.backToTutorials())
+        else
+            TutorialManager.backToTutorials()
+    }
     // The tutorial list; its enter re-reads the passed ids, so a fresh pass shows its check mark.
     static backToTutorials() {
         tutorialResultInterface.hide()

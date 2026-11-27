@@ -26,7 +26,7 @@ class TutorialResultInterface {
     makeButtons(hasNext) {
         this.nextButton = hasNext ? new HubButton('Next tutorial', TutorialManager.next, undefined, TutorialManager, true) : null
         this.retryButton = new HubButton('Retry', TutorialManager.retry, undefined, TutorialManager, !hasNext)
-        this.backButton = new HubButton('Back to tutorials', TutorialManager.backToTutorials, undefined, TutorialManager)
+        this.backButton = new HubButton('Back to tutorials', TutorialManager.backToTutorialsPressed, undefined, TutorialManager)
     }
     get buttons() {
         return [this.nextButton, this.retryButton, this.backButton].filter(Boolean)

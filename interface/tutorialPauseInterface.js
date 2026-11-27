@@ -110,7 +110,7 @@ class TutorialPauseInterface {
     }
     back() {
         this.hide()
-        TutorialManager.backToTutorials()
+        TutorialManager.backToTutorialsPressed()
     }
     // True while shown: the menu button still toggles, the shown buttons act, every other click is swallowed.
     click(pos) {
@@ -239,6 +239,9 @@ class TutorialPauseInterface {
 function backToMenuPress() {
     if (gameSettings.tutorial && !tutorialResultInterface.visible && !TutorialManager.switching)
         tutorialPauseInterface.toggle()
+    // TASK-1726: back to the menu (> 1 s on a slow phone) after the game's frame with 'Loading…' (gameActionWithLabel).
+    else if (typeof gameActionWithLabel === 'function')
+        gameActionWithLabel(menuBack)
     else
         menuBack()
 }

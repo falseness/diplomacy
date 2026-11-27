@@ -1871,15 +1871,14 @@ const interfaceLayer = new InterfaceLayer()
 
 function drawInterface() {
     interfaceLayer.draw(interfaceCtx, drawInterfaceTo)
-    // The debug mode's FPS counter, the interface's last drawing, changes every few frames: drawn over the cached
-    // interface directly (none in a replay, as before).
-    if (typeof replayViewer != 'undefined' && replayViewer)
-        return
     interfaceCtx.save()
     interfaceCtx.setTransform(1, 0, 0, 1, 0, 0)
-    drawDebugFps(interfaceCtx)
+    // The debug mode's FPS counter, the interface's last drawing, changes every few frames: drawn over the cached
+    // interface directly (none in a replay, as before).
+    if (!(typeof replayViewer != 'undefined' && replayViewer))
+        drawDebugFps(interfaceCtx)
     // TASK-1704: a game entry's 'Loading…' over the frames before its board is settled (render/loadassets.js
-    // drawGameEntryLoading), drawn over the cached interface, as the FPS counter.
+    // drawGameEntryLoading), drawn over the cached interface, as the FPS counter (TASK-1726: in a replay too).
     if (typeof drawGameEntryLoading === 'function')
         drawGameEntryLoading(interfaceCtx)
     interfaceCtx.restore()
@@ -1962,6 +1961,12 @@ function drawInterfaceTo(interfaceCtx) {
     interfaceCtx.restore()
 }
 
+// TASK-1726: a held frame (nothing drawn: the last frame stays) gets a game entry's 'Loading…' when it is due and not on
+// screen yet (render/loadassets.js drawHeldEntryLabel).
+function drawHeldFrame() {
+    if (typeof drawHeldEntryLabel === 'function')
+        drawHeldEntryLabel(interfaceCtx)
+}
 function drawAll() {
     // TASK-1562: the frame's number (the work tasks between two frames may do: Grid.levelWorkLeft).
     if (typeof Grid !== 'undefined') {
@@ -1969,21 +1974,24 @@ function drawAll() {
         // TASK-1565: the frame's own draw calls counted (Grid.lastFrameCalls: the build-ahead budget).
         Grid.frameBegin?.()
     }
+    // TASK-1726: an input's 'Loading…' frame: the last picture with the label (holdGameFrameForLabel).
+    if (typeof gameEntryLabelHold === 'function' && gameEntryLabelHold())
+        return drawHeldFrame()
     // TASK-1517: a zoom gesture whose raster is still made keeps the frame on screen (Grid.holdZoomFrame).
     if (typeof grid !== 'undefined' && grid?.holdZoomFrame?.())
-        return
+        return drawHeldFrame()
     // TASK-1518: a new board's first frame is held while its lit tiles are built (Grid.holdStartFrame).
     if (typeof grid !== 'undefined' && grid?.holdStartFrame?.())
-        return
+        return drawHeldFrame()
     // TASK-1633: after it, a frame that would draw the board partial is held till its builds are done (Grid.holdLoadFrame).
     if (typeof grid !== 'undefined' && grid?.holdLoadFrame?.())
-        return
+        return drawHeldFrame()
     // TASK-1519: a turn playback's start is held while its board's surface cache is finished (turnPlaybackView.holdFrame).
     if (typeof turnPlaybackView !== 'undefined' && turnPlaybackView.holdFrame())
-        return
+        return drawHeldFrame()
     // TASK-1520: a frame drawn directly for want of the surface cache is kept on screen while the cache is built (Grid.holdCacheFrame).
     if (typeof grid !== 'undefined' && grid?.holdCacheFrame?.())
-        return
+        return drawHeldFrame()
     drawMain()
     drawInterface()
     if (typeof Grid !== 'undefined')
