@@ -62,6 +62,10 @@ class InterationWithUnit {
     }
     hitUnit(cell, unit) {
         this.noteAttack(cell.coord, unit)
+        // TASK-1716: red's first hit on a blue unit in tutorial 0 ends the move hint for this game (an Undo keeps it ended).
+        if (typeof TutorialManager !== 'undefined' && TutorialManager.moveHint && unit &&
+                unit.playerColor === TUTORIAL_HUMAN_SLOT && cell.unit.playerColor === TUTORIAL_AI_SLOT)
+            TutorialManager.moveHint = false
         this.addHittedUnitUndo(cell)
 
         let cellUnit = cell.unit

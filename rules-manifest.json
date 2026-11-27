@@ -1,7 +1,7 @@
 {
   "format": 1,
   "algorithm": "sha256(path NUL bytes NUL ...)",
-  "rulesVersion": "44599a84b187ad6d761af6f37b9ca08e8608dd11a59165b672adbef77d16eee2",
+  "rulesVersion": "a4f458395b54a9c51d44c9abf6a1515ebf271ca3b6ddf64940b1a1b54322fb1e",
   "scripts": [
     {
       "path": "options/assert.js",
@@ -45,8 +45,8 @@
     },
     {
       "path": "options/tutorialManager.js",
-      "sha256": "13a18bb80bdfc097a95cb8caa59873ec2e611157c4efa8f648c672bd94f88dc1",
-      "bytes": 10816
+      "sha256": "1c21c5b400cb5e50fcff8a4276a51a4923cd71d44728d07097a9d1d2c57e3ca4",
+      "bytes": 11117
     },
     {
       "path": "options/save.js",
@@ -150,8 +150,8 @@
     },
     {
       "path": "render/draw.js",
-      "sha256": "b05ef8dea131cae7c3d4d20e8a3a7ff8426fa7882100f7adc4b86a69f1920b2d",
-      "bytes": 67891
+      "sha256": "8d0276771c829ab3e22e2c412cbd253c511b6fb13c3e894799b6bc65fe892aec",
+      "bytes": 72029
     },
     {
       "path": "interface/entityinterface.js",
@@ -325,8 +325,8 @@
     },
     {
       "path": "sprites/entities/units/unit/interactionWithUnit.js",
-      "sha256": "6756f7946d49cb4567194477e2a433b7e685fae7511eaa5d9aee1afc1e556074",
-      "bytes": 34575
+      "sha256": "1169973810f456b69c6e4511e2ce983a797ce78829e7bacd2fcdb10bce00c54f",
+      "bytes": 34940
     },
     {
       "path": "sprites/entities/units/unit/unit.js",

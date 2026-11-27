@@ -752,6 +752,70 @@ function clickHintHexPath(ctx, x, y, r) {
     }
     ctx.closePath()
 }
+// TASK-1716: tutorial 0's move hint target (drawn by TASK-1717): once the 'click to control' hint is gone and until red's
+// first hit on a blue unit (TutorialManager.moveHint), the one cell the selected red unit should go to, as {x, y, attack}
+// or null. A unit next to a blue unit (hex distance 1) gets that unit's cell (attack: true; the nearest on screen if
+// several). Otherwise the cells the selection's own search reached (unit.interaction.way, run by select(); no new
+// Way.create, it rebuilds the global border) within the unit's moves that it could stand on, the minimum of (hex
+// distance to the nearest blue unit, way steps, screen distance to the unit). Memoized by the selected unit, its coord
+// and moves, the action count, the round and the turn (tutorialMoveHintTarget.detail keeps the pick's keys).
+function tutorialHexDistance(a, b) {
+    const dq = b.x - a.x, dr = (b.y - (b.x - (b.x & 1)) / 2) - (a.y - (a.x - (a.x & 1)) / 2)
+    return Math.max(Math.abs(dq), Math.abs(dr), Math.abs(dq + dr))
+}
+function tutorialMoveHintTarget() {
+    const unit = gameEvent.selected
+    if (!gameSettings.tutorial || gameSettings.tutorial.id !== 'tutorial-0' || TutorialManager.switching ||
+            TutorialManager.clickHint || !TutorialManager.moveHint || whooseTurn !== TUTORIAL_HUMAN_SLOT ||
+            gameEvent.waitingMode || tutorialResultInterface.visible || !unit || !unit.isUnit || unit.killed ||
+            unit.playerColor !== TUTORIAL_HUMAN_SLOT || !(unit.moves > 0) || !unit.coord || !unit.interaction ||
+            !unit.interaction.way)
+        return null
+    const key = [unit.coord.x, unit.coord.y, unit.moves, actionManager.arr.length, gameRound, whooseTurn].join(',')
+    const memo = tutorialMoveHintTarget.memo
+    if (memo && memo.unit === unit && memo.key === key)
+        return memo.target
+    const enemies = players[TUTORIAL_AI_SLOT].units.filter(u => !u.killed && u.coord)
+    const screenOf = c => {
+        const t = biasToTransition(c.x, c.y)
+        return {x: (t.x * basis.offset.x - canvas.offset.x) * canvas.scale, y: (t.y * basis.offset.y - canvas.offset.y) * canvas.scale}
+    }
+    const at = screenOf(unit.coord)
+    const screenDistance = c => {
+        const p = screenOf(c)
+        return Math.hypot(p.x - at.x, p.y - at.y)
+    }
+    let target = null, detail = null
+    const adjacent = enemies.filter(e => tutorialHexDistance(unit.coord, e.coord) === 1)
+    if (adjacent.length) {
+        const best = adjacent.map(e => ({x: e.coord.x, y: e.coord.y, screen: screenDistance(e.coord)}))
+            .reduce((a, b) => b.screen < a.screen ? b : a)
+        target = {x: best.x, y: best.y, attack: true}
+        detail = {attack: true, enemies: adjacent.length, screen: best.screen}
+    } else if (enemies.length) {
+        const way = unit.interaction.way, candidates = []
+        for (const [cellKey, steps] of way.distanceOf) {
+            const c = {x: Math.floor(cellKey / WAY_KEY_STRIDE), y: cellKey % WAY_KEY_STRIDE}
+            if (!(steps > 0 && steps <= unit.moves) || isCoordNotOnMap(c, grid.arr.length, grid.arr[0].length))
+                continue
+            const cell = grid.arr[c.x][c.y]
+            if (cell.unit.notEmpty() || unit.interaction.cantInteract(c, unit) || unit.cellHasTeammate(cell) ||
+                    unit.interaction.cantStandOnCell(cell, unit) || unit.player.ignoresCell(cell))
+                continue
+            candidates.push({x: c.x, y: c.y, enemy: Math.min(...enemies.map(e => tutorialHexDistance(c, e.coord))),
+                steps, screen: screenDistance(c)})
+        }
+        if (candidates.length) {
+            const best = candidates.reduce((a, b) => (b.enemy - a.enemy || b.steps - a.steps || b.screen - a.screen) < 0 ? b : a)
+            target = {x: best.x, y: best.y, attack: false}
+            detail = {attack: false, enemy: best.enemy, steps: best.steps, screen: best.screen, candidates: candidates.length}
+        }
+    }
+    tutorialMoveHintTarget.memo = {unit, key, target}
+    tutorialMoveHintTarget.detail = detail
+    tutorialMoveHintTarget.computes = (tutorialMoveHintTarget.computes || 0) + 1
+    return target
+}
 function drawTutorialClickHint(ctx, unit, gap) {
     const units = players[TUTORIAL_HUMAN_SLOT].units.filter(u => !u.killed && u.coord)
     if (!units.length)

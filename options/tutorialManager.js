@@ -21,6 +21,9 @@ class TutorialManager {
         TutorialManager.clickHintUnit = null
         // TASK-1681: the click hint's clock (fade-in, dust, pulse) starts at its first painted frame.
         TutorialManager.clickHintClock = null
+        // TASK-1716: after the click hint, a selected red unit gets its move hint (tutorialMoveHintTarget) until red's
+        // first hit on a blue unit (InterationWithUnit.hitUnit); a start (the menu, Retry) brings it back, an undo does not.
+        TutorialManager.moveHint = id === 'tutorial-0'
         const map = tutorial.map
         map.tutorial = {id: id}
         // 'surviveRounds' counts red's units only when the map gives red no town; 'coopVictory' and
